@@ -1,0 +1,111 @@
+/* Bridge stations share the viewport with the strategic console, never stack below it. */
+.bridge-console { display: none; min-height: 0; min-width: 0; border: 1px solid var(--line); background: var(--panel); }
+body[data-screen="bridge"] .command-layout, body[data-screen="bridge"] .console-tabs { display: none; }
+body[data-screen="bridge"] main { grid-template-rows: auto minmax(0,1fr) auto; }
+body[data-screen="bridge"] .bridge-console { display: grid; grid-template-columns: 220px minmax(0,1fr) 300px; }
+.bridge-station-list { padding: 14px 13px; min-height: 0; border-right: 1px solid var(--line); }
+.bridge-station-group h3 { font: 7px var(--mono); letter-spacing: .6px; color: var(--dim); text-transform: uppercase; margin: 14px 5px 6px; }
+.bridge-station-group:first-child h3 { margin-top: 3px; }
+.bridge-station-group button { width: 100%; min-height: 31px; padding: 6px 8px; display: flex; gap: 9px; align-items: center; text-align: left; border-radius: 2px; font-size: 11px; color: #aab6c4; }
+.bridge-station-group button > span:first-child { width: 16px; color: var(--station-color); font-size: 17px; text-align: center; }
+.bridge-station-group button.selected { background: #d5b77c12; color: #e5ce9f; }
+.bridge-station-picker { display: none; min-width: 0; padding: 9px 12px; border-bottom: 1px solid var(--line); gap: 10px; align-items: center; }
+.bridge-station-picker > label { font: 8px var(--mono); color: var(--dim); }
+.bridge-station-picker select { min-width: 0; width: 220px; }
+.bridge-station-picker select, .bridge-setting select { height: 32px; padding: 0 8px; font: 11px var(--body); color: var(--text); background: #101b28; border: 1px solid #334154; border-radius: 2px; }
+#bridge-view-toggle { display: none; color: var(--gold); font: 9px var(--mono); padding: 7px; border: 1px solid #6c5c3f; white-space: nowrap; }
+.bridge-deck-panel { position: relative; min-height: 0; min-width: 0; display: flex; flex-direction: column; background: radial-gradient(ellipse at center,#162b3b70,transparent 70%),#080f19; }
+.bridge-deck-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 18px; gap: 8px; font: 8px var(--mono); letter-spacing: 1px; flex-shrink: 0; }
+#bridge-watch { color: #94b9a4; font-size: 7px; border: 1px solid #385247; padding: 5px 7px; letter-spacing: .5px; }
+#bridge-watch.heightened { color: #e5ba73; border-color: #8c673b; background: #d5a7520d; }
+.bridge-deck { width: 100%; min-height: 0; flex: 1; }
+.bridge-deck-footer { display: flex; justify-content: space-between; padding: 13px 18px; font: 7px var(--mono); color: var(--dim); letter-spacing: .7px; flex-shrink: 0; border-top: 1px solid #1c2a38; }
+.bridge-deck-footer > span:first-child { color: var(--gold); }
+.bridge-deck-station { cursor: pointer; outline: none !important; }
+.bridge-console-shell { fill: #172433; stroke: #3b4d60; stroke-width: 1.4; }
+.bridge-screen-lines { fill: #233e4c; stroke: var(--station-color); opacity: .7; stroke-width: 1.2; }
+.bridge-deck-label { font: 12px var(--mono); fill: #aebecb; }
+.bridge-deck-caption { font: 6px var(--mono); fill: #8c9ba8; letter-spacing: .7px; }
+.bridge-deck-station:hover .bridge-console-shell, .bridge-deck-station.selected .bridge-console-shell, .bridge-deck-station:focus-visible .bridge-console-shell { stroke: var(--station-color); fill: #213445; stroke-width: 2; }
+.bridge-deck-station.selected .bridge-deck-label { fill: var(--station-color); }
+.command-platform { fill: #182635; stroke: #675e47; stroke-width: 1.2; }
+.command-chairs { fill: #526372; stroke: #9babba; stroke-width: 1.2; }
+.bridge-deck-station.selected .command-platform, .bridge-deck-station:focus-visible .command-platform { stroke: #d5b77c; stroke-width: 2; }
+.bridge-station-detail { min-width: 0; min-height: 0; padding: 22px; border-left: 1px solid var(--line); display: flex; flex-direction: column; }
+#bridge-station-group { font: 7px var(--mono); letter-spacing: 1px; text-transform: uppercase; color: var(--station-color); }
+#bridge-station-name { font-size: 32px; line-height: 1.1; margin: 12px 0; }
+#bridge-station-summary { font-size: 11px; color: #92a2b4; line-height: 1.7; margin: 0 0 15px; }
+.bridge-readouts { margin: 0; display: grid; gap: 0; }
+.bridge-readouts > div { padding: 12px 0; border-top: 1px solid #202c3b; }
+.bridge-readouts dt { font: 8px var(--mono); color: var(--dim); margin-bottom: 5px; }
+.bridge-readouts dd { margin: 0; font-size: 12px; color: #c7d1dd; overflow-wrap: anywhere; }
+.bridge-actions { display: grid; gap: 9px; margin: 18px 0; }
+.bridge-action { padding: 10px 11px; background: #d5b77c12; color: var(--gold); border: 1px solid #6d5b3d; border-radius: 2px; text-align: left; font-size: 11px; }
+.bridge-action:disabled { opacity: .35; }
+.bridge-setting { display: grid; gap: 6px; min-width: 0; }
+.bridge-setting > span { font: 8px var(--mono); color: var(--dim); }
+.bridge-setting select { width: 100%; }
+.bridge-report { margin-top: auto; padding-top: 15px; border-top: 1px solid var(--line); }
+.bridge-report > span { font: 7px var(--mono); letter-spacing: 1px; color: var(--dim); }
+#bridge-last-report { font-size: 10px; color: #a5b3c1; line-height: 1.65; margin: 7px 0 0; }
+@media (max-height: 850px) {
+  .bridge-station-detail { padding: 17px; }
+  #bridge-station-name { margin: 9px 0; font-size: 29px; }
+  #bridge-station-summary { font-size: 10px; line-height: 1.6; margin-bottom: 12px; }
+  .bridge-readouts > div { padding: 9px 0; }
+  .bridge-actions { margin: 12px 0; gap: 7px; }
+  .bridge-report { padding-top: 10px; }
+}
+@media (max-width: 1100px), (max-height: 760px) {
+  body[data-screen="bridge"] .bridge-console { grid-template-columns: minmax(0,1fr) 300px; grid-template-rows: auto minmax(0,1fr); }
+  .bridge-station-list { display: none; }
+  .bridge-station-picker { display: flex; grid-column: 1/-1; grid-row: 1; }
+  .bridge-deck-panel { grid-column: 1; grid-row: 2; }
+  .bridge-station-detail { grid-column: 2; grid-row: 2; }
+}
+@media (max-width: 650px) {
+  .topbar nav { gap: 9px; }
+  .topbar nav button { font-size: 9px; }
+  body[data-screen="bridge"] .bridge-console { grid-template-columns: minmax(0,1fr); }
+  .bridge-station-picker { padding: 8px; gap: 8px; }
+  .bridge-station-picker > label { display: none; }
+  .bridge-station-picker select { flex: 1; width: 0; }
+  #bridge-view-toggle { display: block; }
+  .bridge-deck-panel, .bridge-station-detail { grid-column: 1; grid-row: 2; }
+  .bridge-console[data-view="deck"] .bridge-station-detail, .bridge-console[data-view="station"] .bridge-deck-panel { display: none; }
+  .bridge-station-detail { border: 0; padding: 16px; }
+  .bridge-readouts { grid-template-columns: repeat(2,minmax(0,1fr)); column-gap: 14px; }
+  .bridge-readouts dd { font-size: 11px; }
+  .bridge-deck-header { padding: 12px; font-size: 7px; }
+  .bridge-deck-footer { padding: 11px 12px; font-size: 6px; }
+}
+@media (max-height: 680px) {
+  .bridge-station-detail { padding: 12px 15px; }
+  #bridge-station-summary { display: none; }
+  #bridge-station-name { font-size: 26px; margin: 6px 0 10px; }
+  .bridge-readouts { grid-template-columns: repeat(2,minmax(0,1fr)); column-gap: 12px; }
+  .bridge-readouts > div { padding: 7px 0; }
+  .bridge-readouts dd { font-size: 10px; }
+  .bridge-actions { gap: 6px; margin: 10px 0; }
+  .bridge-action { padding: 8px 10px; font-size: 10px; }
+  .bridge-setting select { height: 29px; }
+  .bridge-report { padding-top: 8px; }
+  #bridge-last-report { font-size: 9px; margin-top: 5px; }
+}
+@media (max-height: 480px) {
+  body[data-screen="bridge"] main { grid-template-rows: auto minmax(0,1fr); }
+  .bridge-station-picker { padding: 5px 10px; }
+  .bridge-station-picker select { height: 27px; }
+  .bridge-deck-header { padding: 7px 10px; }
+  .bridge-deck-footer { padding: 7px 10px; }
+  .bridge-station-detail { padding: 8px 12px; }
+  #bridge-station-name { font-size: 22px; margin: 4px 0 7px; }
+  #bridge-station-group { font-size: 6px; }
+  .bridge-readouts > div { padding: 5px 0; }
+  .bridge-readouts dt { font-size: 7px; margin-bottom: 3px; }
+  .bridge-readouts dd { font-size: 9px; }
+  .bridge-report { display: none; }
+  .bridge-actions { margin: 7px 0; gap: 5px; }
+  .bridge-action { padding: 6px 8px; }
+  .bridge-setting { gap: 4px; }
+}

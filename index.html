@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#080e17">
+  <meta name="description" content="Sol Defense Force. Command your ship and chart a patrol through the Solar System in 2250.">
+  <title>SDF · Strategic Command</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="viewport.css">
+  <link rel="stylesheet" href="bridge.css">
+</head>
+<body data-view="map" data-screen="map">
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Sol Defense Force home"><span class="insignia">✧</span><span class="brand-name">SDF<span>SOL DEFENSE FORCE</span></span></a>
+    <nav aria-label="Command navigation"><button class="nav-active" id="map-tab"><span>⌖</span> Strategic map</button><button id="bridge-button"><span>✧</span> Bridge</button><button id="briefing-button"><span>▤</span> Mission briefing</button></nav>
+    <div class="command-status"><i class="status-dot"></i> SOL COMMAND <span class="connection">LINK ESTABLISHED</span></div>
+  </header>
+
+  <main>
+    <section class="page-heading"><div><div class="eyebrow">SOL SECTOR / NAVIGATION</div><h1>The watch begins.</h1><p>One system. Our home. Your command.</p></div><div class="date-block"><span class="eyebrow">SHIPBOARD TIME · UTC</span><strong id="stardate">01 JAN 2250 <span>00:00</span></strong><div><i class="status-dot"></i> <span id="clock-state">AWAITING ORDERS</span></div></div></section>
+
+    <div class="console-tabs" role="group" aria-label="Console views">
+      <button data-view="map" aria-pressed="true" aria-controls="map-panel">⌖ Map</button>
+      <button data-view="ship" aria-pressed="false" aria-controls="ship-panel">✧ Ship & system</button>
+      <button data-view="navigation" aria-pressed="false" aria-controls="navigation-panel">⌁ Navigation</button>
+    </div>
+    <section class="command-layout" aria-label="Strategic navigation console">
+      <aside class="left-panel" id="ship-panel" aria-label="Ship and system directory">
+        <div class="panel-label">YOUR COMMAND <span>01</span></div>
+        <div class="ship-card"><div class="ship-illustration" aria-hidden="true"><svg viewBox="0 0 240 130"><defs><linearGradient id="hull" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#b1c1c6"/><stop offset=".5" stop-color="#3b515f"/><stop offset="1" stop-color="#152c3a"/></linearGradient><filter id="engine-glow"><feGaussianBlur stdDeviation="3"/></filter></defs><ellipse cx="120" cy="112" rx="65" ry="5" fill="#070d15"/><g transform="translate(9 4)"><path d="M29 87 74 65 151 23 174 25 152 54 183 62 207 77 147 84 98 105 54 102Z" fill="url(#hull)" stroke="#8199a3" stroke-width=".7"/><path d="m74 65 48 9 52-49-23-2Z" fill="#708992"/><path d="m122 74 25 10 36-22-31-8Z" fill="#304957" stroke="#8a9ba0" stroke-width=".5"/><path d="m55 88 43 17 24-31-48-9Z" fill="#354a57"/><path d="m101 70 38-27 13 3-29 28Z" fill="#152836" stroke="#93a1a5" stroke-width=".7"/><path d="m134 59 12-11 8 1-12 11Z" fill="#d5b57c"/><path d="m48 83 10 5-6 10-13-5Z" fill="#69d9ee"/><path d="m48 83 10 5-6 10-20 2-7-6Z" fill="#46c7e7" opacity=".5" filter="url(#engine-glow)"/><path d="m79 94 12 5-6 8-12-5Z" fill="#77ddf3"/><path d="m79 94 12 5-6 8-22 6Z" fill="#46c7e7" opacity=".5" filter="url(#engine-glow)"/><path d="m162 65 23 9-21 2-14-5Z" fill="#95a8ad"/><path d="m95 77 6 3-7 8-6-3Z" fill="#c5a266"/></g></svg><span>SDF — 07</span></div><div class="ship-title"><h2>SDF Wayfarer</h2><span class="badge">FRIGATE</span></div><p class="muted">Vanguard-class patrol vessel</p><div class="ship-state"><i class="status-dot"></i><span id="ship-status">Holding at Earth</span></div><div class="readiness"><span>VESSEL READINESS</span><strong>100<span>%</span></strong></div><div class="readiness-bar"><span></span></div><div class="systems"><span><i></i> Fusion core</span><b>NOMINAL</b><span><i></i> EPD propulsion</span><b>ONLINE</b><span><i></i> Inertial dampeners</span><b>ACTIVE</b><span><i></i> Radiation shielding</span><b>SECURE</b></div></div>
+        <div class="sector-header panel-label"><div class="directory-tabs" role="group" aria-label="System directory"><button id="directory-planets" aria-pressed="true">Planets</button><button id="directory-settlements" aria-pressed="false">Settlements</button><button id="directory-mining" aria-pressed="false">Mining</button></div><span id="directory-count">08</span></div>
+        <div id="mining-filter" hidden><label for="company-filter">MINING OPERATOR</label><select id="company-filter"><option value="all">All four companies</option></select></div>
+        <div id="planet-directory" class="planet-directory"></div>
+        <div id="directory-pagination" class="directory-pagination" hidden><button id="directory-previous" aria-label="Previous mining stations">←</button><span id="directory-page" aria-live="polite"></span><button id="directory-next" aria-label="Next mining stations">→</button></div>
+        <button id="edge-button" class="edge-button"><svg class="directory-station-icon" viewBox="-16 -16 32 32" aria-hidden="true"><path id="heliopause-icon-path"/></svg><span>Heliopause station<small>OUTER PATROL · 120 AU</small></span><b>↗</b></button>
+        <div class="sidebar-foot"><span class="tiny-cross">+</span> FOR SOL. FOR ALL.</div>
+      </aside>
+
+      <section class="map-panel" id="map-panel" aria-label="Solar System map">
+        <div class="map-top"><div><span class="live-indicator"></span><strong>SOLAR SYSTEM</strong><span class="map-subtitle">TACTICAL OVERVIEW</span></div><span class="small-tag">SECTOR 001</span></div>
+        <div class="map-surface" id="map-surface">
+          <svg id="solar-map" viewBox="-540 -500 1080 1000" role="group" tabindex="0" aria-label="Interactive Solar System navigation map. Select a planet or click empty space to choose a waypoint.">
+            <defs>
+              <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse"><path d="M 50 0 L 0 0 0 50" fill="none" stroke="#223345" stroke-width=".65" opacity=".6"/></pattern>
+              <radialGradient id="sun-aura"><stop stop-color="#ffc867" stop-opacity=".22"/><stop offset="1" stop-color="#ffc867" stop-opacity="0"/></radialGradient>
+              <radialGradient id="sun-fill"><stop stop-color="#ffedb7"/><stop offset=".55" stop-color="#ffcc6a"/><stop offset="1" stop-color="#ce873e"/></radialGradient>
+              <filter id="soft-glow"><feGaussianBlur stdDeviation="5"/></filter>
+            </defs>
+            <g id="map-world"><rect x="-1600" y="-1600" width="3200" height="3200" fill="url(#grid)"/>
+            <g id="stars"></g><path d="M-1000 0H1000M0-1000V1000" stroke="#8b784f" stroke-width=".8" opacity=".2"/>
+            <g id="orbits"></g><g id="asteroids"></g><g id="routes"></g><g id="mining-stations"></g>
+            <circle r="65" fill="url(#sun-aura)"/><circle r="17" fill="#f1b45c" opacity=".35" filter="url(#soft-glow)"/><circle r="13" fill="url(#sun-fill)"/><path d="M-23 0h-5m51 0h5M0-23v-5m0 51v5" stroke="#ccab72" opacity=".65"/><text x="0" y="37" text-anchor="middle" class="sol-label">SOL</text>
+            <g id="bodies"></g><g id="settlements"></g><g id="target-marker"></g><g id="ship-marker"></g></g>
+          </svg>
+          <div class="map-coordinate"><span>HELIOCENTRIC NAVIGATION GRID</span><span id="cursor-coord">X +0.00 / Y +0.00 AU</span></div>
+          <div class="map-controls"><button id="zoom-in" aria-label="Zoom in" title="Zoom in">+</button><button id="zoom-out" aria-label="Zoom out" title="Zoom out">−</button><span></span><button id="recenter" aria-label="Center map on Sun" title="Center on Sol">⌖</button></div>
+          <div class="scale-label"><span></span> COMPRESSED SCALE · SITE CALLOUTS OFFSET</div>
+          <div class="map-hint" id="map-hint">Select a destination to begin your patrol</div>
+        </div>
+        <div class="map-bottom"><div class="legend"><span><i class="legend-ship"></i>Your vessel</span><span><i class="legend-planet"></i>Planet</span><span><i class="legend-site"></i>Settlements</span><span><i class="legend-mine"></i>Mining</span><span><i class="legend-route"></i>Planned course</span></div><button id="reset-view">RESET VIEW ↗</button></div>
+        <div class="time-controls"><div><span class="eyebrow">SIMULATION</span><span id="simulation-status">Standby</span></div><div class="time-buttons"><button id="pause-button" aria-label="Pause or resume simulation">Ⅱ</button><button class="speed active" data-speed="1">1×</button><button class="speed" data-speed="10">10×</button><button class="speed" data-speed="100">100×</button></div><span class="phase-label">PHASE 01 <span>/ STRATEGIC NAVIGATION</span></span></div>
+      </section>
+
+      <aside class="right-panel" id="navigation-panel" aria-label="Navigation and flight plan">
+        <div class="panel-label">NAVIGATION <span>⌁</span></div>
+        <section class="destination-card"><div class="destination-caption"><div class="eyebrow">SELECTED DESTINATION</div><button id="contract-info" class="contract-button" aria-label="View mining contract" hidden>Contract ↗</button></div><div class="destination-heading"><span class="destination-orb" id="destination-orb"></span><div><h2 id="destination-name">Earth</h2><span id="destination-type">TERRESTRIAL PLANET</span></div></div><p id="destination-description">Home of Sol Command. The starting point of your first system patrol.</p><dl><div><dt>Distance from Sol</dt><dd id="destination-au">1.00 AU</dd></div><div><dt>From your vessel</dt><dd id="destination-distance">0.00 AU</dd></div><div><dt>EPD transit estimate</dt><dd id="destination-eta">At destination</dd></div></dl><button class="secondary-button" id="add-waypoint">+ Add to course</button><p class="selection-note" id="selection-note">Choose another destination to plot a course.</p></section>
+        <section class="course-section"><div class="panel-label">FLIGHT PLAN <span id="waypoint-count">00 WAYPOINTS</span></div><div id="waypoint-list" class="waypoint-list"></div><div id="waypoint-pagination" class="waypoint-pagination" hidden><button id="previous-waypoints" aria-label="Previous waypoints">←</button><span id="waypoint-page" aria-live="polite"></span><button id="next-waypoints" aria-label="Next waypoints">→</button></div><div id="empty-course" class="empty-course"><span>⌁</span><p>The system is yours to explore.</p><small>Select a planet or any point on the grid, then add it to your course.</small></div><div class="course-totals"><div><span>TOTAL DISTANCE</span><strong id="total-distance">0.00 <small>AU</small></strong></div><div><span>EST. TRAVEL TIME</span><strong id="total-eta">—</strong></div></div><button class="primary-button" id="engage-button" disabled><span>Engage EPD</span><span>↗</span></button><button class="text-button" id="clear-course" disabled>Clear flight plan</button><p class="safety-message" id="safety-message" role="status"></p></section>
+        <section class="activity-section"><div class="panel-label">COMMAND LOG <span class="live-text">LIVE</span></div><ol id="command-log"></ol></section>
+      </aside>
+    </section>
+    <section id="bridge-console" class="bridge-console" data-view="deck" aria-label="Ship bridge stations">
+      <div id="bridge-station-list" class="bridge-station-list" aria-label="Bridge station directory"></div>
+      <div class="bridge-station-picker"><label for="bridge-station-select">DUTY STATION</label><select id="bridge-station-select" aria-label="Bridge station"></select><button id="bridge-view-toggle">Station console ↗</button></div>
+      <section class="bridge-deck-panel" aria-label="Main bridge deck plan">
+        <div class="bridge-deck-header"><span>SDF WAYFARER / MAIN BRIDGE</span><span id="bridge-watch">ROUTINE WATCH</span></div>
+        <svg class="bridge-deck" viewBox="0 0 660 560" role="group" aria-label="Bridge deck plan. Select a duty station to open its console.">
+          <defs><radialGradient id="bridge-floor"><stop stop-color="#1b2e3d"/><stop offset="1" stop-color="#0d1825"/></radialGradient></defs>
+          <path d="M150 80Q330-15 510 80L610 350Q590 510 470 535H190Q70 510 50 350Z" fill="url(#bridge-floor)" stroke="#314454" stroke-width="2"/>
+          <path d="M160 100Q330 18 500 100L587 350Q565 487 460 512H200Q95 487 73 350Z" fill="none" stroke="#253b4b"/>
+          <ellipse cx="330" cy="300" rx="170" ry="150" fill="none" stroke="#405063" stroke-width=".8" opacity=".5"/>
+          <path d="M330 103V235M268 305H195M392 305H465M330 368V440M255 187 295 252M405 187 365 252M175 399 278 345M485 399 382 345" fill="none" stroke="#54636b" stroke-dasharray="3 6" opacity=".35"/>
+          <rect x="205" y="52" width="250" height="38" rx="8" fill="#172c39" stroke="#53818d" opacity=".85"/>
+          <path d="M225 78h210" stroke="#86bfc7" opacity=".3"/>
+          <text id="bridge-main-display" x="330" y="70" text-anchor="middle" fill="#8abfc9" font-family="monospace" font-size="8">SOL SYSTEM / PATROL WATCH</text>
+          <text x="330" y="390" text-anchor="middle" fill="#536c7b" font-family="monospace" font-size="9" letter-spacing="3">SDF WAYFARER</text>
+          <text x="330" y="523" text-anchor="middle" fill="#6d8190" font-family="monospace" font-size="7" letter-spacing="2">AFT ACCESS / MAIN ENGINEERING</text>
+          <g id="bridge-deck-stations"></g>
+        </svg>
+        <div class="bridge-deck-footer"><span id="bridge-duty-seat">CAPTAIN HAS THE CONN</span><span>SELECT A STATION TO TAKE CONTROL</span></div>
+      </section>
+      <section id="bridge-station-detail" class="bridge-station-detail" aria-label="Selected bridge station">
+        <div id="bridge-station-group"></div><h2 id="bridge-station-name"></h2><p id="bridge-station-summary"></p>
+        <dl id="bridge-readouts" class="bridge-readouts"></dl>
+        <div id="bridge-actions" class="bridge-actions"></div>
+        <div class="bridge-report"><span>LATEST BRIDGE REPORT</span><p id="bridge-last-report" role="status" aria-live="polite"></p></div>
+      </section>
+    </section>
+    <footer class="page-footer"><span><i class="status-dot"></i> ALL SYSTEMS OPERATIONAL</span><span>SOL DEFENSE FORCE <b> / </b> STRATEGIC COMMAND INTERFACE <b> / </b> 2250</span><button id="about-button">PROTOTYPE v0.1 <span>↗</span></button></footer>
+  </main>
+  <dialog id="briefing-dialog">
+    <button class="dialog-close" id="close-dialog" aria-label="Close briefing">×</button>
+    <div class="eyebrow">SOL DEFENSE FORCE / PHASE 01</div>
+    <h2>Welcome to the watch, Captain.</h2>
+    <div class="briefing-tabs" role="group" aria-label="Briefing pages"><button data-briefing="mission" aria-pressed="true">Your mission</button><button data-briefing="details" aria-pressed="false">Prototype details</button></div>
+    <div id="briefing-mission"><p>It is 2250. A century after the cold fusion breakthrough, humanity can cross its home system in a little over a month. Electromagnetic Pulse Drives, inertial dampeners, and advanced shielding have opened the frontier.</p><p>Your mission: patrol the Solar System. Select a planet or a point on the grid, add waypoints to your flight plan, and engage your EPD. Use the simulation controls to accelerate your journey.</p></div>
+    <div id="briefing-details" class="briefing-note" hidden><strong>First-look assumptions</strong><p>The SDF Wayfarer, its class, and the heliopause station are provisional. The outer patrol boundary is set at 120 AU; a nominal 3.8 AU/day makes a radial crossing approximately 32 days. The map uses a compressed radial scale and illustrative planet positions, held fixed during this prototype. Travel uses distances in AU, with straight legs and a safety exclusion around Sol. Routes and ship progress are saved in this browser. Active journeys resume paused after reload.</p></div>
+    <button id="begin-button" class="primary-button">Take command <span>↗</span></button>
+    <button id="restart-patrol" class="text-button">Restart patrol at Earth · resets route and shipboard time</button>
+  </dialog>
+  <dialog id="contract-dialog">
+    <button id="close-contract" class="dialog-close" aria-label="Close mining contract">×</button>
+    <div class="eyebrow">UNITED NATIONS OF EARTH / MINING CHARTER</div>
+    <h2 id="contract-station">Mining station</h2>
+    <p>Commercial extraction rights granted by the United Nations of Earth government.</p>
+    <dl class="contract-details"><div><dt>Station owner</dt><dd id="contract-owner"></dd></div><div><dt>Contract authority</dt><dd id="contract-issuer"></dd></div><div><dt>Contract number</dt><dd id="contract-number"></dd></div><div><dt>Contract status</dt><dd id="contract-status"></dd></div></dl>
+    <button id="return-navigation" class="primary-button">Return to navigation <span>↗</span></button>
+  </dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

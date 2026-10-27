@@ -1,0 +1,389 @@
+/* The command console occupies the viewport. Small displays switch views
+   instead of stacking panels; flight plans page instead of scrolling. */
+html { height: 100%; overflow: hidden; }
+body {
+  min-width: 0;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: clamp(48px, 7vh, 68px) minmax(0, 1fr);
+}
+[hidden] { display: none !important; }
+.topbar { height: auto; min-width: 0; padding: 0 clamp(14px, 2vw, 32px); gap: 30px; }
+.brand { width: clamp(170px, 18vw, 230px); flex-shrink: 0; }
+.insignia { font-size: 34px; }
+.brand-name { font-size: 27px; }
+main {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: clamp(8px, 1.5vh, 16px);
+  width: 100%; max-width: none; min-width: 0; min-height: 0;
+  margin: 0; padding: clamp(10px, 1.8vh, 22px) clamp(12px, 2vw, 32px) 0;
+}
+.page-heading { margin: 0; min-width: 0; }
+h1 { font-size: clamp(28px, 4vh, 40px); margin: 5px 0 3px; }
+.page-heading p { font-size: 10px; }
+.date-block strong { margin: 6px 0; }
+.page-footer { min-width: 0; padding: 0 0 10px; gap: 8px; }
+.console-tabs { display: none; }
+.command-layout {
+  display: grid;
+  grid-template-columns: clamp(185px, 17.5vw, 250px) minmax(0, 1fr) clamp(238px, 23vw, 290px);
+  min-height: 0; min-width: 0; height: 100%;
+}
+.left-panel, .right-panel, .map-panel { min-height: 0; min-width: 0; }
+.left-panel { display: flex; flex-direction: column; padding: 15px 15px 0; }
+.panel-label { flex-shrink: 0; }
+.ship-illustration { height: clamp(40px, 10vh, 120px); margin: 5px -4px 0; }
+.ship-title h2 { font-size: 22px; }
+.ship-title { flex-wrap: nowrap; }
+.ship-card .muted { margin: 3px 0 7px; }
+.readiness { margin-top: 12px; }
+.readiness-bar { margin: 5px 0 12px; }
+.systems { gap: 8px 0; }
+.sector-header { margin: 15px -15px 5px; padding: 13px 15px 0; }
+.planet-directory { gap: 0; margin: 0 -6px; }
+.planet-item { min-height: 24px; padding: clamp(4px, .7vh, 8px) 7px; }
+.edge-button { margin: 7px 0 10px; padding-top: 10px; }
+.sidebar-foot { padding: 10px 0; }
+.map-panel { display: flex; flex-direction: column; }
+.map-top { padding: 12px 15px; flex-shrink: 0; }
+.map-subtitle { display: none; }
+.map-surface { flex: 1 1 0; min-height: 0; height: auto; max-height: none; }
+.map-controls { top: 7px; right: 10px; }
+.map-coordinate { left: 15px; font-size: 7px; }
+.map-hint { bottom: 31px; padding: 6px 9px; font-size: 9px; max-width: calc(100% - 24px); white-space: normal; text-align: center; width: max-content; }
+.scale-label { bottom: 11px; left: 15px; }
+.map-bottom { padding: 9px 12px; flex-shrink: 0; }
+.legend { gap: 11px; font-size: 8px; }
+.time-controls { padding: 9px 12px; gap: 10px; flex-shrink: 0; }
+.phase-label span { display: none; }
+.right-panel {
+  display: flex; flex-direction: column; grid-column: auto; gap: 0;
+  padding: 15px 16px 0; border-top: 0; border-left: 1px solid var(--line);
+}
+.destination-card { padding: 13px 0 12px; flex-shrink: 0; }
+.destination-heading { margin-top: 9px; gap: 11px; }
+.destination-heading h2 { font-size: 27px; overflow-wrap: anywhere; }
+.destination-orb { width: 34px; height: 34px; }
+.destination-card > p { min-height: 0; font-size: 10px; margin: 8px 0; line-height: 1.6; }
+.destination-card dl { margin: 10px 0; }
+.destination-card dl > div { margin: 8px 0; }
+.destination-card .selection-note { font-size: 8px; margin: 6px 0 0; }
+.secondary-button { padding: 9px; }
+.course-section { padding-top: 12px; flex-shrink: 0; }
+.waypoint-list { max-height: none; overflow: visible; margin: 7px 0 3px; }
+.waypoint-row { min-height: 34px; padding: 5px 0; gap: 8px; }
+.waypoint-row > div { min-width: 0; }
+.waypoint-row > div > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.waypoint-row small { margin-top: 3px; }
+.waypoint-pagination { display: flex; justify-content: space-between; align-items: center; height: 25px; margin-bottom: 4px; color: var(--dim); font: 8px var(--mono); }
+.waypoint-pagination button { min-width: 32px; height: 25px; border: 1px solid var(--line); color: var(--gold); }
+.empty-course { padding: 13px 0; }
+.empty-course > span { font-size: 25px; }
+.empty-course p { margin: 3px 0; }
+.empty-course small { font-size: 9px; }
+.course-totals { padding: 10px 0 12px; }
+.course-totals > div > span { margin-bottom: 5px; }
+.primary-button { padding: 9px 12px; min-height: 34px; }
+.text-button { margin-top: 7px; }
+.safety-message { margin: 7px 0 0; font-size: 9px; line-height: 1.5; }
+.activity-section { min-height: 0; margin-top: auto; padding: 12px 0 8px; flex-shrink: 0; }
+.activity-section ol { margin: 8px 0 0; display: block; }
+.activity-section li { margin: 6px 0; font-size: 8px; }
+.planet-label { font-size: var(--chart-label-size, 18px); }
+.planet-sublabel { font-size: var(--chart-small-size, 10px); }
+.ship-label { font-size: var(--chart-small-size, 10px); }
+dialog { max-height: calc(100dvh - 24px); overflow: hidden; padding: 26px; }
+dialog h2 { font-size: 31px; margin: 12px 0; }
+.briefing-tabs { display: flex; gap: 15px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+.briefing-tabs button { color: var(--dim); padding: 8px 0; font-size: 10px; border-bottom: 1px solid transparent; }
+.briefing-tabs button[aria-pressed="true"] { color: var(--gold); border-bottom-color: var(--gold); }
+dialog p { font-size: 11px; line-height: 1.65; }
+.briefing-note { margin: 16px 0; }
+.briefing-note p { font-size: 11px; }
+#begin-button { margin-top: 16px; }
+#toast { bottom: 20px; padding: 11px 18px; }
+
+/* Shorter laptops retain the three-panel console with tighter secondary detail. */
+@media (max-height: 850px) {
+  .ship-illustration { height: clamp(30px, 7vh, 65px); }
+  .destination-card > #destination-description { display: none; }
+  .ship-card .muted { margin-bottom: 5px; }
+  .readiness { margin-top: 9px; }
+  .sector-header { margin-top: 11px; padding-top: 10px; }
+  .sidebar-foot { display: none; }
+  .activity-section li:nth-child(n+2) { display: none; }
+}
+@media (max-height: 740px) {
+  .page-heading > div > .eyebrow, .page-heading > div > p { display: none; }
+  .page-heading h1 { margin: 0; font-size: 29px; }
+  .date-block > .eyebrow { display: none; }
+  .date-block strong { margin: 0 0 4px; font-size: 18px; }
+  .ship-illustration, .ship-card .muted, .sidebar-foot { display: none; }
+  .ship-title { margin-top: 10px; }
+  .ship-state { margin-top: 7px; }
+  .left-panel, .right-panel { padding-top: 12px; }
+  .destination-card { padding: 8px 0 10px; }
+  .destination-heading { margin-top: 7px; }
+  .destination-card .selection-note { display: none; }
+  .activity-section { padding: 8px 0; }
+  .activity-section .panel-label { display: none; }
+  .activity-section ol { margin: 0; }
+  .empty-course { padding: 9px 0; }
+}
+
+/* A focused console view keeps narrow and short screens usable without scrolling. */
+@media (max-width: 980px), (max-height: 620px) {
+  main { grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 8px; }
+  .console-tabs { display: flex; gap: 4px; min-width: 0; background: #101925; border: 1px solid var(--line); padding: 3px; }
+  .console-tabs button { flex: 1; min-width: 0; padding: 8px 5px; font-size: 11px; border-radius: 2px; color: var(--dim); }
+  .console-tabs button[aria-pressed="true"] { background: #d5b77c15; color: var(--gold); }
+  .command-layout { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .command-layout > .left-panel, .command-layout > .right-panel, .command-layout > .map-panel { display: none; }
+  body[data-view="map"] .map-panel { display: flex; }
+  body[data-view="ship"] .left-panel { display: flex; }
+  body[data-view="navigation"] .right-panel { display: flex; }
+  .left-panel { border: 0; padding: 16px 20px 0; order: 0; }
+  .left-panel > .panel-label, .left-panel .ship-card { display: block; }
+  .left-panel > .panel-label { display: flex; }
+  .left-panel .ship-illustration { display: block; height: clamp(35px, 10vh, 90px); }
+  .left-panel .ship-title { margin-top: 5px; }
+  .left-panel .sector-header { display: flex; margin: 14px 0 8px; padding: 13px 0 0; border-top: 1px solid var(--line); }
+  .planet-directory { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; margin: 0; }
+  .planet-item { font-size: 12px; min-height: 33px; padding: 6px; }
+  .planet-item > span:last-child { display: inline; font-size: 9px; }
+  .planet-item .mini-planet { width: 8px; height: 8px; margin-right: 10px; }
+  .edge-button { margin-top: 11px; padding-top: 12px; font-size: 11px; }
+  .edge-button small { display: block; margin-left: 0; font-size: 7px; }
+  .right-panel { border: 0; padding: 16px 22px; order: 0; }
+  .right-panel > .panel-label { display: flex; }
+  .destination-card { padding: 12px 0 14px; }
+  .destination-heading h2 { font-size: 30px; }
+  .destination-card dl { font-size: 11px; }
+  .destination-card dd { font-size: 10px; }
+  .destination-card > #destination-description { display: block; }
+  .destination-card dl > div { margin: 9px 0; }
+  .course-section { border-top: 1px solid var(--line); padding-top: 14px; }
+  .waypoint-row { font-size: 12px; min-height: 38px; }
+  .course-totals > div > span { font-size: 8px; }
+  .course-totals strong { font-size: 25px; }
+  .course-totals { padding: 12px 0; }
+  .primary-button, .secondary-button { font-size: 12px; min-height: 38px; }
+  .text-button { font-size: 10px; }
+  .activity-section { grid-column: auto; margin-top: auto; padding-top: 10px; }
+  .activity-section .panel-label { display: flex; }
+  .activity-section li:nth-child(n+2) { display: none; }
+  .activity-section ol { margin-top: 6px; }
+  .map-surface { min-height: 0; height: auto; max-height: none; }
+  .phase-label span { display: inline; }
+  .page-footer > span:nth-child(2) { display: none; }
+}
+@media (max-width: 980px) and (min-width: 600px), (max-height: 620px) and (min-width: 600px) {
+  body[data-view="navigation"] .right-panel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; gap: 14px 28px; }
+  .right-panel > .panel-label { grid-column: 1/-1; }
+  .destination-card { grid-column: 1; grid-row: 2; padding: 0; }
+  .course-section { grid-column: 2; grid-row: 2; padding: 0; border: 0; }
+  .activity-section { grid-column: 1/-1; grid-row: 3; padding: 8px 0 0; }
+  .left-panel { position: relative; }
+  body[data-view="ship"] .left-panel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); grid-template-rows: auto auto minmax(0, 1fr); column-gap: 30px; row-gap: 10px; padding-bottom: 15px; }
+  .left-panel > .panel-label:first-child { grid-column: 1; grid-row: 1; }
+  .ship-card { grid-column: 1; grid-row: 2/4; }
+  .left-panel .sector-header { grid-column: 2; grid-row: 1; margin: 0; padding: 0; border: 0; }
+  .planet-directory { grid-column: 2; grid-row: 2; display: grid; gap: 2px 10px; }
+  .edge-button { grid-column: 2; grid-row: 3; align-self: start; }
+}
+@media (max-width: 620px) {
+  .topbar { padding: 0 14px; gap: 10px; }
+  .brand { width: auto; gap: 8px; }
+  .brand-name { font-size: 24px; }
+  .brand-name > span { font-size: 6px; }
+  .insignia { font-size: 29px; }
+  nav { margin-left: auto; gap: 13px; }
+  nav button { font-size: 10px; }
+  .page-heading { gap: 8px; }
+  .page-heading h1 { font-size: clamp(23px, 6.8vw, 28px); white-space: nowrap; }
+  .date-block { flex-shrink: 0; }
+  .date-block strong { font-size: clamp(12px, 4.2vw, 17px); white-space: nowrap; }
+  .date-block strong span { display: inline; margin-left: 5px; }
+  .date-block > div { font-size: 6px; }
+  .date-block > .eyebrow { display: none; }
+  .page-heading .eyebrow { font-size: 6px; }
+  .page-heading p { font-size: 8px; }
+  main { padding: 10px 10px 0; }
+  .map-top { padding: 10px 12px; }
+  .map-bottom { padding: 9px 10px; }
+  .map-coordinate { font-size: 6px; left: 12px; }
+  .legend { font-size: 7px; gap: 9px; }
+  .phase-label { font-size: 6px; }
+  .phase-label span { display: none; }
+  .right-panel { padding: 12px 17px; }
+  .right-panel > .panel-label { display: none; }
+  .destination-card > #destination-description { display: none; }
+  .destination-card { padding: 0 0 11px; }
+  .destination-card .selection-note { display: none; }
+  .destination-card dl { margin: 8px 0; }
+  .destination-card dl > div { margin: 7px 0; }
+  .destination-heading { margin-top: 5px; }
+  .destination-heading h2 { font-size: 27px; }
+  .activity-section { padding-bottom: 0; }
+  .left-panel { padding: 12px 17px; }
+  .left-panel .ship-illustration { height: clamp(30px, 8vh, 70px); }
+  .left-panel .sector-header { margin-top: 12px; padding-top: 10px; }
+  .left-panel .planet-item { min-height: 30px; }
+  .page-footer { padding-bottom: 8px; }
+  .page-footer > span:first-child { font-size: 5px; }
+  .page-footer button { font-size: 6px; }
+}
+@media (max-height: 680px) {
+  .activity-section { display: none; }
+  .destination-card > #destination-description { display: none; }
+  .destination-card .selection-note { display: none; }
+  .destination-heading h2 { font-size: 25px; }
+  .destination-heading { margin-top: 4px; }
+  .destination-card dl { margin: 6px 0; }
+  .destination-card dl > div { margin: 5px 0; }
+  .destination-card { padding-bottom: 8px; }
+  .left-panel .ship-illustration { display: none; }
+  .left-panel .systems { gap: 6px 0; }
+  .left-panel .readiness-bar { margin-bottom: 8px; }
+  .left-panel .readiness { margin-top: 8px; }
+  .left-panel .sector-header { margin-top: 10px; padding-top: 8px; }
+  .left-panel .planet-item { min-height: 25px; padding-block: 5px; }
+  .course-section { padding-top: 8px; }
+  .waypoint-row { min-height: 30px; padding-block: 4px; }
+  .waypoint-list { margin-top: 4px; }
+  .course-totals { padding: 7px 0; }
+  .course-totals strong { font-size: 22px; }
+  .empty-course { padding: 8px 0; }
+  .empty-course > span { display: none; }
+  .empty-course small { font-size: 8px; }
+  .primary-button, .secondary-button { min-height: 32px; padding-block: 7px; }
+  .safety-message { font-size: 8px; margin-top: 5px; }
+  dialog { padding: 20px; }
+  dialog h2 { font-size: 27px; margin: 9px 0; }
+  dialog p, .briefing-note p { font-size: 10px; line-height: 1.5; }
+  #restart-patrol { font-size: 8px; margin-top: 11px; }
+}
+@media (max-height: 480px) {
+  body { grid-template-rows: 42px minmax(0, 1fr); }
+  main { padding-top: 6px; gap: 5px; grid-template-rows: auto auto minmax(0, 1fr); padding-bottom: 7px; }
+  .page-footer { display: none; }
+  .page-heading h1 { font-size: 24px; }
+  .date-block strong { font-size: 16px; margin: 0; }
+  .date-block > div { display: none; }
+  .console-tabs button { padding: 5px; font-size: 10px; }
+  .right-panel { padding: 10px 15px; }
+  body[data-view="navigation"] .right-panel { grid-template-rows: minmax(0, 1fr); gap: 20px; }
+  .right-panel > .panel-label { display: none; }
+  .destination-card, .course-section { grid-row: 1; }
+  .destination-heading h2 { font-size: 25px; }
+  .destination-card dl { margin: 9px 0; }
+  .destination-card dl > div { margin: 6px 0; }
+  .course-section { padding: 0; }
+  .course-totals strong { font-size: 20px; }
+  .course-totals > div > span { font-size: 7px; margin-bottom: 3px; }
+  .waypoint-row { min-height: 29px; padding: 3px 0; font-size: 10px; }
+  .waypoint-list { margin-top: 5px; }
+  .waypoint-pagination { height: 21px; margin-bottom: 2px; }
+  .waypoint-pagination button { height: 21px; }
+  .map-top { padding: 6px 12px; }
+  .time-controls { padding: 5px 12px; }
+  .map-bottom { padding: 6px 12px; }
+  .map-hint { display: none; }
+  .scale-label { bottom: 7px; }
+  .left-panel { padding-top: 10px; }
+  .ship-title { margin-top: 0; }
+  .left-panel .sector-header { margin: 0; padding: 0; }
+  .ship-card .systems { gap: 5px; }
+  dialog { padding: 17px 22px; }
+  dialog h2 { font-size: 26px; margin: 7px 0; }
+  dialog p { font-size: 10px; line-height: 1.5; margin: 8px 0; }
+  .briefing-tabs { margin-bottom: 8px; }
+  .briefing-tabs button { padding: 6px 0; }
+  .briefing-note { margin: 8px 0; }
+  .briefing-note p { font-size: 10px; }
+  #begin-button { margin-top: 9px; }
+  #restart-patrol { margin-top: 9px; font-size: 8px; }
+}
+@media (max-width: 620px) and (max-height: 640px) {
+  main { gap: 6px; padding-top: 6px; }
+  .date-block > div { display: none; }
+  .console-tabs button { padding-block: 7px; }
+}
+
+/* Surface sites use callouts so moon locations remain visible at system scale. */
+.directory-tabs { display: flex; align-items: center; gap: 10px; }
+.directory-tabs button { padding: 2px 0; font: 9px var(--mono); letter-spacing: .3px; color: var(--dim); }
+.directory-tabs button[aria-pressed="true"] { color: var(--gold); }
+.directory-tabs button[aria-pressed="true"]::after { content: ''; display: block; height: 1px; margin-top: 3px; background: var(--gold); }
+.directory-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.planet-item .mini-planet { flex-shrink: 0; }
+.planet-item .mini-planet.station { border: 1px solid #cfbc90; border-radius: 0; transform: rotate(45deg); background: transparent; box-shadow: none; }
+.planet-item .mini-planet.colony { border: 1px solid #d29b7f; border-radius: 1px; background: #d29b7f33; box-shadow: none; }
+.site-item { gap: 0; }
+.site-item > span:last-child { margin-left: auto; padding-left: 4px; font-size: 7px; flex-shrink: 0; }
+.facility-group { cursor: pointer; }
+.facility-leader { stroke: #9c947a; stroke-width: .8; stroke-dasharray: 2 4; opacity: .45; pointer-events: none; }
+.facility-symbol { fill: #15232c; stroke: #cfb987; stroke-width: 1.4; }
+.facility-group.colony .facility-symbol { fill: #d39b7d22; stroke: #d39b7d; }
+.large-station { stroke-width: 2; }
+.facility-label { font: var(--chart-label-size, 18px) var(--body); fill: #c4bba5; paint-order: stroke; stroke: #080f19; stroke-width: 4px; stroke-linejoin: round; }
+.facility-caption { font: var(--chart-small-size, 10px) var(--mono); fill: #7f8d98; letter-spacing: .5px; paint-order: stroke; stroke: #080f19; stroke-width: 3px; }
+.facility-label, .facility-caption, .outpost .planet-label, .outpost .planet-sublabel { visibility: hidden; pointer-events: none; }
+.facility-group:hover .facility-label, .facility-group:hover .facility-caption,
+.facility-group:focus-visible .facility-label, .facility-group:focus-visible .facility-caption,
+.outpost:hover .planet-label, .outpost:hover .planet-sublabel,
+.outpost:focus-visible .planet-label, .outpost:focus-visible .planet-sublabel { visibility: visible; }
+.facility-group.selected .selection-ring, .facility-group:hover .selection-ring { opacity: 1; }
+.facility-group:hover .facility-label { fill: #f1d49b; }
+/* SVG focus is represented by the object's ring, never its text bounds. */
+#solar-map:focus, #solar-map [role="button"]:focus { outline: none; }
+#solar-map [role="button"]:focus-visible .selection-ring { opacity: 1; stroke: #f1d49b; stroke-width: 1.5; }
+.planet-group.selected .selection-ring { opacity: 1; }
+.planet-group.selected .planet-label { fill: #bac5d1; }
+.legend-site { border: 1px solid var(--gold); transform: rotate(45deg); }
+@media (max-width: 1200px) { .legend > span:nth-child(2) { display: none; } }
+@media (max-width: 980px), (max-height: 620px) {
+  .settlement-directory .site-item { font-size: 10px; }
+  .settlement-directory .site-item > span:last-child { display: none; }
+}
+
+/* Mining remains a paged directory within the existing screen footprint. */
+.directory-tabs { gap: 8px; }
+.directory-tabs button { font-size: 8px; }
+#mining-filter { min-width: 0; margin: 4px 0 6px; flex-shrink: 0; }
+#mining-filter label { display: block; font: 6px var(--mono); letter-spacing: 1px; color: var(--dim); margin-bottom: 5px; }
+#company-filter { width: 100%; min-width: 0; height: 27px; padding: 0 5px; border: 1px solid var(--line); border-radius: 2px; color: #c9d1da; background: #101925; font: 9px var(--body); }
+.directory-pagination { height: 25px; display: flex; align-items: center; justify-content: space-between; margin-top: 4px; font: 8px var(--mono); color: var(--dim); flex-shrink: 0; }
+.directory-pagination button { width: 30px; height: 24px; border: 1px solid var(--line); color: var(--gold); }
+.mining-symbol { fill: #101e28; stroke: var(--mine-color, #84c7bd); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.mining .selection-ring { stroke: var(--mine-color, #84c7bd); }
+.planet-item .mini-planet.mining { border-radius: 0; background: var(--planet-color); clip-path: polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%); box-shadow: none; }
+.legend-mine { background: #84c7bd; clip-path: polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%); width: 7px !important; height: 7px !important; }
+.directory-station-icon { width: 22px; height: 22px; flex-shrink: 0; }
+.directory-station-icon path { stroke: var(--gold); stroke-width: 1.5; fill: #15232c; }
+.destination-heading > div { min-width: 0; flex: 1; }
+.destination-caption { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.contract-button { font: 8px var(--mono); color: var(--gold); border: 1px solid #72624480; padding: 3px 5px; border-radius: 2px; flex-shrink: 0; }
+.contract-details { margin: 18px 0; }
+.contract-details > div { padding: 9px 0; border-bottom: 1px solid var(--line); }
+.contract-details dt { font: 8px var(--mono); color: var(--dim); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 5px; }
+.contract-details dd { margin: 0; font-size: 12px; color: var(--text); overflow-wrap: anywhere; }
+#contract-status { color: #99c4ad; }
+@media (max-width: 980px) and (min-width: 600px), (max-height: 620px) and (min-width: 600px) {
+  body[data-view="ship"] .left-panel.mining-directory { grid-template-rows: auto auto auto auto minmax(0,1fr); row-gap: 5px; }
+  .mining-directory .ship-card { grid-row: 2/6; }
+  .mining-directory #mining-filter { grid-column: 2; grid-row: 2; margin: 0; }
+  .mining-directory .planet-directory { grid-row: 3; }
+  .mining-directory .directory-pagination { grid-column: 2; grid-row: 4; margin: 0; }
+  .mining-directory .edge-button { grid-row: 5; margin-top: 4px; padding-top: 6px; }
+}
+@media (max-height: 680px) {
+  .contract-details { margin: 10px 0; }
+  .contract-details > div { padding: 7px 0; }
+  .contract-details dd { font-size: 11px; }
+}
+@media (max-width: 620px) { .legend { gap: 7px; } .contract-button { font-size: 7px; padding: 5px; } }
