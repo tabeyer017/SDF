@@ -1,0 +1,7 @@
+# Pirate Corvette visual cleanup
+
+Mode: built-in image_gen
+
+Use case: precise-object-edit / style-transfer.
+Input 1 is the CORVETTE image to edit, and is the sole reference for ship design, exact equipment and layout. Input 2 is the FRIGATE image, a visual-finish reference only. Clean up Input 1 to have the crisp detailed visual look of Input 2: sharp in-focus lines, clearly defined clean steel-gray armor plating, fine rivets and panel seams, crisp windows, realistic mechanical detail, consistent subtle weathering, clean white background and dark navy labels and arrows. Restore detail and clarity lost to repeated edits while retaining the realistic rendering style of the frigate. Keep the existing five orthographic views and their placement precisely: TOP, SIDE, BOTTOM, FRONT, REAR. Preserve the existing geometry, component positions and exact configuration from Input 1; do not borrow additional equipment or quantities from Input 2.
+Critical invariants: Top-view pair of 30 mm CIWS one per side must align with the side-view CIWS at the same fore-aft position (about x=756 in this sheet); both mounts immediately aft of the bridge. Exactly one 120 mm autocannon on the bow; NO additional gun on hangar roof. Exactly 30 ventral GP missile tube hatches in five columns by six rows in BOTTOM view; four shuttles in raised aft hangar, with aft flight deck; exactly two engines. Labels must be sharp and spelled as Input 1, title "PIRATE - CORVETTE". Do not introduce FRIGATE title, 40 tube count, extra rear autocannon, extra turrets or unrelated changes.
