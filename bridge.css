@@ -1,4 +1,5 @@
 /* Bridge stations share the viewport with the strategic console, never stack below it. */
+.tactical-console { display: none; }
 .bridge-console { display: none; min-height: 0; min-width: 0; border: 1px solid var(--line); background: var(--panel); }
 body[data-screen="bridge"] .command-layout, body[data-screen="bridge"] .console-tabs { display: none; }
 body[data-screen="bridge"] main { grid-template-rows: auto minmax(0,1fr) auto; }
@@ -108,4 +109,351 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
   .bridge-actions { margin: 7px 0; gap: 5px; }
   .bridge-action { padding: 6px 8px; }
   .bridge-setting { gap: 4px; }
+}
+
+/* Tactical replaces the deck and station detail with two synchronized radars. */
+.bridge-console[data-station="tactical"] > .bridge-deck-panel,
+.bridge-console[data-station="tactical"] > .bridge-station-detail { display: none; }
+.bridge-console[data-station="tactical"] > .tactical-console {
+  display: grid; grid-column: 2 / -1; grid-row: 1; min-width: 0; min-height: 0;
+  grid-template-rows: auto auto minmax(0,1fr) auto auto auto;
+  background: radial-gradient(ellipse at 50% 40%,#16333b33,transparent 65%),#080f19;
+}
+.tactical-heading { padding: 19px 24px 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.tactical-eyebrow { font: 8px var(--mono); letter-spacing: 1.5px; color: #d6977f; }
+.tactical-heading h2 { font-size: 29px; margin-top: 5px; }
+.tactical-posture { padding: 7px 9px; border: 1px solid #385247; color: #94b9a4; font: 8px var(--mono); white-space: nowrap; }
+.tactical-heading-actions { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 8px; }
+.armament-catalog-trigger { border: 1px solid #45616c; padding: 7px 9px; color: #a8d8df; font: 9px var(--mono); white-space: nowrap; }
+.armament-catalog-link { color: var(--gold); padding: 5px 0; text-align: left; font: 9px/1.6 var(--mono); text-decoration: underline; text-underline-offset: 3px; }
+.armament-catalog-dialog { width: min(620px,calc(100vw - 28px)); max-width: none; max-height: calc(100dvh - 28px); overflow: auto; padding: 24px; }
+.armament-catalog-dialog h2 { font-size: 30px; margin: 8px 0 0; }
+.armament-catalog-list { list-style: none; padding: 0; margin: 22px 0; }
+.armament-catalog-list li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 12px 0; border-bottom: 1px solid #2b3e4b; }
+.armament-catalog-list strong { font-size: 12px; font-weight: 500; color: #dbe7ed; }
+.armament-catalog-list li > span { font: 9px var(--mono); color: #8ba8b5; text-align: right; }
+.armament-own-fit { padding: 17px; border: 1px solid #38515c; background: #0a1721; }
+.armament-own-fit h3 { font: 500 23px var(--display); color: #e2eaf0; margin: 8px 0 12px; }
+.ship-armament-list { margin: 0; padding-left: 14px; color: #b8cdd8; font: 10px/1.8 var(--body); }
+.ship-armament-list li { padding: 2px 0; }
+.ship-armament-list small { display: block; font: 8px/1.7 var(--mono); color: #8da5b5; margin: 1px 0 3px; }
+.armament-own-fit h4 { font: 8px var(--mono); color: #a8bdc9; margin: 16px 0 7px; letter-spacing: 1px; }
+.armament-fit-picker { margin: 0 0 12px; }
+.ship-facility-summary { font: 10px/1.8 var(--body); color: #b8cdd8; margin: 0; }
+@media (max-width: 650px) {
+  .tactical-heading-actions { gap: 5px; }
+  .armament-catalog-trigger { font-size: 8px; padding: 6px; }
+  .armament-catalog-dialog { padding: 17px; }
+  .armament-catalog-list li { gap: 8px; }
+  .armament-catalog-list strong { font-size: 11px; }
+}
+.tactical-toolbar { padding: 0 24px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.radar-range { display: flex; align-items: center; gap: 4px; }
+.radar-range > span { font: 8px var(--mono); color: var(--dim); margin-right: 8px; white-space: nowrap; }
+.radar-range button { min-width: 42px; min-height: 32px; padding: 6px; border: 1px solid #2e4350; color: #92abb5; font: 10px var(--mono); }
+.radar-range button[aria-pressed="true"] { background: #84d2d71a; border-color: #84d2d7; color: #a5edf0; }
+.radar-count { font: 8px var(--mono); color: #92a6b4; white-space: nowrap; }
+.radar-screens { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); min-width: 0; min-height: 0; margin: 0 24px; gap: 16px; }
+.radar-card { display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid #2b404a; background: #071215; }
+.radar-caption { padding: 11px 13px; display: flex; justify-content: space-between; gap: 6px; border-bottom: 1px solid #23353d; flex-shrink: 0; }
+.radar-caption h3 { margin: 0; color: #abcbd0; font: 9px var(--mono); letter-spacing: 1px; }
+.radar-caption > span { font: 7px var(--mono); color: #7d9a9f; }
+.radar-card > svg { display: block; width: 100%; height: 100%; flex: 1 1 0; min-height: 0; }
+.radar-field { fill: #0b2025; }
+.radar-ring { stroke: #41636a; stroke-width: .8; fill: none; }
+.radar-ring:last-of-type { stroke: #769b9e; }
+.radar-axis { stroke: #53787e; stroke-width: .7; stroke-dasharray: 3 5; }
+.radar-ring-label { fill: #8eafb2; font: 8px var(--mono); paint-order: stroke; stroke: #0b2025; stroke-width: 3px; }
+.radar-axis-label { fill: #90b3b7; font: 9px var(--mono); letter-spacing: .5px; }
+.radar-track { cursor: pointer; outline: none; }
+.radar-track-hit { fill: transparent; stroke: none; }
+.radar-selection { fill: none; stroke: #e3edf0; stroke-width: 1; stroke-dasharray: 3 3; opacity: 0; }
+.radar-track.selected .radar-selection, .radar-track:focus-visible .radar-selection, .radar-track:hover .radar-selection { opacity: 1; }
+.radar-track:focus-visible .radar-selection { stroke-width: 2; stroke-dasharray: none; }
+.radar-track-label { fill: #d2e2e6; font: 9px var(--mono); paint-order: stroke; stroke: #0b2025; stroke-width: 3px; pointer-events: none; }
+.radar-own-ship { pointer-events: none; }
+.radar-own-ship circle { fill: #0b2025; stroke: #a8e4ea; stroke-width: .7; }
+.radar-own-ship path { fill: #a8e4ea; stroke: #a8e4ea; stroke-width: 1; }
+.radar-legend { display: flex; justify-content: center; gap: 23px; padding: 10px 12px; color: #b4c2cc; font: 9px var(--mono); }
+.radar-legend > span { display: flex; align-items: center; gap: 6px; }
+.radar-legend svg { width: 16px; height: 16px; }
+.tactical-contact { display: flex; align-items: center; gap: 24px; border-top: 1px solid #273943; margin: 0 24px; padding: 12px 0; }
+.radar-contact-picker { display: grid; gap: 5px; }
+.radar-contact-picker > span { font: 7px var(--mono); color: var(--dim); letter-spacing: 1px; }
+.radar-contact-picker select { width: 245px; max-width: 100%; height: 32px; background: #101e28; color: #c4d6de; border: 1px solid #334b58; border-radius: 2px; font: 10px var(--mono); padding: 0 8px; }
+.radar-contact-detail { display: grid; gap: 7px; min-width: 0; }
+.radar-contact-detail strong { font-size: 11px; font-weight: 500; color: #cbdde3; }
+.radar-contact-detail > span { font: 9px var(--mono); color: #95adb7; }
+.tactical-note { display: flex; justify-content: space-between; gap: 8px; padding: 9px 24px; border-top: 1px solid #202f39; color: #8199a4; font: 7px var(--mono); letter-spacing: .7px; }
+.tactical-note > span:first-child { color: var(--gold); }
+@media (max-width: 1100px), (max-height: 760px) {
+  .bridge-console[data-station="tactical"] > .tactical-console { grid-column: 1 / -1; grid-row: 2; }
+  .tactical-heading { padding: 13px 18px 10px; }
+  .tactical-heading h2 { font-size: 26px; }
+  .tactical-toolbar { padding: 0 18px 10px; }
+  .radar-screens { margin: 0 18px; gap: 12px; }
+  .tactical-contact { margin: 0 18px; padding: 9px 0; }
+  .tactical-note { padding: 8px 18px; }
+}
+@media (max-width: 750px) {
+  .tactical-toolbar { align-items: flex-start; flex-direction: column; gap: 7px; }
+  .radar-caption { flex-direction: column; padding: 8px 10px; }
+  .tactical-contact { gap: 14px; }
+  .radar-contact-picker select { width: 205px; }
+  .radar-contact-detail strong { font-size: 10px; }
+}
+@media (max-width: 650px) {
+  .bridge-console[data-station="tactical"][data-view="deck"] > .bridge-deck-panel { display: flex; }
+  .bridge-console[data-station="tactical"][data-view="deck"] > .tactical-console { display: none; }
+  .tactical-heading { padding: 10px 12px 8px; }
+  .tactical-eyebrow { font-size: 7px; letter-spacing: .7px; }
+  .tactical-heading h2 { font-size: 23px; }
+  .tactical-posture { font-size: 7px; padding: 6px; }
+  .tactical-toolbar { padding: 0 12px 8px; }
+  .radar-range { width: 100%; gap: 3px; }
+  .radar-range > span { margin-right: 3px; font-size: 7px; }
+  .radar-range button { min-width: 0; min-height: 32px; flex: 1; font-size: 9px; }
+  .radar-count { font-size: 7px; }
+  .radar-screens { margin: 0 12px; gap: 8px; }
+  .radar-caption { padding: 7px; }
+  .radar-caption h3 { font-size: 8px; letter-spacing: .4px; }
+  .radar-caption > span { font-size: 6px; }
+  .radar-legend { gap: 12px; padding: 7px 5px; font-size: 8px; }
+  .radar-legend > span { gap: 3px; }
+  .radar-legend svg { width: 13px; height: 13px; }
+  .tactical-contact { margin: 0 12px; padding: 8px 0; gap: 8px; flex-direction: column; align-items: stretch; }
+  .radar-contact-picker { grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 10px; }
+  .radar-contact-picker select { width: 100%; }
+  .radar-contact-detail { gap: 4px; }
+  .radar-contact-detail > span { font-size: 8px; }
+  .tactical-note { padding: 7px 12px; font-size: 6px; letter-spacing: 0; }
+}
+@media (max-width: 650px) and (min-height: 700px) {
+  .radar-screens { grid-template-columns: minmax(0,1fr); grid-template-rows: repeat(2,minmax(0,1fr)); }
+  .radar-caption { flex-direction: row; padding: 5px 9px; }
+}
+@media (max-height: 570px) {
+  .tactical-heading { padding: 7px 12px; }
+  .tactical-heading h2 { font-size: 20px; margin-top: 2px; }
+  .tactical-eyebrow { font-size: 6px; }
+  .tactical-toolbar { flex-direction: row; align-items: center; padding: 0 12px 7px; }
+  .radar-range { width: auto; }
+  .radar-range button { min-width: 31px; min-height: 27px; padding: 4px; }
+  .radar-caption { padding: 5px 9px; flex-direction: row; }
+  .radar-caption > span { display: none; }
+  .radar-legend { padding: 4px; }
+  .tactical-contact { flex-direction: row; align-items: center; padding: 5px 0; }
+  .radar-contact-picker { display: block; }
+  .radar-contact-picker > span { display: none; }
+  .radar-contact-picker select { width: 205px; height: 28px; }
+  .radar-contact-detail { gap: 3px; }
+  .tactical-note { padding: 5px 12px; font-size: 6px; }
+}
+@media (max-height: 480px) {
+  body[data-screen="bridge"]:has(.bridge-console[data-station="tactical"]) .page-heading { display: none; }
+  body[data-screen="bridge"]:has(.bridge-console[data-station="tactical"]) main { grid-template-rows: minmax(0,1fr); }
+  .bridge-console[data-station="tactical"] > .tactical-console { grid-template-rows: auto minmax(0,1fr) auto auto auto; }
+  .tactical-heading { display: none; }
+  .tactical-toolbar { padding-top: 6px; }
+}
+
+/* Contact motion, hover telemetry, and a persistent target-lock display. */
+.bridge-console[data-station="tactical"] > .tactical-console { grid-template-rows: auto auto minmax(0,1fr) auto; }
+.tactical-layout-tabs { display: none; }
+.tactical-workspace { display: grid; grid-template-columns: minmax(0,1fr) clamp(230px,23vw,285px); min-width: 0; min-height: 0; border-top: 1px solid #23353d; }
+.tactical-radar-area { display: grid; grid-template-rows: minmax(0,1fr) auto auto; min-width: 0; min-height: 0; padding-top: 14px; }
+.tactical-radar-area .radar-screens { margin: 0 16px; gap: 12px; }
+.tactical-radar-area .radar-caption { flex-direction: column; padding: 9px 10px; }
+.tactical-radar-area .radar-legend { gap: 16px; font-size: 8px; }
+.tactical-radar-area .tactical-contact { display: grid; grid-template-columns: minmax(0,1fr); gap: 7px; margin: 0 16px; padding: 10px 0; }
+.tactical-radar-area .radar-contact-picker { grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 12px; }
+.tactical-radar-area .radar-contact-picker select { width: 100%; min-width: 0; }
+.radar-interaction-hint { color: #93aab5; font: 8px/1.6 var(--mono); }
+.radar-direction { pointer-events: none; }
+.radar-direction path { fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.radar-selection { stroke-dasharray: none; stroke-width: 1.2; }
+.radar-track.active-target .radar-selection { stroke: #f4db9e; stroke-width: 1.7; }
+.radar-track:focus-visible { outline: none; }
+.radar-sensor-status { display: grid; gap: 5px; text-align: right; }
+.radar-iff-status { font: 7px var(--mono); color: #9cc9d0; white-space: nowrap; }
+@media (max-width: 750px) {
+  .radar-sensor-status { text-align: left; }
+}
+.radar-tooltip { position: fixed; z-index: 15; display: grid; gap: 6px; width: max-content; max-width: calc(100vw - 16px); padding: 12px 15px; background: #101e29f5; border: 1px solid #63818d; border-radius: 3px; box-shadow: 0 8px 32px #0009; pointer-events: none; font: 10px/1.4 var(--mono); color: #cbdde3; }
+.radar-tooltip strong { color: #edf4f6; font-size: 11px; margin-bottom: 2px; }
+.tactical-console .positive { color: #74d79c; }
+.tactical-console .negative { color: #f47779; }
+.tactical-console .zero { color: #b7c9d2; }
+.tactical-target-panel { min-width: 0; min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: #435a67 #101b27; padding: 18px; border-left: 1px solid #2b3e4b; background: #0d1723; }
+.target-lock-status { font: 8px/1.6 var(--mono); letter-spacing: .5px; color: #8ba1b1; padding-bottom: 11px; border-bottom: 1px solid #2b3e4b; }
+.target-lock-status.locked { color: #e7c784; }
+.tactical-target-panel h3 { margin: 13px 0 6px; font: 500 28px/1.05 var(--display); color: #e2eaf0; outline: none; }
+.target-ship-class { font: 9px/1.6 var(--mono); letter-spacing: .5px; color: #9cc9d0; margin: 0 0 10px; }
+.target-ship-reference { display: block; padding: 0 0 3px; border-bottom: 1px dotted #63818d; text-align: left; }
+.ship-reference-indicator { color: var(--gold); }
+.ship-reference-dialog { width: min(1200px,calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); padding: 20px; overflow: auto; }
+.ship-reference-dialog[open] { display: grid; grid-template-rows: auto minmax(0,1fr); gap: 16px; }
+.ship-reference-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; min-width: 0; }
+.ship-reference-header > div { min-width: 0; }
+.ship-reference-dialog h2 { margin: 7px 0 0; font-size: 28px; }
+.ship-reference-close { flex-shrink: 0; width: 36px; height: 36px; border: 1px solid #4c6170; border-radius: 2px; color: #d1dde5; font-size: 26px; line-height: 1; }
+.ship-reference-figure { display: grid; grid-template-rows: minmax(0,1fr) auto; gap: 12px; margin: 0; min-width: 0; min-height: 0; }
+.ship-reference-stage { min-width: 0; min-height: 120px; display: flex; justify-content: center; align-items: center; background: #f6f6f4; border: 1px solid #384c5a; }
+.ship-reference-image { display: block; max-width: 100%; max-height: calc(100dvh - 184px); width: auto; height: auto; object-fit: contain; }
+.ship-reference-status { padding: 30px; text-align: center; color: #314452; }
+.ship-reference-caption { display: flex; align-items: center; justify-content: space-between; gap: 10px; font: 8px/1.7 var(--mono); color: #9cafbe; }
+.ship-reference-caption a { color: var(--gold); text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+@media (max-width: 650px), (max-height: 480px) {
+  .ship-reference-dialog { padding: 12px; width: calc(100vw - 20px); max-height: calc(100dvh - 20px); }
+  .ship-reference-dialog[open] { gap: 12px; }
+  .ship-reference-dialog h2 { font-size: 23px; }
+  .ship-reference-header { gap: 8px; }
+  .ship-reference-image { max-height: calc(100dvh - 174px); }
+  .ship-reference-caption { flex-wrap: wrap; font-size: 7px; gap: 6px; }
+}
+.target-lock-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+.target-lock-list button { border: 1px solid #3c515e; padding: 4px 6px; font: 9px var(--mono); color: #a5bac6; }
+.target-lock-list button[aria-pressed="true"] { color: #f0d89e; border-color: #b19661; background: #d5b77c12; }
+.target-identity, .target-telemetry { margin: 12px 0; }
+.target-identity > div, .target-telemetry > div { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 3px 0; }
+.target-identity dt, .target-telemetry dt { font: 8px/1.5 var(--mono); color: #8299aa; flex: 0 0 auto; }
+.target-identity dd, .target-telemetry dd { margin: 0; font: 10px/1.5 var(--body); color: #c5d5df; text-align: right; overflow-wrap: anywhere; }
+.target-telemetry { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 5px 8px; border-block: 1px solid #2b3e4b; padding: 6px 0; margin: 9px 0; }
+.target-telemetry > div { display: grid; grid-template-columns: minmax(0,1fr); gap: 3px; padding: 4px 0; }
+.target-telemetry dd { text-align: left; font: 9px/1.5 var(--mono); }
+.target-equipment { padding: 3px 0 9px; }
+.target-equipment h4 { margin: 0 0 5px; font: 8px var(--mono); letter-spacing: 1px; color: #b8c5d0; }
+.target-equipment p { margin: 0; font: 10px/1.7 var(--body); color: #a4bac9; }
+.target-fit-note { font: 7px/1.7 var(--mono); color: #8e9d9f; margin: 8px 0 12px; }
+.target-release { width: 100%; padding: 9px; border: 1px solid #6b5b3e; color: var(--gold); font: 9px var(--mono); }
+.target-empty { color: #a2b6c5; font-size: 11px; line-height: 1.8; }
+.target-empty-reticle { padding: 30px 0; text-align: center; font: 60px var(--body); color: #405665; }
+@media (min-width: 1400px) {
+  .tactical-radar-area .radar-caption { flex-direction: row; }
+}
+@media (max-width: 900px) {
+  .tactical-workspace { grid-template-columns: minmax(0,1fr) 228px; }
+  .tactical-radar-area .radar-screens { margin: 0 10px; gap: 8px; }
+  .tactical-radar-area .radar-legend { gap: 10px; font-size: 7px; }
+  .tactical-radar-area .radar-legend > span { gap: 3px; }
+  .tactical-radar-area .tactical-contact { margin: 0 10px; }
+  .tactical-radar-area .radar-caption h3 { font-size: 8px; letter-spacing: .3px; }
+  .tactical-radar-area .radar-caption > span { font-size: 6px; }
+  .tactical-target-panel { padding: 13px; }
+  .tactical-target-panel h3 { font-size: 26px; }
+  .tactical-note { letter-spacing: 0; font-size: 6px; }
+}
+@media (max-width: 650px) {
+  .bridge-console[data-station="tactical"] > .tactical-console { grid-template-rows: auto auto auto minmax(0,1fr) auto; }
+  .tactical-layout-tabs { display: flex; gap: 6px; padding: 0 12px 8px; }
+  .tactical-layout-tabs button { flex: 1; font: 9px var(--mono); padding: 8px; border: 1px solid #3b515e; color: #a5bac6; }
+  .tactical-layout-tabs button[aria-pressed="true"] { border-color: #84d2d7; color: #a5edf0; background: #84d2d710; }
+  .tactical-workspace { grid-template-columns: minmax(0,1fr); }
+  .tactical-workspace[data-mode="radar"] .tactical-target-panel,
+  .tactical-workspace[data-mode="target"] .tactical-radar-area { display: none; }
+  .tactical-radar-area { padding-top: 8px; }
+  .tactical-radar-area .radar-caption { padding: 6px 8px; }
+  .tactical-radar-area .radar-legend { font-size: 8px; gap: 12px; }
+  .tactical-target-panel { border-left: 0; padding: 14px 18px; }
+  .target-telemetry { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); column-gap: 12px; }
+  .target-empty-reticle { padding: 15px 0; }
+  .radar-interaction-hint { font-size: 7px; }
+  .tactical-note { flex-wrap: wrap; padding: 6px 12px; gap: 4px; }
+}
+@media (max-width: 650px) and (min-height: 700px) {
+  .tactical-radar-area .radar-caption { flex-direction: row; }
+}
+@media (max-height: 570px) {
+  .tactical-radar-area { padding-top: 6px; }
+  .tactical-radar-area .radar-caption { padding: 5px 8px; }
+  .tactical-radar-area .tactical-contact { padding: 5px 0; gap: 4px; }
+  .tactical-radar-area .radar-contact-picker { display: grid; grid-template-columns: minmax(0,1fr); }
+  .tactical-target-panel { padding: 10px 13px; }
+  .target-lock-status { padding-bottom: 6px; }
+  .target-identity, .target-telemetry { margin: 8px 0; }
+}
+@media (max-height: 480px) {
+  .bridge-console[data-station="tactical"] > .tactical-console { grid-template-rows: auto minmax(0,1fr) auto; }
+}
+@media (max-height: 480px) and (max-width: 650px) {
+  .bridge-console[data-station="tactical"] > .tactical-console { grid-template-rows: auto auto minmax(0,1fr) auto; }
+}
+
+/* Navigation and Helm share the same sector chart and flight state. */
+.sector-console { display: none; min-width: 0; min-height: 0; }
+.sector-view-tabs { display: none; }
+.bridge-console:is([data-station="navigation"],[data-station="helm"]) > :is(.bridge-deck-panel,.bridge-station-detail) { display: none; }
+.bridge-console:is([data-station="navigation"],[data-station="helm"]) > .sector-console { display: grid; grid-column: 2/-1; grid-row: 1; grid-template-rows: auto auto minmax(0,1fr); background: #080f19; }
+.sector-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 17px 20px 10px; }
+.sector-heading h2 { font-size: 29px; margin: 5px 0 0; }
+.sector-heading .bridge-action { font: 9px var(--mono); }
+.sector-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 20px 12px; }
+.sector-ranges { display: flex; gap: 4px; flex-wrap: wrap; }
+.sector-toolbar button { font: 9px var(--mono); padding: 7px; }
+.sector-ranges button[aria-pressed="true"] { border-color: #84d2d7; color: #a5edf0; background: #84d2d714; }
+.sector-toolbar select,.sector-clock select { background: #101e28; border: 1px solid #334b58; color: #c4d6de; padding: 7px; font: 10px var(--mono); min-width: 0; }
+.sector-workspace { display: grid; grid-template-columns: minmax(0,1fr) 290px; min-width: 0; min-height: 0; border-top: 1px solid var(--line); }
+.sector-map-area { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: radial-gradient(ellipse,#102a35,#080f19 75%); }
+.sector-map-area > svg { width: 100%; height: 100%; flex: 1 1 0; min-height: 0; font-family: var(--mono); }
+.sector-map-area > svg text { font-size: var(--sector-font,10px); }
+.sector-console[data-mode="navigation"] .sector-map-area > svg { cursor: crosshair; }
+.sector-map-caption { margin: 0; padding: 10px 16px; font: 8px/1.6 var(--mono); color: #91a8b7; border-top: 1px solid var(--line); }
+.sector-controls { padding: 18px; overflow: auto; min-height: 0; min-width: 0; border-left: 1px solid #2b3e4b; background: #0d1723; scrollbar-width: thin; }
+.sector-controls > .bridge-action { display: block; width: 100%; margin-top: 8px; }
+.sector-status { font: 12px/1.7 var(--body); color: #e5d2a6; margin: 8px 0; }
+.sector-readout { font: 10px/1.8 var(--mono); color: #9edce0; }
+.sector-safety,.sector-position { font: 9px/1.8 var(--mono); color: #9eafba; }
+.sector-clock { display: grid; gap: 7px; margin: 14px 0; }
+.sector-controls h3 { font: 9px var(--mono); color: #a4c4cb; letter-spacing: 1px; margin: 18px 0 12px; }
+.sector-waypoint-form,.sector-helm-form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; }
+.sector-waypoint-form > button,.sector-helm-form > button { grid-column: 1/-1; }
+.bridge-setting input { width: 100%; height: 32px; background: #101e28; border: 1px solid #334b58; color: #d2e4ea; font: 11px var(--mono); padding: 0 7px; }
+.sector-route { padding-left: 17px; color: #b8b29d; font: 9px/1.8 var(--mono); }
+.sector-route li { margin: 7px 0; overflow-wrap: anywhere; }
+.sector-route-actions { display: grid; gap: 7px; margin-bottom: 15px; }
+.sector-helm p { font: 10px/1.7 var(--body); color: #9eafba; }
+.sector-epd { display: grid; gap: 7px; }
+.sector-track-list { border-top: 1px solid #2b3e4b; padding-top: 12px; font: 9px/1.8 var(--mono); color: #9eafba; }
+.sector-track-list summary { cursor: pointer; color: #d5b77c; }
+.sector-track-list ul { padding-left: 15px; }
+.combat-maneuvers { display: grid; gap: 8px; margin: 14px 0; padding-block: 12px; border-block: 1px solid #2b3e4b; }
+.combat-maneuvers h4 { font: 8px var(--mono); letter-spacing: 1px; color: #d5b77c; margin: 0; }
+.combat-maneuvers .bridge-action { font-size: 10px; padding: 8px; }
+.maneuver-form { display: grid; gap: 8px; }
+.tactical-note > span:first-child { line-height: 1.7; }
+@media (max-width: 1100px), (max-height: 760px) {
+  .bridge-console:is([data-station="navigation"],[data-station="helm"]) > .sector-console { grid-column: 1/-1; grid-row: 2; }
+}
+@media (max-width: 800px) {
+  .sector-workspace { grid-template-columns: minmax(0,1fr) 250px; }
+  .sector-controls { padding: 13px; }
+  .sector-heading,.sector-toolbar { padding-inline: 12px; }
+}
+@media (max-width: 650px) {
+  .bridge-console:is([data-station="navigation"],[data-station="helm"])[data-view="deck"] > .bridge-deck-panel { display: flex; }
+  .bridge-console:is([data-station="navigation"],[data-station="helm"])[data-view="deck"] > .sector-console { display: none; }
+  .sector-heading { padding-block: 9px; }
+  .sector-heading h2 { font-size: 23px; }
+  .sector-heading .bridge-action { font-size: 8px; padding: 7px; }
+  .sector-workspace { grid-template-columns: minmax(0,1fr); grid-template-rows: minmax(150px,42%) minmax(0,1fr); }
+  .bridge-console:is([data-station="navigation"],[data-station="helm"]) > .sector-console { grid-template-rows: auto auto auto minmax(0,1fr); }
+  .sector-view-tabs { display: flex; gap: 6px; padding: 0 12px 8px; }
+  .sector-view-tabs button { flex: 1; font: 9px var(--mono); padding: 8px; border: 1px solid #3b515e; color: #a5bac6; }
+  .sector-view-tabs button[aria-pressed="true"] { border-color: #84d2d7; color: #a5edf0; background: #84d2d710; }
+  .sector-workspace { grid-template-rows: minmax(0,1fr); }
+  .sector-workspace[data-view="chart"] .sector-controls,.sector-workspace[data-view="controls"] .sector-map-area { display: none; }
+  .sector-controls { border-left: 0; border-top: 1px solid #2b3e4b; }
+  .sector-map-caption { font-size: 7px; padding: 5px 10px; }
+  .sector-toolbar { gap: 5px; padding-bottom: 8px; }
+  .sector-toolbar button { padding: 6px; font-size: 8px; }
+}
+@media (max-height: 480px) {
+  .sector-heading { display: none; }
+  .sector-toolbar { padding-block: 5px; }
+  .bridge-console:is([data-station="navigation"],[data-station="helm"]) > .sector-console { grid-template-rows: auto minmax(0,1fr); }
+  .sector-workspace { grid-template-columns: minmax(0,1fr) 240px; grid-template-rows: minmax(0,1fr); }
+}
+@media (max-height: 480px) and (max-width: 650px) {
+  .bridge-console:is([data-station="navigation"],[data-station="helm"]) > .sector-console { grid-template-rows: auto auto minmax(0,1fr); }
+  .sector-workspace { grid-template-columns: minmax(0,1fr); }
 }

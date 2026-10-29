@@ -1,6 +1,9 @@
 import { bridgeStations, restoreBridgeState, flightControlState } from './bridge-model.mjs';
+import { mountTactical } from './tactical.mjs';
+import { createSector, observeSector, issueManeuver, setManualHelm, coast, brake, addPatrolWaypoint, startPatrol, stepSector } from './sector-model.mjs';
+import { mountSectorConsole } from './sector-console.mjs';
 
-export function mountBridge({snapshot,openNavigation,engage,pause,abort,log}) {
+export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLocalChange=()=>{}}) {
   const $=id=>document.getElementById(id),NS='http://www.w3.org/2000/svg';
   const svg=(tag,attrs={},text)=>{const el=document.createElementNS(NS,tag);for(const [key,value] of Object.entries(attrs))el.setAttribute(key,value);if(text!==undefined)el.textContent=text;return el;};
   let saved;
@@ -9,6 +12,24 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log}) {
   let notice='All stations report ready for the patrol watch.',lastReview=null;
   const compact=matchMedia('(max-width: 650px)');
   const save=()=>{try{localStorage.setItem('sdf-bridge-v1',JSON.stringify(state));}catch{}};
+  let sector=createSector(undefined,snapshot().location),localElapsed=0;
+  const flight={
+    get sector(){return sector;},inTransit:()=>snapshot().active,
+    contacts:()=>observeSector(sector),
+    command:(mode,id,range)=>operate(()=>issueManeuver(sector,mode,id,range)),
+    manual:values=>operate(()=>setManualHelm(sector,values)),
+    coast:()=>operate(()=>{coast(sector);return true;}),
+    brake:()=>operate(()=>{brake(sector);return true;}),
+    add:point=>operate(()=>{const added=addPatrolWaypoint(sector,point);if(added)sector.status='Patrol waypoint added · ready to fly';return added;}),
+    patrol:()=>operate(()=>startPatrol(sector)),
+    clearRoute:()=>operate(()=>{sector.route=[];if(sector.order?.mode==='patrol')coast(sector);sector.status='Patrol route cleared';return true;}),
+    toggle:()=>operate(()=>{sector.running=!sector.running;sector.status=sector.running?'Local simulation running · current flight order resumed':'Local simulation paused · flight order retained';return true;}),
+    setRate:value=>{if([1,10,60].includes(value)){sector.rate=value;refresh();}}
+  };
+  const localRoot=document.createElement('section');localRoot.className='sector-console';localRoot.setAttribute('aria-label','Navigation and Helm local sector');$('bridge-console').append(localRoot);
+  const localConsole=mountSectorConsole({root:localRoot,flight,openSystem:openNavigation,strategic:{snapshot,engage,pause,abort}});
+  const tactical=mountTactical({root:$('tactical-console'),range:state.radarRange,onRangeChange:range=>{state.radarRange=range;save();},flight,onNavigate:()=>select('navigation')});
+  function operate(fn){if(snapshot().active){report('EPD transit active. Disengage EPD before local maneuvering.');return false;}const result=fn();if(result)report(sector.status);else report('Local order unavailable: check the target, range, or waypoint limit.');onLocalChange();return result;}
   function report(text){notice=text;log(text);refresh();}
   function select(id){
     if(!bridgeStations.some(station=>station.id===id))return;
@@ -70,6 +91,7 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log}) {
     const controlKey=[state.selected,state.watch,s.active,s.paused,s.routeCount,s.unsafe].join('|');
     if(controlKey!==lastControlKey){lastControlKey=controlKey;renderControls();}
     $('bridge-station-select').value=station.id;
+    $('bridge-console').dataset.station=station.id;
     $('bridge-station-name').textContent=station.name;
     $('bridge-station-group').textContent=station.group;
     $('bridge-station-summary').textContent=station.summary;
@@ -81,6 +103,8 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log}) {
     $('bridge-last-report').textContent=notice;
     document.querySelectorAll('[data-bridge-station]').forEach(el=>{const chosen=el.dataset.bridgeStation===station.id;el.classList.toggle('selected',chosen);el.setAttribute('aria-pressed',String(chosen));});
     const list=$('bridge-readouts');list.replaceChildren(...readouts(s).map(([label,value])=>{const row=document.createElement('div'),dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=value;row.append(dt,dd);return row;}));
+    if(['navigation','helm'].includes(state.selected))localConsole.refresh(state.selected);
+    if(state.selected==='tactical')tactical.refresh();
   }
   const groupLabels=new Map();
   for(const station of bridgeStations){
@@ -102,5 +126,16 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log}) {
   $('bridge-station-select').onchange=()=>select($('bridge-station-select').value);
   $('bridge-view-toggle').onclick=()=>{const root=$('bridge-console');root.dataset.view=root.dataset.view==='deck'?'station':'deck';updateViewButton();};
   updateViewButton();refresh();
-  return {refresh};
+  return {
+    refresh,selectStation:select,
+    localStatus:()=>({running:sector.running,mode:sector.order?.mode||'coast',time:sector.time}),
+    suspendLocal(){sector.running=false;coast(sector);sector.status='EPD transit · local flight suspended';refresh();},
+    arrive(location){sector=createSector(undefined,location);tactical.reset();notice=`Arrived at ${location}. Vector Drive ready for local patrol.`;refresh();},
+    tick(seconds){
+      if(snapshot().active || document.hidden || !sector.running)return 0;
+      const advanced=stepSector(sector,seconds*sector.rate);localElapsed+=seconds;
+      if(localElapsed>=.35){localElapsed=0;if(document.body.dataset.screen==='bridge'){if(state.selected==='tactical')tactical.refresh();if(['navigation','helm'].includes(state.selected))localConsole.refresh(state.selected);}}
+      return advanced;
+    }
+  };
 }

@@ -124,8 +124,9 @@ function updateTelemetry() {
   if(firstLeg && state.route.length && routePage===0){const leg=distance(state.ship,state.route[0]);firstLeg.textContent=`${formatDistance(leg)} · ${formatETA(leg/EPD_AU_PER_DAY)}`;}
   const dt=date();const day=String(dt.getUTCDate()).padStart(2,'0'),month=dt.toLocaleString('en',{month:'short',timeZone:'UTC'}).toUpperCase();
   $('stardate').replaceChildren(document.createTextNode(`${day} ${month} ${dt.getUTCFullYear()} `),Object.assign(document.createElement('span'),{textContent:dt.toISOString().slice(11,16)}));
-  $('ship-status').textContent=state.active?`En route to ${state.route[0].name}`:`Holding at ${state.location}`;
-  $('clock-state').textContent=state.active?(state.paused?'TRANSIT PAUSED':'PATROL IN PROGRESS'):'AWAITING ORDERS';
+  const local=bridgeConsole?.localStatus();
+  $('ship-status').textContent=state.active?`En route to ${state.route[0].name}`:local?.running?`Local flight near ${state.location}`:`Holding at ${state.location}`;
+  $('clock-state').textContent=state.active?(state.paused?'TRANSIT PAUSED':'PATROL IN PROGRESS'):local?.running?'LOCAL FLIGHT IN PROGRESS':local?.time?'LOCAL FLIGHT PAUSED':'AWAITING ORDERS';
   $('simulation-status').textContent=state.active?(state.paused?'Paused':`Transit · ${state.speed}×`):'Standby';
   $('pause-button').textContent=state.paused?'▶':'Ⅱ';
   $('pause-button').disabled=!state.active;
@@ -260,8 +261,8 @@ $('add-waypoint').onclick=()=>{
 };
 $('clear-course').onclick=()=>{if(state.active)return;state.route=[];log('Flight plan cleared.');renderPlan();save();};
 $('engage-button').onclick=()=>{
-  if(state.active){state.active=false;state.paused=false;state.location='deep space';log('EPD disengaged. Holding position.');toast('Transit aborted. Remaining waypoints retained.');}
-  else {if(!state.route.length||routeUnsafe())return;state.active=true;state.paused=false;log(`EPD engaged. Destination: ${state.route[0].name}.`);toast('Course confirmed. Electromagnetic Pulse Drive engaged.');}
+  if(state.active){state.active=false;state.paused=false;state.location='deep space';bridgeConsole?.arrive(state.location);log('EPD disengaged. Vector Drive ready.');toast('Transit aborted. Remaining waypoints retained.');}
+  else {if(!state.route.length||routeUnsafe())return;bridgeConsole?.suspendLocal();state.active=true;state.paused=false;log(`EPD engaged. Destination: ${state.route[0].name}.`);toast('Course confirmed. Electromagnetic Pulse Drive engaged.');}
   renderPlan();save();
   if(state.active && focusedConsole.matches && document.body.dataset.screen!=='bridge'){showView('map');svg.focus({preventScroll:true});}
 };
@@ -269,7 +270,7 @@ $('pause-button').onclick=()=>{if(!state.active)return;state.paused=!state.pause
 document.querySelectorAll('.speed').forEach(button=>button.onclick=()=>{state.speed=Number(button.dataset.speed);updateTelemetry();save();});
 for(const id of ['briefing-button','about-button'])$(id).onclick=()=>$('briefing-dialog').showModal();
 $('map-tab').onclick=()=>{showScreen('map');showView('map');resetView();svg.focus({preventScroll:true});};
-$('bridge-button').onclick=()=>showScreen('bridge');
+$('bridge-button').onclick=()=>{bridgeConsole.selectStation('command');showScreen('bridge');};
 document.querySelectorAll('.briefing-tabs button').forEach(button=>button.onclick=()=>{
   $('briefing-mission').hidden=button.dataset.briefing!=='mission';
   $('briefing-details').hidden=button.dataset.briefing!=='details';
@@ -278,6 +279,7 @@ document.querySelectorAll('.briefing-tabs button').forEach(button=>button.onclic
 for(const id of ['close-dialog','begin-button'])$(id).onclick=()=>$('briefing-dialog').close();
 $('restart-patrol').onclick=()=>{
   state={ship:{x:earth.x,y:earth.y},location:'Earth',route:[],active:false,paused:false,days:0,speed:1};
+  bridgeConsole?.arrive('Earth');
   logs=[];routePage=0;log('New patrol initialized. Holding at Earth.');select(earth,false);showScreen('map');showView('map');resetView();renderPlan();save();$('briefing-dialog').close();toast('Patrol reset. Ready for your orders, Captain.');
 };
 $('briefing-dialog').addEventListener('click',e=>{if(e.target===$('briefing-dialog')){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();}});
@@ -293,10 +295,11 @@ function frame(time){
     const available=elapsed*.08*state.speed;
     const days=Math.min(available,routeDistance(state.ship,state.route)/EPD_AU_PER_DAY);
     const result=advance(state.ship,state.route,days*EPD_AU_PER_DAY);state.ship={x:result.position.x,y:result.position.y};state.days+=days;
-    if(result.reached){const reached=state.route.splice(0,result.reached);for(const point of reached)log(`Arrived: ${point.name}.`);state.location=reached.at(-1).name;if(!state.route.length){state.active=false;state.paused=false;toast(`Patrol leg complete. Holding at ${state.location}.`);}renderPlan();save();}
+    if(result.reached){const reached=state.route.splice(0,result.reached);for(const point of reached)log(`Arrived: ${point.name}.`);state.location=reached.at(-1).name;if(!state.route.length){state.active=false;state.paused=false;bridgeConsole?.arrive(state.location);toast(`Patrol leg complete. Vector Drive ready at ${state.location}.`);}renderPlan();save();}
     else if(time-lastSave>120){updateTelemetry();updateSelection();renderRoutes();lastSave=time;}
     if(time%2000<40)save();
   }
+  if(!state.active&&elapsed){const seconds=bridgeConsole?.tick(elapsed)||0;if(seconds){state.days+=seconds/86400;if(time-lastSave>350){updateTelemetry();lastSave=time;}}}
   requestAnimationFrame(frame);
 }
 new ResizeObserver(entries=>{
@@ -312,6 +315,6 @@ bridgeConsole=mountBridge({
   engage:()=>{if(!state.active)$('engage-button').click();},
   pause:()=>{if(state.active)$('pause-button').click();},
   abort:()=>{if(state.active)$('engage-button').click();},
-  log
+  log,onLocalChange:updateTelemetry
 });
 buildMap();select(earth,false);renderPlan();log(state.active?'Saved journey restored. Transit paused.':'Sol Command link established.');log('Captain on deck. Awaiting orders.');requestAnimationFrame(frame);
