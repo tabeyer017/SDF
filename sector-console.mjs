@@ -27,11 +27,11 @@ export function mountManeuverControls({flight,targetId,onNavigate}) {
 }
 
 export function mountSectorConsole({root,flight,openSystem,strategic}) {
-  let radius=250,plane='top',station='navigation',camera=null;
-  const heading=el('header','sector-heading'), title=el('div','');const eyebrow=el('span','tactical-eyebrow','NAVIGATION / LOCAL SECTOR'),name=el('h2','','Patrol & maneuver');title.append(eyebrow,name);
+  let radius=220,plane='top',station='navigation',camera=null;
+  const heading=el('header','sector-heading'), title=el('div','');const eyebrow=el('span','tactical-eyebrow','NAVIGATION / LOCAL SECTOR'),name=el('h2','','Flight execution');name.hidden=true;title.append(eyebrow,name);
   heading.append(title,button('Solar System / EPD ↗',openSystem));
   const toolbar=el('div','sector-toolbar'),ranges=el('div','sector-ranges');ranges.setAttribute('role','group');ranges.setAttribute('aria-label','Sector map radius');
-  for(const value of [100,250,500,1000,2500]){const b=button(`${value.toLocaleString()} km`,()=>{radius=value;refresh();});b.dataset.radius=value;ranges.append(b);}
+  for(const value of [100,200,220,250,500,1000,2500]){const b=button(`${value.toLocaleString()} km`,()=>{radius=value;refresh();});b.dataset.radius=value;ranges.append(b);}
   const view=el('select','');view.setAttribute('aria-label','Sector projection');view.append(Object.assign(el('option','','Top · X / Y'),{value:'top'}),Object.assign(el('option','','Rear · X / Z'),{value:'rear'}));view.onchange=()=>{plane=view.value;refresh();};
   toolbar.append(ranges,view,button('Center on ship',()=>{camera=null;refresh();}));
   const workspace=el('div','sector-workspace'),mapArea=el('section','sector-map-area');mapArea.setAttribute('aria-label','Local sector navigation map');
@@ -69,7 +69,7 @@ export function mountSectorConsole({root,flight,openSystem,strategic}) {
   };
   function refresh(nextStation=station) {
     if(nextStation!==station)setView(nextStation==='helm'?'controls':'chart');station=nextStation;root.dataset.mode=station;
-    eyebrow.textContent=station==='helm'?'CONN / HELM · VECTOR DRIVE':'NAVIGATION / LOCAL SECTOR';name.textContent=station==='helm'?'Flight execution':'Patrol & maneuver';
+    eyebrow.textContent=station==='helm'?'CONN / HELM · VECTOR DRIVE':'NAVIGATION / LOCAL SECTOR';name.hidden=station!=='helm';
     nav.hidden=station!=='navigation';helm.hidden=station!=='helm';caption.textContent=station==='navigation'?'Click chart to append a waypoint · fixed sector axes · X/Y/Z entry in controls':'Fixed sector axes · dashed line predicts next 60 seconds · travel and bow are independent';
     const s=flight.sector,live=flight.contacts(),origin=camera||s.own,axis=plane==='top'?'y':'z';
     const px=p=>(p.x-origin.x)/radius*250,py=p=>-(p[axis]-origin[axis])/radius*250;
@@ -84,12 +84,12 @@ export function mountSectorConsole({root,flight,openSystem,strategic}) {
     const transit=strategic.snapshot(),availability=flightControlState(transit);epdEngage.disabled=!availability.canEngage;epdPause.disabled=!availability.canPause;epdAbort.disabled=!availability.canAbort;epdPause.textContent=transit.paused?'Resume EPD transit':'Pause EPD transit';
     position.textContent=`${s.location} sector · T+${s.time.toFixed(0)} s · Ship X ${s.own.x.toFixed(1)} / Y ${s.own.y.toFixed(1)} / Z ${s.own.z.toFixed(1)} km`;
     chart.replaceChildren(svg('rect',{x:-250,y:-250,width:500,height:500,fill:'#091a21',stroke:'#38535f'}));
-    for(let i=-2;i<=2;i++)chart.append(svg('path',{d:`M${i*100} -250V250M-250 ${i*100}H250`,stroke:'#223c48','stroke-width':.7}));
+    for(let i=-2;i<=2;i++)chart.append(svg('path',{d:`M${i*100} -250V250M-250 ${i*100}H250`,stroke:i===0?'#729ba8':'#476976','stroke-width':i===0?1.4:1,'vector-effect':'non-scaling-stroke'}));
     chart.append(svg('text',{x:-250,y:-258,fill:'#9fbfc9','font-size':10},`${radius.toLocaleString()} KM RADIUS · ${plane==='top'?'X / Y':'X / Z'} · CENTERED ON SHIP`));
     // Clip every spatial layer to the chart; labels and controls stay outside the plot.
     const defs=svg('defs'),clip=svg('clipPath',{id:'sector-plot-clip'});clip.append(svg('rect',{x:-250,y:-250,width:500,height:500}));defs.append(clip);chart.append(defs);
     const layer=svg('g',{'clip-path':'url(#sector-plot-clip)'});chart.append(layer);
-    layer.append(svg('circle',{cx:px(s.own),cy:py(s.own),r:SENSOR_RANGE/radius*250,fill:'#78cbd608',stroke:'#5faeb9','stroke-dasharray':'5 5'}));
+    layer.append(svg('circle',{cx:px(s.own),cy:py(s.own),r:SENSOR_RANGE/radius*250,fill:'#78cbd608',stroke:'#8cd3df','stroke-width':1.6,'stroke-dasharray':'5 4','vector-effect':'non-scaling-stroke'}));
     for(const h of sectorHazards){const slice=Math.sqrt(Math.max(0,h.radius**2-(h[plane==='top'?'z':'y']-origin[plane==='top'?'z':'y'])**2));if(!slice)continue;layer.append(svg('circle',{cx:px(h),cy:py(h),r:slice/radius*250,fill:'#f4777920',stroke:'#f47779'}),svg('text',{x:px(h)+8,y:py(h)-8,fill:'#f47779','font-size':9},h.name));}
     layer.append(svg('path',{d:`M${px({x:0,y:0,z:0})-5} ${py({x:0,y:0,z:0})}h10m-5-5v10`,stroke:'#d5b77c'}));
     const points=[s.own,...s.route];if(points.length>1)layer.append(svg('polyline',{points:points.map(p=>`${px(p)},${py(p)}`).join(' '),fill:'none',stroke:'#d5b77c','stroke-width':1.2}));

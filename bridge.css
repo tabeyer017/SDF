@@ -20,6 +20,11 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 #bridge-watch { color: #94b9a4; font-size: 7px; border: 1px solid #385247; padding: 5px 7px; letter-spacing: .5px; }
 #bridge-watch.heightened { color: #e5ba73; border-color: #8c673b; background: #d5a7520d; }
 .bridge-deck { width: 100%; min-height: 0; flex: 1; }
+@media (min-width: 651px) and (max-height: 850px) {
+  .bridge-deck-header { padding: 9px 18px; }
+  .bridge-deck-footer { padding: 8px 18px; }
+  body[data-screen="bridge"]:has(.bridge-console[data-station="command"]) .page-heading h1 { font-size: 25px; margin: 0; }
+}
 .bridge-deck-footer { display: flex; justify-content: space-between; padding: 13px 18px; font: 7px var(--mono); color: var(--dim); letter-spacing: .7px; flex-shrink: 0; border-top: 1px solid #1c2a38; }
 .bridge-deck-footer > span:first-child { color: var(--gold); }
 .bridge-deck-station { cursor: pointer; outline: none !important; }
@@ -160,9 +165,9 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 .radar-caption > span { font: 7px var(--mono); color: #7d9a9f; }
 .radar-card > svg { display: block; width: 100%; height: 100%; flex: 1 1 0; min-height: 0; }
 .radar-field { fill: #0b2025; }
-.radar-ring { stroke: #41636a; stroke-width: .8; fill: none; }
+.radar-ring { stroke: #6e9ca4; stroke-width: 1.1; fill: none; }
 .radar-ring:last-of-type { stroke: #769b9e; }
-.radar-axis { stroke: #53787e; stroke-width: .7; stroke-dasharray: 3 5; }
+.radar-axis { stroke: #8bbdc5; stroke-width: 1.2; stroke-dasharray: 4 4; }
 .radar-ring-label { fill: #8eafb2; font: 8px var(--mono); paint-order: stroke; stroke: #0b2025; stroke-width: 3px; }
 .radar-axis-label { fill: #90b3b7; font: 9px var(--mono); letter-spacing: .5px; }
 .radar-track { cursor: pointer; outline: none; }
@@ -261,7 +266,7 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 .bridge-console[data-station="tactical"] > .tactical-console { grid-template-rows: auto auto minmax(0,1fr) auto; }
 .tactical-layout-tabs { display: none; }
 .tactical-workspace { display: grid; grid-template-columns: minmax(0,1fr) clamp(230px,23vw,285px); min-width: 0; min-height: 0; border-top: 1px solid #23353d; }
-.tactical-radar-area { display: grid; grid-template-rows: minmax(0,1fr) auto auto; min-width: 0; min-height: 0; padding-top: 14px; }
+.tactical-radar-area { display: grid; grid-template-rows: minmax(0,1fr) auto; min-width: 0; min-height: 0; padding-top: 14px; }
 .tactical-radar-area .radar-screens { margin: 0 16px; gap: 12px; }
 .tactical-radar-area .radar-caption { flex-direction: column; padding: 9px 10px; }
 .tactical-radar-area .radar-legend { gap: 16px; font-size: 8px; }
@@ -387,6 +392,12 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 .sector-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 17px 20px 10px; }
 .sector-heading h2 { font-size: 29px; margin: 5px 0 0; }
 .sector-heading .bridge-action { font: 9px var(--mono); }
+@media (min-width: 651px) and (max-height: 850px) {
+  body[data-screen="bridge"]:has(.bridge-console[data-station="navigation"]) .page-heading { display: none; }
+  body[data-screen="bridge"]:has(.bridge-console[data-station="navigation"]) main { grid-template-rows: minmax(0,1fr) auto; }
+  .sector-console[data-mode="navigation"] .sector-heading { padding: 7px 20px; }
+  .sector-console[data-mode="navigation"] .sector-map-caption { padding-block: 5px; }
+}
 .sector-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 20px 12px; }
 .sector-ranges { display: flex; gap: 4px; flex-wrap: wrap; }
 .sector-toolbar button { font: 9px var(--mono); padding: 7px; }
@@ -421,6 +432,37 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 .combat-maneuvers .bridge-action { font-size: 10px; padding: 8px; }
 .maneuver-form { display: grid; gap: 8px; }
 .tactical-note > span:first-child { line-height: 1.7; }
+
+.tactical-toolbar > .tactical-contact { display: grid; flex: 1; min-width: 0; gap: 3px; margin: 0; padding: 0; border: 0; }
+.tactical-toolbar .radar-contact-picker { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 8px; width: calc(60% + 24px); }
+.tactical-toolbar .radar-contact-picker select { width: 100%; min-width: 0; height: 26px; }
+.tactical-toolbar .radar-interaction-hint { font-size: 7px; }
+.tactical-toolbar > .radar-range { flex-shrink: 0; }
+@media (max-width: 900px) {
+  .tactical-toolbar { flex-wrap: wrap; }
+  .tactical-toolbar > .radar-sensor-status { width: 100%; display: flex; justify-content: space-between; }
+}
+@media (max-width: 750px) {
+  .tactical-toolbar > .tactical-contact { width: 100%; }
+  .tactical-toolbar .radar-contact-picker { width: 100%; }
+}
+
+/* Give laptop-height displays room for the radar, rather than tall headers. */
+@media (min-width: 651px) and (max-height: 850px) {
+  body[data-screen="bridge"]:has(.bridge-console[data-station="tactical"]) .page-heading { display: none; }
+  body[data-screen="bridge"]:has(.bridge-console[data-station="tactical"]) main { grid-template-rows: minmax(0,1fr) auto; }
+  .tactical-heading { padding: 7px 16px; }
+  .tactical-heading > div:first-child { display: flex; align-items: baseline; gap: 12px; }
+  .tactical-heading h2 { font-size: 21px; margin: 0; }
+  .tactical-eyebrow { font-size: 7px; letter-spacing: .5px; }
+  .tactical-toolbar { padding: 0 16px 7px; }
+  .tactical-radar-area { padding-top: 7px; }
+  .tactical-radar-area .radar-caption { flex-direction: row; padding: 6px 9px; }
+  .tactical-radar-area .radar-legend { padding: 5px; }
+  .tactical-radar-area .tactical-contact { grid-template-columns: minmax(180px,1fr) auto; align-items: center; padding: 6px 0; }
+  .radar-interaction-hint { font-size: 7px; }
+  .tactical-note { padding: 5px 16px; }
+}
 @media (max-width: 1100px), (max-height: 760px) {
   .bridge-console:is([data-station="navigation"],[data-station="helm"]) > .sector-console { grid-column: 1/-1; grid-row: 2; }
 }

@@ -42,13 +42,13 @@
         <div class="map-surface" id="map-surface">
           <svg id="solar-map" viewBox="-540 -500 1080 1000" role="group" tabindex="0" aria-label="Interactive Solar System navigation map. Select a planet or click empty space to choose a waypoint.">
             <defs>
-              <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse"><path d="M 50 0 L 0 0 0 50" fill="none" stroke="#223345" stroke-width=".65" opacity=".6"/></pattern>
+              <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse"><path d="M 50 0 L 0 0 0 50" fill="none" stroke="#526d85" stroke-width="1" opacity=".65" vector-effect="non-scaling-stroke"/></pattern>
               <radialGradient id="sun-aura"><stop stop-color="#ffc867" stop-opacity=".22"/><stop offset="1" stop-color="#ffc867" stop-opacity="0"/></radialGradient>
               <radialGradient id="sun-fill"><stop stop-color="#ffedb7"/><stop offset=".55" stop-color="#ffcc6a"/><stop offset="1" stop-color="#ce873e"/></radialGradient>
               <filter id="soft-glow"><feGaussianBlur stdDeviation="5"/></filter>
             </defs>
             <g id="map-world"><rect x="-1600" y="-1600" width="3200" height="3200" fill="url(#grid)"/>
-            <g id="stars"></g><path d="M-1000 0H1000M0-1000V1000" stroke="#8b784f" stroke-width=".8" opacity=".2"/>
+            <g id="stars"></g><path d="M-1000 0H1000M0-1000V1000" stroke="#bda16e" stroke-width="1.3" opacity=".7" vector-effect="non-scaling-stroke"/>
             <g id="orbits"></g><g id="asteroids"></g><g id="routes"></g><g id="mining-stations"></g>
             <circle r="65" fill="url(#sun-aura)"/><circle r="17" fill="#f1b45c" opacity=".35" filter="url(#soft-glow)"/><circle r="13" fill="url(#sun-fill)"/><path d="M-23 0h-5m51 0h5M0-23v-5m0 51v5" stroke="#ccab72" opacity=".65"/><text x="0" y="37" text-anchor="middle" class="sol-label">SOL</text>
             <g id="bodies"></g><g id="settlements"></g><g id="target-marker"></g><g id="ship-marker"></g></g>
@@ -74,7 +74,7 @@
       <div class="bridge-station-picker"><label for="bridge-station-select">DUTY STATION</label><select id="bridge-station-select" aria-label="Bridge station"></select><button id="bridge-view-toggle">Station console ↗</button></div>
       <section class="bridge-deck-panel" aria-label="Main bridge deck plan">
         <div class="bridge-deck-header"><span>SDF WAYFARER / MAIN BRIDGE</span><span id="bridge-watch">ROUTINE WATCH</span></div>
-        <svg class="bridge-deck" viewBox="0 0 660 560" role="group" aria-label="Bridge deck plan. Select a duty station to open its console.">
+        <svg class="bridge-deck" viewBox="35 25 590 520" role="group" aria-label="Bridge deck plan. Select a duty station to open its console.">
           <defs><radialGradient id="bridge-floor"><stop stop-color="#1b2e3d"/><stop offset="1" stop-color="#0d1825"/></radialGradient></defs>
           <path d="M150 80Q330-15 510 80L610 350Q590 510 470 535H190Q70 510 50 350Z" fill="url(#bridge-floor)" stroke="#314454" stroke-width="2"/>
           <path d="M160 100Q330 18 500 100L587 350Q565 487 460 512H200Q95 487 73 350Z" fill="none" stroke="#253b4b"/>

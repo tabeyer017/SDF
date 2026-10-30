@@ -139,7 +139,7 @@ function buildMap() {
   for(let i=-10;i<=10;i++){if(i===0)continue;$('orbits').append(node('text',{x:i*50+3,y:12,class:'map-grid-label'},`${i>0?'+':''}${i}`),node('text',{x:4,y:i*50-4,class:'map-grid-label'},`${i<0?'+':''}${-i}`));}
   for(const body of bodies) {
     const p=mapPoint(body),r=Math.hypot(p.x,p.y);
-    $('orbits').append(node('circle',{r,fill:'none',stroke:body.au===120?'#506375':'#53667c','stroke-width':body.au===120?.8:.7,opacity:body.au===120?.32:.25,'stroke-dasharray':body.au===120?'3 7':'none'}));
+    $('orbits').append(node('circle',{r,fill:'none',stroke:body.au===120?'#92b5c9':'#8ca9c2','stroke-width':body.au===120?1.4:1.1,opacity:body.au===120?.8:.7,'vector-effect':'non-scaling-stroke','stroke-dasharray':body.au===120?'3 7':'none'}));
     const g=node('g',{class:`planet-group ${body.id==='heliopause'?'outpost':''}`,'data-id':body.id,transform:`translate(${p.x} ${p.y})`,role:'button',tabindex:'0','aria-label':`Select ${body.name}, ${body.au} AU from Sol`});
     const grad=node('radialGradient',{id:`planet-${body.id}`,cx:'28%',cy:'25%',r:'80%'});grad.append(node('stop',{offset:'0%','stop-color':body.color}),node('stop',{offset:'40%','stop-color':body.color}),node('stop',{offset:'100%','stop-color':'#14202c'}));document.querySelector('defs').append(grad);
     g.append(node('circle',{r:Math.max(20,body.radius+10),fill:'transparent'}),node('circle',{r:body.radius+6,class:'selection-ring','stroke-dasharray':'3 3'}));
@@ -157,7 +157,7 @@ function buildMap() {
   $('heliopause-icon-path').setAttribute('d',STATION_SYMBOL_PATH);
   $('company-filter').append(...miningCompanies.map(company=>Object.assign(document.createElement('option'),{value:company.id,textContent:company.name})));
   renderDirectory();
-  for(let i=0;i<350;i++) {const au=2.2+random()*1.1,p=mapPoint(at(au,random()*360));$('asteroids').append(node('circle',{cx:p.x,cy:p.y,r:random()*.7+.35,fill:'#b8a381',opacity:.15+random()*.28}));}
+  for(let i=0;i<350;i++) {const au=2.2+random()*1.1,p=mapPoint(at(au,random()*360));$('asteroids').append(node('circle',{cx:p.x,cy:p.y,r:random()*.85+.55,fill:'#d9bd8f',opacity:.4+random()*.35}));}
   for(let i=0;i<160;i++){const p=mapPoint(at(32+random()*15,random()*360));$('asteroids').append(node('circle',{cx:p.x,cy:p.y,r:.55,fill:'#8298b6',opacity:.22}));}
   const belt=mapPoint(at(2.8,0));$('orbits').append(node('text',{x:0,y:Math.hypot(belt.x,belt.y)-9,'text-anchor':'middle',class:'orbit-label'},'A S T E R O I D  B E L T'));
   $('orbits').append(node('text',{x:0,y:451,'text-anchor':'middle',class:'orbit-label'},'H E L I O P A U S E  /  1 2 0  A U'));

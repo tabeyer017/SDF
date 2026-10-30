@@ -23,7 +23,7 @@ export function mountTactical({ root, range, onRangeChange, flight, onNavigate }
   let lockedIds = [], activeId = null, mode = 'radar', hoverMarker = null;
 
   const heading = el('div', 'tactical-heading');
-  const title = el('div', ''); title.append(el('span', 'tactical-eyebrow', 'TACTICAL / WEAPONS CONTROL'), el('h2', '', 'Local contact picture'));
+  const title = el('div', ''); title.append(el('span', 'tactical-eyebrow', 'TACTICAL / WEAPONS CONTROL'));
   const headingActions = el('div', 'tactical-heading-actions');
   const catalogButton = el('button', 'armament-catalog-trigger', 'Armament catalog ↗');
   headingActions.append(catalogButton, el('span', 'tactical-posture', 'WEAPONS SAFED'));heading.append(title, headingActions);
@@ -48,7 +48,7 @@ export function mountTactical({ root, range, onRangeChange, flight, onNavigate }
   const charts = ['top', 'rear'].map(view => {
     const card = el('section', 'radar-card'); card.setAttribute('aria-label', `${view === 'top' ? 'Top' : 'Rear'} radar screen`);
     const caption = el('div', 'radar-caption'); caption.append(el('h3', '', view === 'top' ? '01 / TOP VIEW' : '02 / REAR VIEW'), el('span', '', view === 'top' ? 'X / Y · HORIZONTAL' : 'X / Z · ELEVATION'));
-    const chart = svg('svg', { viewBox: '-200 -200 400 400', role: 'group', 'aria-label': view === 'top' ? 'Top radar: X starboard, Y forward' : 'Rear radar looking forward: X starboard, Z above' });
+    const chart = svg('svg', { viewBox: '-165 -165 330 330', role: 'group', 'aria-label': view === 'top' ? 'Top radar: X starboard, Y forward' : 'Rear radar looking forward: X starboard, Z above' });
     card.append(caption, chart); screens.append(card); return { view, chart };
   });
   const legend = el('div', 'radar-legend'); legend.setAttribute('aria-label', 'Target classifications');
@@ -66,7 +66,8 @@ export function mountTactical({ root, range, onRangeChange, flight, onNavigate }
   const label = el('label', 'radar-contact-picker'); label.append(el('span', '', 'LOCK TARGET'));
   const picker = el('select', ''); picker.setAttribute('aria-label', 'Lock radar track'); picker.onchange = () => { if (picker.value) lock(picker.value); }; label.append(picker);
   const hint = el('span', 'radar-interaction-hint', 'Left-click: one target · Ctrl + left-click: add / remove'); selection.append(label, hint);
-  radarArea.append(screens, legend, selection);
+  toolbar.insertBefore(selection, sensorStatus);
+  radarArea.append(screens, legend);
 
   const targetPanel = el('aside', 'tactical-target-panel'); targetPanel.id = 'tactical-target-panel'; targetPanel.setAttribute('aria-label', 'Locked target ship details');
   const note = el('div', 'tactical-note');const flightStatus=el('span','','');note.append(flightStatus, el('span', '', 'LOCAL SIMULATION · FICTIONAL SHIP FITS · WEAPONS SAFED'));
@@ -230,7 +231,7 @@ export function mountTactical({ root, range, onRangeChange, flight, onNavigate }
         chart.append(svg('circle', { r: radius, class: 'radar-ring' }), svg('text', { x: 5, y: -radius + 13, class: 'radar-ring-label' }, `${distance} km`));
       }
       chart.append(svg('path', { d: 'M-148 0H148M0-148V148', class: 'radar-axis' }));
-      for (const [x, y, text] of [[0,-173,view === 'top' ? '+Y / FORE' : '+Z / ABOVE'],[0,180,view === 'top' ? '−Y / AFT' : '−Z / BELOW'],[-172,4,'−X'],[172,4,'+X']]) chart.append(svg('text', { x, y, 'text-anchor': 'middle', class: 'radar-axis-label' }, text));
+      for (const [x, y, text] of [[0,-154,view === 'top' ? '+Y / FORE' : '+Z / ABOVE'],[0,160,view === 'top' ? '−Y / AFT' : '−Z / BELOW'],[-155,4,'−X'],[155,4,'+X']]) chart.append(svg('text', { x, y, 'text-anchor': 'middle', class: 'radar-axis-label' }, text));
       // Draw direction lines first so symbols remain readable over every vector.
       for (const target of visible) {
         const point = projectContact(target, view, range), direction = projectVelocity(target, view);
