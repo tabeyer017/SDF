@@ -8,6 +8,14 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 const types = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.mjs': 'text/javascript', '.svg': 'image/svg+xml', '.png': 'image/png' };
 const port = Number(process.env.PORT || 2250);
 const allowed = new Set(['index.html', 'styles.css', 'viewport.css', 'bridge.css', 'app.js', 'navigation.mjs', 'settlements.mjs', 'mining.mjs', 'bridge.mjs', 'bridge-model.mjs', 'tactical.mjs', 'tactical-model.mjs', 'sector-model.mjs', 'sector-console.mjs']);
+allowed.add('sector-bodies.mjs');
+allowed.add('save-game.mjs');
+allowed.add('save-ui.mjs');
+allowed.add('combat-model.mjs');
+allowed.add('combat-console.mjs');
+allowed.add('combat-save.mjs');
+allowed.add('communications-model.mjs');
+allowed.add('communications-console.mjs');
 for (const image of Object.values(shipFiveViews)) allowed.add(image);
 allowed.add('images/sdf-frigate-angled.png');
 http.createServer(async (req, res) => {

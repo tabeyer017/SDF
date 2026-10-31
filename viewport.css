@@ -388,3 +388,12 @@ dialog p { font-size: 11px; line-height: 1.65; }
   .contract-details dd { font-size: 11px; }
 }
 @media (max-width: 620px) { .legend { gap: 7px; } .contract-button { font-size: 7px; padding: 5px; } }
+/* Portable JSON saves. */
+#save-dialog { max-height: calc(100dvh - 36px); overflow: auto; }
+.save-import { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); }
+.save-import label { display: block; color: var(--gold); font: 10px var(--mono); margin-bottom: 10px; }
+.save-import input { width: 100%; min-width: 0; color: var(--text); font: 11px var(--mono); }
+.save-import input::file-selector-button { border: 1px solid var(--line); background: #172534; color: var(--text); padding: 8px; margin-right: 10px; cursor: pointer; }
+#save-status,#save-preview { font-size: 11px; line-height: 1.7; overflow-wrap: anywhere; }
+#load-save:disabled { opacity: .45; cursor: default; }
+@media(max-width: 450px) { .topbar { gap: 8px; } .topbar nav { gap: 8px; } .topbar .brand-name > span { display: none; } }

@@ -13,7 +13,7 @@
 <body data-view="map" data-screen="map">
   <header class="topbar">
     <a class="brand" href="/" aria-label="Sol Defense Force home"><span class="insignia">✧</span><span class="brand-name">SDF<span>SOL DEFENSE FORCE</span></span></a>
-    <nav aria-label="Command navigation"><button class="nav-active" id="map-tab"><span>⌖</span> Strategic map</button><button id="bridge-button"><span>✧</span> Bridge</button><button id="briefing-button"><span>▤</span> Mission briefing</button></nav>
+    <nav aria-label="Command navigation"><button class="nav-active" id="map-tab"><span>⌖</span> Strategic map</button><button id="bridge-button"><span>✧</span> Bridge</button><button id="briefing-button"><span>▤</span> Mission briefing</button><button id="saves-button">Saves</button></nav>
     <div class="command-status"><i class="status-dot"></i> SOL COMMAND <span class="connection">LINK ESTABLISHED</span></div>
   </header>
 
@@ -105,9 +105,23 @@
     <h2>Welcome to the watch, Captain.</h2>
     <div class="briefing-tabs" role="group" aria-label="Briefing pages"><button data-briefing="mission" aria-pressed="true">Your mission</button><button data-briefing="details" aria-pressed="false">Prototype details</button></div>
     <div id="briefing-mission"><p>It is 2250. A century after the cold fusion breakthrough, humanity can cross its home system in a little over a month. Electromagnetic Pulse Drives, inertial dampeners, and advanced shielding have opened the frontier.</p><p>Your mission: patrol the Solar System. Select a planet or a point on the grid, add waypoints to your flight plan, and engage your EPD. Use the simulation controls to accelerate your journey.</p></div>
-    <div id="briefing-details" class="briefing-note" hidden><strong>First-look assumptions</strong><p>The SDF Wayfarer, its class, and the heliopause station are provisional. The outer patrol boundary is set at 120 AU; a nominal 3.8 AU/day makes a radial crossing approximately 32 days. The map uses a compressed radial scale and illustrative planet positions, held fixed during this prototype. Travel uses distances in AU, with straight legs and a safety exclusion around Sol. Routes and ship progress are saved in this browser. Active journeys resume paused after reload.</p></div>
+    <div id="briefing-details" class="briefing-note" hidden><strong>First-look assumptions</strong><p>The SDF Wayfarer, its class, and the heliopause station are provisional. The outer patrol boundary is set at 120 AU; a nominal 3.8 AU/day makes a radial crossing approximately 32 days. The map uses a compressed radial scale and illustrative planet positions, held fixed during this prototype. Travel uses distances in AU, with straight legs and a safety exclusion around Sol. Complete patrol progress is autosaved in this browser. Use Saves to download or load a JSON save file. Strategic and local flight resume paused after reload.</p></div>
     <button id="begin-button" class="primary-button">Take command <span>↗</span></button>
     <button id="restart-patrol" class="text-button">Restart patrol at Earth · resets route and shipboard time</button>
+  </dialog>
+  <dialog id="save-dialog" aria-labelledby="save-title">
+    <button class="dialog-close" id="close-saves" aria-label="Close saves">×</button>
+    <span class="eyebrow">SDF WAYFARER / PATROL RECORD</span>
+    <h2 id="save-title">Save &amp; load.</h2>
+    <p>Keep a portable JSON save of your strategic journey, local flight, sensor history, target locks, and bridge settings.</p>
+    <button id="download-save" class="primary-button">Save game (.json) <span>↓</span></button>
+    <div class="save-import">
+      <label for="save-file">Choose an SDF JSON save</label>
+      <input id="save-file" type="file" accept=".json,application/json">
+      <p id="save-preview"></p>
+      <button id="load-save" class="secondary-button" disabled>Load selected save</button>
+    </div>
+    <p id="save-status" role="status" aria-live="polite"></p>
   </dialog>
   <dialog id="contract-dialog">
     <button id="close-contract" class="dialog-close" aria-label="Close mining contract">×</button>

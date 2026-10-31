@@ -16,6 +16,7 @@ const definitions = [
   { id:'triton-station', name:'Triton station', parentId:'neptune', moon:'Triton', kind:'station', offsetKm:354800, angle:300, color:'#acbdcf', type:'STATION · NEPTUNE / TRITON', description:'An SDF station on Triton, maintaining a presence in the Neptunian system near the outer planetary frontier.' }
 ];
 
+export { definitions as settlementDefinitions };
 export function createSettlements(planets) {
   return definitions.map(site=>{
     const parent=planets.find(body=>body.id===site.parentId);

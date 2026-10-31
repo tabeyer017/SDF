@@ -2,6 +2,8 @@ import { EPD_AU_PER_DAY, EDGE_AU, distance, at, mapPoint, unmapPoint, nearSol, r
 import { createSettlements, settlementCallout, formatDistance, ARRIVAL_EPSILON_AU, STATION_SYMBOL_PATH } from './settlements.mjs';
 import { miningCompanies, miningStations, MINING_SYMBOL_PATH } from './mining.mjs';
 import { mountBridge } from './bridge.mjs';
+import { createSave, parseSave, SAVE_STORAGE_KEY, LEGACY_SAVE_STORAGE_KEY } from './save-game.mjs';
+import { mountSaves } from './save-ui.mjs';
 
 const $ = id => document.getElementById(id);
 const NS = 'http://www.w3.org/2000/svg';
@@ -22,8 +24,10 @@ let miningPage=0, miningCompany='all';
 let bridgeConsole;
 const earth = bodies.find(b => b.id === 'earth');
 let state = { ship:{ x:earth.x, y:earth.y }, location:'Earth', route:[], active:false, paused:false, days:0, speed:1 };
+let savedGame=null,saveLoadError=false,lastAutosave=0;
+try{const json=localStorage.getItem(SAVE_STORAGE_KEY)||localStorage.getItem(LEGACY_SAVE_STORAGE_KEY);if(json){savedGame=parseSave(json);state=savedGame.navigation;}}catch{saveLoadError=true;}
 try {
-  const saved = JSON.parse(localStorage.getItem('sdf-navigation-v1'));
+  const saved = savedGame?null:JSON.parse(localStorage.getItem('sdf-navigation-v1'));
   const validPoint = p => p && Number.isFinite(p.x) && Number.isFinite(p.y) && Math.hypot(p.x,p.y) <= EDGE_AU + .01;
   if (saved && validPoint(saved.ship) && Array.isArray(saved.route) && saved.route.length <= 12 && saved.route.every(p => validPoint(p) && typeof p.name === 'string') && Number.isFinite(saved.days) && saved.days >= 0) {
     state = { ...state, ship:saved.ship, location:typeof saved.location === 'string' ? saved.location : 'Deep space', route:saved.route, days:saved.days, active:!!saved.active && saved.route.length > 0, paused:!!saved.active, speed:[1,10,100].includes(saved.speed) ? saved.speed : 1 };
@@ -36,7 +40,8 @@ const focusedConsole = matchMedia('(max-width: 980px), (max-height: 620px)');
 const fmt = n => n.toFixed(2);
 const formatETA = days => days < 1/24 ? `${Math.max(1,Math.round(days*1440))} min` : days < 1 ? `${(days*24).toFixed(1)} hrs` : `${days.toFixed(1)} days`;
 function node(tag, attrs={}, text) { const el=document.createElementNS(NS,tag); for(const [key,value] of Object.entries(attrs)) el.setAttribute(key,value); if(text!==undefined) el.textContent=text; return el; }
-function save() { try { localStorage.setItem('sdf-navigation-v1', JSON.stringify(state)); } catch { /* Optional browser persistence. */ } }
+function captureSave(){return createSave({navigation:state,bridge:bridgeConsole.exportState(),selection:selected,logs});}
+function save() { if(!bridgeConsole)return;try { localStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(captureSave())); } catch { /* JSON downloads remain available when browser storage is disabled. */ } }
 function toast(message) { $('toast').textContent=message; $('toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>$('toast').classList.remove('visible'),3500); }
 function date() { return new Date(Date.UTC(2250,0,1)+state.days*86400000); }
 function log(message) { logs.unshift({time:date().toISOString().slice(11,16),message}); logs=logs.slice(0,3); $('command-log').replaceChildren(...logs.map(item=>{const li=document.createElement('li');const time=document.createElement('time');time.textContent=item.time;const text=document.createElement('span');text.textContent=item.message;li.append(time,text);return li;})); }
@@ -108,7 +113,7 @@ function renderPlan() {
   $('waypoint-count').textContent=`${String(state.route.length).padStart(2,'0')} WAYPOINT${state.route.length===1?'':'S'}`;
   $('clear-course').disabled=!state.route.length||state.active;
   const unsafe=routeUnsafe();
-  $('engage-button').disabled=(!state.route.length||unsafe)&&!state.active;
+  $('engage-button').disabled=(!state.route.length||unsafe||bridgeConsole?.localStatus().canEPD===false)&&!state.active;
   $('engage-button').firstElementChild.textContent=state.active?'Abort transit':'Engage EPD';
   $('engage-button').lastElementChild.textContent=state.active?'■':'↗';
   $('safety-message').textContent=unsafe?'Course crosses Sol’s safety zone. Add a detour waypoint.':'';
@@ -125,6 +130,13 @@ function updateTelemetry() {
   const dt=date();const day=String(dt.getUTCDate()).padStart(2,'0'),month=dt.toLocaleString('en',{month:'short',timeZone:'UTC'}).toUpperCase();
   $('stardate').replaceChildren(document.createTextNode(`${day} ${month} ${dt.getUTCFullYear()} `),Object.assign(document.createElement('span'),{textContent:dt.toISOString().slice(11,16)}));
   const local=bridgeConsole?.localStatus();
+  if(local){
+    const percent=Math.ceil(local.hull*100);document.querySelector('.readiness strong').replaceChildren(document.createTextNode(String(percent)),Object.assign(document.createElement('span'),{textContent:'%'}));
+    document.querySelector('.readiness-bar span').style.width=`${percent}%`;document.querySelector('.readiness > span').textContent='HULL INTEGRITY';
+    const systems=document.querySelectorAll('.systems b');systems[0].textContent=local.core?'ONLINE':'OFFLINE';systems[1].textContent=local.canEPD?'AVAILABLE':'UNAVAILABLE';
+    document.querySelector('.page-footer > span:first-child').textContent=percent===0?'SHIP LOST':percent<100?'DAMAGE CONTROL ACTIVE':'ALL SYSTEMS OPERATIONAL';
+    $('engage-button').disabled=!state.active&&(!state.route.length||routeUnsafe()||!local.canEPD);
+  }
   $('ship-status').textContent=state.active?`En route to ${state.route[0].name}`:local?.running?`Local flight near ${state.location}`:`Holding at ${state.location}`;
   $('clock-state').textContent=state.active?(state.paused?'TRANSIT PAUSED':'PATROL IN PROGRESS'):local?.running?'LOCAL FLIGHT IN PROGRESS':local?.time?'LOCAL FLIGHT PAUSED':'AWAITING ORDERS';
   $('simulation-status').textContent=state.active?(state.paused?'Paused':`Transit · ${state.speed}×`):'Standby';
@@ -262,7 +274,7 @@ $('add-waypoint').onclick=()=>{
 $('clear-course').onclick=()=>{if(state.active)return;state.route=[];log('Flight plan cleared.');renderPlan();save();};
 $('engage-button').onclick=()=>{
   if(state.active){state.active=false;state.paused=false;state.location='deep space';bridgeConsole?.arrive(state.location);log('EPD disengaged. Vector Drive ready.');toast('Transit aborted. Remaining waypoints retained.');}
-  else {if(!state.route.length||routeUnsafe())return;bridgeConsole?.suspendLocal();state.active=true;state.paused=false;log(`EPD engaged. Destination: ${state.route[0].name}.`);toast('Course confirmed. Electromagnetic Pulse Drive engaged.');}
+  else {if(!state.route.length||routeUnsafe())return;if(bridgeConsole?.localStatus().canEPD===false){toast('EPD unavailable: check Engineering or undock.');return;}bridgeConsole?.suspendLocal();state.active=true;state.paused=false;log(`EPD engaged. Destination: ${state.route[0].name}.`);toast('Course confirmed. Electromagnetic Pulse Drive engaged.');}
   renderPlan();save();
   if(state.active && focusedConsole.matches && document.body.dataset.screen!=='bridge'){showView('map');svg.focus({preventScroll:true});}
 };
@@ -279,7 +291,7 @@ document.querySelectorAll('.briefing-tabs button').forEach(button=>button.onclic
 for(const id of ['close-dialog','begin-button'])$(id).onclick=()=>$('briefing-dialog').close();
 $('restart-patrol').onclick=()=>{
   state={ship:{x:earth.x,y:earth.y},location:'Earth',route:[],active:false,paused:false,days:0,speed:1};
-  bridgeConsole?.arrive('Earth');
+  bridgeConsole?.resetPatrol();
   logs=[];routePage=0;log('New patrol initialized. Holding at Earth.');select(earth,false);showScreen('map');showView('map');resetView();renderPlan();save();$('briefing-dialog').close();toast('Patrol reset. Ready for your orders, Captain.');
 };
 $('briefing-dialog').addEventListener('click',e=>{if(e.target===$('briefing-dialog')){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();}});
@@ -294,12 +306,13 @@ function frame(time){
   if(state.active&&!state.paused&&elapsed){
     const available=elapsed*.08*state.speed;
     const days=Math.min(available,routeDistance(state.ship,state.route)/EPD_AU_PER_DAY);
+    if(bridgeConsole?.advanceTransit(days*86400)===false){state.active=false;state.paused=false;state.location='deep space';bridgeConsole.arrive(state.location);renderPlan();save();toast('Ship lost during transit. Load a save or restart patrol.');requestAnimationFrame(frame);return;}
     const result=advance(state.ship,state.route,days*EPD_AU_PER_DAY);state.ship={x:result.position.x,y:result.position.y};state.days+=days;
     if(result.reached){const reached=state.route.splice(0,result.reached);for(const point of reached)log(`Arrived: ${point.name}.`);state.location=reached.at(-1).name;if(!state.route.length){state.active=false;state.paused=false;bridgeConsole?.arrive(state.location);toast(`Patrol leg complete. Vector Drive ready at ${state.location}.`);}renderPlan();save();}
     else if(time-lastSave>120){updateTelemetry();updateSelection();renderRoutes();lastSave=time;}
-    if(time%2000<40)save();
   }
   if(!state.active&&elapsed){const seconds=bridgeConsole?.tick(elapsed)||0;if(seconds){state.days+=seconds/86400;if(time-lastSave>350){updateTelemetry();lastSave=time;}}}
+  if(time-lastAutosave>=2000){save();lastAutosave=time;}
   requestAnimationFrame(frame);
 }
 new ResizeObserver(entries=>{
@@ -310,11 +323,23 @@ new ResizeObserver(entries=>{
   svg.style.setProperty('--chart-small-size',`${Math.max(8,6/scale)}px`);
 }).observe($('map-surface'));
 bridgeConsole=mountBridge({
-  snapshot:()=>({shipName:'SDF Wayfarer',location:state.location,active:state.active,paused:state.paused,routeCount:state.route.length,nextWaypoint:state.route[0]?.name||'',unsafe:routeUnsafe(),distance:formatDistance(routeDistance(state.ship,state.route)),eta:state.route.length?formatETA(routeDistance(state.ship,state.route)/EPD_AU_PER_DAY):'Awaiting course',targetName:selected.name}),
+  snapshot:()=>({shipName:'SDF Wayfarer',location:state.location,days:state.days,canEPD:bridgeConsole?.localStatus().canEPD!==false,active:state.active,paused:state.paused,routeCount:state.route.length,nextWaypoint:state.route[0]?.name||'',unsafe:routeUnsafe(),distance:formatDistance(routeDistance(state.ship,state.route)),eta:state.route.length?formatETA(routeDistance(state.ship,state.route)/EPD_AU_PER_DAY):'Awaiting course',targetName:selected.name}),
   openNavigation:()=>{showScreen('map');showView('navigation');},
   engage:()=>{if(!state.active)$('engage-button').click();},
   pause:()=>{if(state.active)$('pause-button').click();},
   abort:()=>{if(state.active)$('engage-button').click();},
-  log,onLocalChange:updateTelemetry
+  log,onLocalChange:()=>{updateTelemetry();save();},onSave:save,savedGame:savedGame?.bridge
 });
-buildMap();select(earth,false);renderPlan();log(state.active?'Saved journey restored. Transit paused.':'Sol Command link established.');log('Captain on deck. Awaiting orders.');requestAnimationFrame(frame);
+function restoredSelection(point){return [...bodies,...settlements,...miningStations].find(body=>body.id===point?.id)||point||earth;}
+function restoreSave(game){
+  state=game.navigation;selected=restoredSelection(game.selection);logs=game.logs.map(item=>({...item}));routePage=0;lastTime=0;
+  bridgeConsole.restoreState(game.bridge);select(selected,false);renderPlan();
+  const station=game.bridge.settings.selected;showScreen(['navigation','helm','tactical','engineering'].includes(station)?'bridge':'map');showView('map');
+  log('JSON save restored. Flight paused.');save();toast('Save loaded. Strategic and local flight are paused.');
+}
+mountSaves({capture:captureSave,restore:restoreSave});
+buildMap();select(restoredSelection(savedGame?.selection),false);renderPlan();
+if(savedGame){logs=savedGame.logs;log('Autosave restored. Flight paused.');}
+else{log(state.active?'Saved journey restored. Transit paused.':'Sol Command link established.');log('Captain on deck. Awaiting orders.');}
+if(saveLoadError)toast('Browser save could not be restored. You can load a JSON backup from Saves.');
+requestAnimationFrame(frame);

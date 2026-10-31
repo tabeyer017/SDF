@@ -1,6 +1,24 @@
 export const radarRanges = [10, 20, 60, 100, 140, 200];
 export const IFF_RANGE_KM = 60;
 export const IFF_IDENTIFICATION_CHANCE = .9;
+export const crewDoctrine={
+  maxAndroidFraction:.3,
+  automation:'High automation keeps ship crews small.',
+  androids:'Androids serve as crew, space marines, or raiders on SDF and pirate ships, handling routine and hazardous duties. They count within personnel totals and can be injured or destroyed. Their high cost limits androids to 30% of each crew or combat team.'
+};
+export const shuttleTypes={
+  shuttle:{name:'Shuttle',troopCapacity:10,flightCrewIncluded:false},
+  'assault-shuttle':{name:'Assault shuttle',troopCapacity:10,flightCrewIncluded:false}
+};
+export const boardingComplements={
+  'sdf-corvette':{unit:'Space marines',platoons:1,personnel:40},
+  'sdf-frigate':{unit:'Space marines',platoons:1,personnel:40},
+  'sdf-destroyer':{unit:'Space marines',platoons:1,personnel:40},
+  'sdf-cruiser':{unit:'Space marines',platoons:2,personnel:80},
+  'sdf-heavy-cruiser':{unit:'Space marines',platoons:3,personnel:120},
+  'pirate-frigate':{unit:'Raiders',personnel:40},
+  'pirate-corvette':{unit:'Raiders',personnel:40}
+};
 export const shipFiveViews = {
   'une-cargo': 'images/une-cargo-ship-five-view.png',
   'une-light-cargo': 'images/une-light-cargo-ship-five-view.png',
@@ -34,7 +52,8 @@ export const armamentTypes = {
 };
 export const countermeasureTypes = {
   chaff: { name:'Chaff dispensers' },
-  flares: { name:'Flare dispensers' }
+  flares: { name:'Flare dispensers' },
+  'radar-jammer': { name:'Radar jammer' }
 };
 export function armamentLabel(ship,id) {
   const quantity=ship.fitting?.[id]?.quantity;
@@ -42,7 +61,7 @@ export function armamentLabel(ship,id) {
 }
 
 // Class fittings use the user's armament catalog. Confirmed fits include quantities
-// and mounting details; other fits remain provisional. Combat performance is unset.
+// and mounting details; other fits remain provisional. Combat balance is in combat-model.mjs.
 export const shipTypes = {
   'une-cargo': { label: 'UNE - CARGO SHIP', faction: 'United Nations of Earth', role: 'Bulk freight carrier', engines: '2 × Atlas CF-80 fusion drives · EPD Mk II', loadout:['ciws-30'] },
   'une-light-cargo': { label: 'UNE - LIGHT CARGO SHIP', faction: 'United Nations of Earth', role: 'Light freight courier', engines: '1 × Kestrel CF-35 fusion drive · EPD Mk II', loadout:['ciws-30'] },
@@ -50,8 +69,26 @@ export const shipTypes = {
   'private-yacht': { label: 'PRIVATE YACHT', faction: 'Private civilian registry', role: 'Personal interplanetary vessel', engines: '2 × Aurora CF-25 fusion drives · EPD Mk II', loadout:['ciws-30'] },
   'une-transport': { label: 'UNE - TRANSPORT', faction: 'United Nations of Earth', role: 'Passenger / personnel transport', engines: '2 × Meridian CF-55 fusion drives · EPD Mk II', loadout:['ciws-30'] },
   'une-large-transport': { label: 'UNE - LARGE TRANSPORT', faction: 'United Nations of Earth', role: 'Mass passenger / logistics transport', engines: '4 × Atlas CF-80 fusion drives · EPD Mk III', loadout:['ciws-30'] },
-  'pirate-frigate': { label: 'PIRATE - FRIGATE', faction: 'Pirate raider group', role: 'Armed raider / interdiction', engines: '2 × Reaver CF-70 fusion drives · modified EPD Mk III', loadout:['gp-missiles','autocannon-120','ciws-30'] },
-  'pirate-corvette': { label: 'PIRATE - CORVETTE', faction: 'Pirate raider group', role: 'Fast attack / pursuit', engines: '2 × Reaver CF-40 fusion drives · modified EPD Mk II', loadout:['mp-missiles','autocannon-75','ciws-30'] },
+  'pirate-frigate': {
+    label:'PIRATE - FRIGATE',faction:'Pirate raider group',role:'Armed raider / interdiction',engines:'2 × Reaver CF-70 fusion drives · modified EPD Mk III',
+    loadout:['gp-missiles','autocannon-120','ciws-30'],fitConfirmed:true,
+    fitting:{
+      'autocannon-120':{quantity:2,turrets:2,gunsPerTurret:1,configuration:'2 turrets · 1 forward, 1 aft on top of the shuttle hangar'},
+      'gp-missiles':{quantity:40,location:'Ventral launch / bottom'},
+      'ciws-30':{quantity:2,port:1,starboard:1,location:'Port and starboard · 1 per side'}
+    },
+    countermeasures:['chaff','flares','radar-jammer'],hangar:{bays:1,assaultShuttles:4}
+  },
+  'pirate-corvette': {
+    label:'PIRATE - CORVETTE',faction:'Pirate raider group',role:'Fast attack / pursuit',engines:'2 × Reaver CF-40 fusion drives · modified EPD Mk II',
+    loadout:['gp-missiles','autocannon-120','ciws-30'],fitConfirmed:true,
+    fitting:{
+      'autocannon-120':{quantity:1,turrets:1,gunsPerTurret:1,configuration:'1 forward turret · 1 autocannon'},
+      'gp-missiles':{quantity:30,location:'Ventral launch / bottom'},
+      'ciws-30':{quantity:2,port:1,starboard:1,location:'Port and starboard · 1 per side'}
+    },
+    countermeasures:['chaff','flares','radar-jammer'],hangar:{bays:1,assaultShuttles:4}
+  },
   'sdf-frigate': {
     label:'SDF - FRIGATE',faction:'Sol Defense Force',role:'System patrol / escort',engines:'2 × Resolute CF-75 fusion drives · EPD Mk IV',
     loadout:['autocannon-120','mp-missiles','as-missiles','ciws-30'],fitConfirmed:true,
@@ -99,7 +136,11 @@ export const shipTypes = {
     countermeasures:['chaff','flares'],hangar:{bays:1,shuttles:4}
   }
 };
-for (const ship of Object.values(shipTypes)) ship.armaments = ship.loadout.map(id=>armamentLabel(ship,id)).join(' · ');
+for (const [id,ship] of Object.entries(shipTypes)) {
+  ship.armaments=ship.loadout.map(id=>armamentLabel(ship,id)).join(' · ');
+  ship.crew={automation:'high',size:'small',androids:id.startsWith('sdf-')||id.startsWith('pirate-')?'included':'unspecified',maxAndroidFraction:crewDoctrine.maxAndroidFraction};
+  if(boardingComplements[id])ship.boarding=boardingComplements[id];
+}
 
 // Provisional size classes for recognized catalog vessels.
 const shipSizes = {

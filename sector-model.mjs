@@ -31,7 +31,7 @@ export function observeSector(sector) {
   const live=[];
   for(const contact of sector.contacts) {
     const relative=relativeContact(sector,contact);
-    if(contactDistance(relative)>SENSOR_RANGE) continue;
+    if(contactDistance(relative)>(sector.sensorRange??SENSOR_RANGE)) continue;
     let observed=observeContact(relative);
     const previous=sector.memory[contact.id];
     if(!observed.identified && previous?.observed.identified) observed={...previous.observed,x:relative.x,y:relative.y,z:relative.z,vx:relative.vx,vy:relative.vy,vz:relative.vz,iffStatus:'Previously verified IFF'};
@@ -91,7 +91,7 @@ function guidance(sector) {
     sector.status=`Patrol route · ${waypoint.name} · Helm executing`;
   } else {
     const target=sector.contacts.find(c=>c.id===order.targetId);
-    if(!target || length(subtract(target,own))>SENSOR_RANGE){coast(sector);sector.status='Target lost beyond 200 km · maneuver cancelled · coasting';return null;}
+    if(!target || length(subtract(target,own))>(sector.sensorRange??SENSOR_RANGE)){coast(sector);sector.status='Target lost beyond sensor coverage · maneuver cancelled · coasting';return null;}
     const r=subtract(target,own), direction=unit(r), distance=length(r);
     if(sector.faceTarget) sector.facing=direction;
     let correction=0;
@@ -118,12 +118,12 @@ export function stepSector(sector,seconds) {
   while(remaining>1e-8) {
     const dt=Math.min(.25,remaining), desired=guidance(sector), own=sector.own;
     if(desired) {
-      const delta=subtract(desired,velocity(own)), acceleration=limited(delta,VECTOR_ACCELERATION*dt);
+      const delta=subtract(desired,velocity(own)), acceleration=limited(delta,VECTOR_ACCELERATION*dt*(sector.enginePerformance??1));
       keys.forEach((k,i)=>{own[speeds[i]]+=acceleration[k];});
     } else if(sector.order?.mode==='manual') {
       const {thrust,bearing,elevation}=sector.manual, a=bearing*Math.PI/180,e=elevation*Math.PI/180;
       const push={x:Math.sin(a)*Math.cos(e),y:Math.cos(a)*Math.cos(e),z:Math.sin(e)};
-      const v=limited(Object.fromEntries(keys.map((k,i)=>[k,own[speeds[i]]+push[k]*thrust/100*VECTOR_ACCELERATION*dt])),VECTOR_LIMIT);
+      const v=limited(Object.fromEntries(keys.map((k,i)=>[k,own[speeds[i]]+push[k]*thrust/100*VECTOR_ACCELERATION*dt*(sector.enginePerformance??1)])),VECTOR_LIMIT);
       keys.forEach((k,i)=>{own[speeds[i]]=v[k];});sector.safety='Manual control · hazard avoidance disengaged';
     }
     keys.forEach((k,i)=>{own[k]+=own[speeds[i]]*dt/3600;});

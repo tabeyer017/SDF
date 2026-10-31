@@ -2,6 +2,29 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSector, relativeContact, observeSector, issueManeuver, setManualHelm, coast, brake, addPatrolWaypoint, startPatrol, stepSector, maneuverTelemetry, predictedPath, segmentHitsHazard, sectorHazards, VECTOR_ACCELERATION } from '../sector-model.mjs';
 import { contactDistance, contactClosureRate } from '../tactical-model.mjs';
+import { sectorBodies, planetaryOverview } from '../sector-bodies.mjs';
+
+test('planet and lunar arrivals preserve Earth–Moon separation with a chart origin above the surface',()=>{
+  for(const location of ['Earth','Moon station']){
+    const bodies=sectorBodies(location),earth=bodies.find(b=>b.id==='earth'),moon=bodies.find(b=>b.id==='moon');
+    assert.ok(Math.abs(Math.hypot(earth.x-moon.x,earth.y-moon.y)-384400)<1e-6);
+    const anchor=location==='Earth'?earth:moon;
+    assert.ok(Math.abs(Math.hypot(anchor.x,anchor.y,anchor.z)-anchor.radius-100)<1e-6);
+    const fit=planetaryOverview(bodies,{x:0,y:0,z:0});
+    for(const body of bodies)for(const axis of ['x','y','z'])assert.ok(Math.abs(body[axis]-fit.center[axis])+body.radius<fit.radius);
+  }
+});
+
+test('planetary references follow existing planetary settlements and omit deep space',()=>{
+  for(const [location,planet,moon] of [['Mars colony','mars','phobos'],['Phobos station','mars','phobos'],['Ganymede station','jupiter','ganymede'],['Titan station','saturn','titan'],['Titania station','uranus','titania'],['Triton station','neptune','triton']]){
+    const bodies=sectorBodies(location);
+    assert.ok(bodies.some(b=>b.id===planet));assert.ok(bodies.some(b=>b.id===moon));
+  }
+  assert.equal(sectorBodies('Mercury').length,1);
+  assert.deepEqual(sectorBodies('deep space'),[]);
+  assert.deepEqual(sectorBodies('Alpha station'),[]);
+  assert.equal(planetaryOverview([],{x:0,y:0,z:0}),null);
+});
 
 const target={id:'T-01',type:'neutral',shipType:'une-cargo',name:'Test cargo',registry:'TEST',iffRoll:0,x:0,y:40,z:10,vx:300,vy:600,vz:120};
 function advance(sector,seconds){for(let t=0;t<seconds;t++)stepSector(sector,1);}

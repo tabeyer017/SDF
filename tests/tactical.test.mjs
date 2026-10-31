@@ -101,6 +101,21 @@ test('left-click selects exactly one target, including a target already in a mul
   assert.deepEqual(second, ['U-01', 'F-03']);
 });
 
+test('pirate class references include confirmed weapon locations, defenses and assault shuttles',()=>{
+  for(const [id,guns,missiles] of [['pirate-corvette',1,30],['pirate-frigate',2,40]]){
+    const ship=shipTypes[id];assert.equal(ship.fitConfirmed,true);
+    assert.equal(ship.fitting['autocannon-120'].quantity,guns);
+    assert.equal(ship.fitting['autocannon-120'].turrets,guns);
+    assert.equal(ship.fitting['gp-missiles'].quantity,missiles);
+    assert.equal(ship.fitting['gp-missiles'].location,'Ventral launch / bottom');
+    assert.deepEqual(ship.fitting['ciws-30'],{quantity:2,port:1,starboard:1,location:'Port and starboard · 1 per side'});
+    assert.deepEqual(ship.countermeasures,['chaff','flares','radar-jammer']);
+    assert.deepEqual(ship.hangar,{bays:1,assaultShuttles:4});assert.equal(ship.boarding.personnel,40);
+  }
+  assert.match(shipTypes['pirate-corvette'].fitting['autocannon-120'].configuration,/forward turret/);
+  assert.match(shipTypes['pirate-frigate'].fitting['autocannon-120'].configuration,/1 forward, 1 aft on top of the shuttle hangar/);
+});
+
 test('Ctrl-click toggles a target while preserving every other lock', () => {
   const second = ['U-01', 'F-03'];
   assert.deepEqual(selectTargets(second, 'U-01', true), ['F-03']);
