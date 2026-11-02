@@ -16,6 +16,8 @@ allowed.add('combat-console.mjs');
 allowed.add('combat-save.mjs');
 allowed.add('communications-model.mjs');
 allowed.add('communications-console.mjs');
+allowed.add('start-screen.css');
+allowed.add('start-menu.mjs');
 for (const image of Object.values(shipFiveViews)) allowed.add(image);
 allowed.add('images/sdf-frigate-angled.png');
 http.createServer(async (req, res) => {

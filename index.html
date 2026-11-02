@@ -9,15 +9,35 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="viewport.css">
   <link rel="stylesheet" href="bridge.css">
+  <link rel="stylesheet" href="start-screen.css">
 </head>
-<body data-view="map" data-screen="map">
-  <header class="topbar">
+<body data-view="map" data-screen="map" data-menu="open">
+  <section id="start-screen" class="start-screen" aria-labelledby="start-title">
+    <div class="start-art">
+      <div class="start-orbits" aria-hidden="true"><i></i><i></i><i></i><span>✧</span></div>
+      <figure class="start-vessel"><img src="images/sdf-frigate-angled.png" alt="SDF Wayfarer, a Vanguard-class frigate, against the dark of space"><figcaption><span>SDF WAYFARER</span> VANGUARD-CLASS FRIGATE / YOUR FIRST COMMAND</figcaption></figure>
+    </div>
+    <header class="start-masthead"><span>✧ &nbsp; SOL DEFENSE FORCE</span><span>SOL SYSTEM / 2250</span></header>
+    <div class="start-content">
+      <div class="start-intro"><div class="eyebrow">STRATEGIC SPACE COMMAND</div><h1 id="start-title">SOL DEFENSE<br><span>FORCE</span></h1><p>A frontier to protect.<br>A ship to command.</p></div>
+      <nav class="start-actions" aria-label="Main menu">
+        <button id="continue-mission" class="start-continue" hidden><span>Continue<small id="continue-summary">Return to your patrol</small></span><b aria-hidden="true">↗</b></button>
+        <button id="new-mission"><span>New Mission<small>Take command of the Wayfarer</small></span><b aria-hidden="true">01</b></button>
+        <button id="new-campaign"><span>New Campaign<small>A longer watch · coming soon</small></span><b aria-hidden="true">02</b></button>
+        <button id="menu-load-save"><span>Load Saved Game<small>Restore a patrol from a JSON file</small></span><b aria-hidden="true">03</b></button>
+        <button id="menu-history"><span>History<small>The story of humanity in Sol</small></span><b aria-hidden="true">04</b></button>
+        <button id="menu-how-to-play"><span>How to Play<small>Your first watch, explained</small></span><b aria-hidden="true">05</b></button>
+      </nav>
+    </div>
+    <footer class="start-footer"><span><i class="status-dot"></i> FOR SOL. FOR ALL.</span><span>PHASE 01 <b>/</b> PROTOTYPE v0.1</span></footer>
+  </section>
+  <header class="topbar" inert aria-hidden="true">
     <a class="brand" href="/" aria-label="Sol Defense Force home"><span class="insignia">✧</span><span class="brand-name">SDF<span>SOL DEFENSE FORCE</span></span></a>
-    <nav aria-label="Command navigation"><button class="nav-active" id="map-tab"><span>⌖</span> Strategic map</button><button id="bridge-button"><span>✧</span> Bridge</button><button id="briefing-button"><span>▤</span> Mission briefing</button><button id="saves-button">Saves</button></nav>
+    <nav aria-label="Command navigation"><button id="menu-button">Menu</button><button class="nav-active" id="map-tab"><span>⌖</span> Strategic map</button><button id="bridge-button"><span>✧</span> Bridge</button><button id="briefing-button"><span>▤</span> Mission briefing</button><button id="saves-button">Saves</button></nav>
     <div class="command-status"><i class="status-dot"></i> SOL COMMAND <span class="connection">LINK ESTABLISHED</span></div>
   </header>
 
-  <main>
+  <main inert aria-hidden="true">
     <section class="page-heading"><div><div class="eyebrow">SOL SECTOR / NAVIGATION</div><h1>The watch begins.</h1><p>One system. Our home. Your command.</p></div><div class="date-block"><span class="eyebrow">SHIPBOARD TIME · UTC</span><strong id="stardate">01 JAN 2250 <span>00:00</span></strong><div><i class="status-dot"></i> <span id="clock-state">AWAITING ORDERS</span></div></div></section>
 
     <div class="console-tabs" role="group" aria-label="Console views">
@@ -99,6 +119,44 @@
     </section>
     <footer class="page-footer"><span><i class="status-dot"></i> ALL SYSTEMS OPERATIONAL</span><span>SOL DEFENSE FORCE <b> / </b> STRATEGIC COMMAND INTERFACE <b> / </b> 2250</span><button id="about-button">PROTOTYPE v0.1 <span>↗</span></button></footer>
   </main>
+  <dialog id="new-mission-dialog" aria-labelledby="new-mission-title">
+    <button class="dialog-close" data-close-menu-dialog aria-label="Close new mission">×</button>
+    <div class="eyebrow">MISSION 01 / SOL SYSTEM PATROL</div>
+    <h2 id="new-mission-title">Your first watch.</h2>
+    <p>Take command of the SDF Wayfarer at Earth on 1 January 2250. Plot your own patrol through the Solar System, investigate local contacts, and manage your ship from the bridge.</p>
+    <dl class="menu-facts"><div><dt>Vessel</dt><dd>Vanguard-class frigate</dd></div><div><dt>Departure</dt><dd>Earth / Sol sector</dd></div><div><dt>Assignment</dt><dd>Open patrol &amp; training</dd></div></dl>
+    <p id="new-mission-warning" class="menu-notice" hidden>Starting a new mission replaces your current browser autosave. Download your patrol first if you want to keep it.</p>
+    <button id="backup-before-mission" class="secondary-button" hidden>Download current patrol ↓</button>
+    <p id="mission-backup-status" role="status" aria-live="polite"></p>
+    <button id="launch-mission" class="primary-button">Launch mission <span>↗</span></button>
+  </dialog>
+  <dialog id="campaign-dialog" aria-labelledby="campaign-title">
+    <button class="dialog-close" data-close-menu-dialog aria-label="Close campaign">×</button>
+    <div class="eyebrow">CAMPAIGN / FUTURE OPERATIONS</div>
+    <h2 id="campaign-title">A longer watch.</h2>
+    <p>Campaign mode is not available in this prototype. Linked missions, campaign objectives, and progression have yet to be implemented.</p>
+    <p>You can explore the current game in New Mission: an open Solar System patrol with navigation, bridge stations, training encounters, combat, and ship repairs. Save your patrol to continue it later.</p>
+    <button id="campaign-to-mission" class="primary-button">Explore New Mission <span>↗</span></button>
+  </dialog>
+  <dialog id="history-dialog" class="history-dialog" aria-labelledby="history-title">
+    <button class="dialog-close" data-close-menu-dialog aria-label="Close history">×</button>
+    <div class="eyebrow">SOL COMMAND ARCHIVE / SETTING &amp; BACKSTORY</div>
+    <h2 id="history-title">Our home. Our watch.</h2>
+    <ol class="history-timeline">
+      <li><span>c. 2150</span><div><h3>The cold fusion breakthrough</h3><p>Humanity achieves cold fusion. Over the following century, new propulsion, inertial dampeners, and advanced protective materials open the Solar System to travel.</p></div></li>
+      <li><span>2250</span><div><h3>A system within reach</h3><p>Electromagnetic Pulse Drives now carry ships across the system in a little over a month. Earth has a large station on the Moon; Mars has a surface colony and a station on Phobos.</p></div></li>
+      <li><span>THE FRONTIER</span><div><h3>Beyond the inner worlds</h3><p>Stations on Ganymede, Titan, Titania, and Triton anchor humanity’s presence around the outer planets. Sixteen commercial mining stations operate in the asteroid belt under United Nations of Earth contracts.</p></div></li>
+      <li><span>YOUR WATCH</span><div><h3>Sol Defense Force</h3><p>You are the captain of an SDF vessel patrolling our home system. Civilian traffic, commercial operators, privateers, and pirates share the frontier. From the bridge of the Wayfarer, your watch begins.</p></div></li>
+    </ol>
+    <button class="secondary-button" data-close-menu-dialog>Return to menu</button>
+  </dialog>
+  <dialog id="how-to-play-dialog" aria-labelledby="how-to-play-title">
+    <button class="dialog-close" data-close-menu-dialog aria-label="Close how to play">×</button>
+    <div class="eyebrow">CAPTAIN’S ORIENTATION</div><h2 id="how-to-play-title">Take the conn.</h2>
+    <ol class="menu-instructions"><li><strong>Plot a patrol.</strong> Select a planet, settlement, mining station, or point on the strategic map. Add it to your course, then Engage EPD.</li><li><strong>Set the pace.</strong> Use pause and the 1×, 10×, or 100× controls during transit.</li><li><strong>Work the bridge.</strong> Navigation and Helm control local flight. Tactical manages sensors, target locks, and weapons. Engineering handles damage and station service.</li><li><strong>Keep your progress.</strong> Browser autosave remembers your patrol. Saves downloads a portable JSON backup; Load Saved Game restores one.</li></ol>
+    <p>Returning to the menu pauses strategic and local flight. Continue returns to your patrol with flight paused so you can review your orders.</p>
+    <button class="secondary-button" data-close-menu-dialog>Return to menu</button>
+  </dialog>
   <dialog id="briefing-dialog">
     <button class="dialog-close" id="close-dialog" aria-label="Close briefing">×</button>
     <div class="eyebrow">SOL DEFENSE FORCE / PHASE 01</div>

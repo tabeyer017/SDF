@@ -194,6 +194,8 @@ export function mountDamageConsole({root,flight}){
   const summary=el('p','combat-readout'),status=el('p','combat-note');status.setAttribute('role','status');
   const clock=button('',()=>flight.toggle()),rate=select('Repair / local simulation speed',[[1,'1×'],[10,'10×'],[60,'60×']],value=>flight.setRate(Number(value)));
   const toolbar=el('div','combat-actions');toolbar.append(clock,rate.wrap,button('Cease all fire',()=>flight.ceaseFire()));
+  const automatic=button('',()=>flight.automaticRepairs(!flight.combat.own.autoRepair));
+  automatic.setAttribute('aria-label','Automatic repairs');toolbar.prepend(automatic);
   const workspace=el('div','damage-workspace'),equipment=el('div','damage-equipment'),systems=el('section','damage-systems'),weaponSystems=el('section','damage-weapons');
   systems.setAttribute('aria-label','Ship systems damage');weaponSystems.setAttribute('aria-label','Weapons damage');
   systems.append(el('h3','','SHIP SYSTEMS'));weaponSystems.append(el('h3','','WEAPONS'));
@@ -207,12 +209,13 @@ export function mountDamageConsole({root,flight}){
   const containFire=button('Isolate fire / shut down affected compartments',()=>flight.contain('fire'));
   const containBreach=button('Seal bulkheads / isolate pressure loss',()=>flight.contain('breach'));
   const docking=button('',()=>flight.dock()),service=button('Request station repairs and replenishment',()=>flight.service()),station=el('p','combat-note');
-  const events=el('ol','combat-events');aside.append(el('h3','','REPAIR TEAMS'),queue,el('p','combat-note','Repairs consume spare parts. Teams work at half speed under fire. Field limits: hull 60%, equipment 75%. Destroyed systems need station replacement.'),containFire,containBreach,el('h3','','STATION SERVICE'),station,docking,service,events);
+  const events=el('ol','combat-events');aside.append(el('h3','','REPAIR TEAMS'),queue,el('p','combat-note','Engineering queues repairs automatically. Cancel holds a system; queue it manually or switch Auto off/on to release holds. Manual control keeps manual orders. Repairs use spare parts and pause with simulation time. Half speed under fire. Field limits: hull 60%, equipment 75%. Destroyed systems need station replacement.'),containFire,containBreach,el('h3','','STATION SERVICE'),station,docking,service,events);
   equipment.append(systems,weaponSystems);workspace.append(equipment,aside);root.append(heading,summary,status,toolbar,workspace);
   function refresh(){
     const c=flight.combat,s=c.own;
     summary.textContent=`Hull ${integrityPercent(s.systems.hull)}% · Spares ${s.spares} / ${s.maxSpares} · ${s.teams} repair teams · ${c.docked?'DOCKED':'FREE FLIGHT'}`;
     summary.title=`Hull / structure · ${hp(s.systems.hull)} · ${state(s.systems.hull)}`;
+    automatic.textContent=`Automatic repairs: ${s.autoRepair?'ON':'OFF · manual control'}`;automatic.setAttribute('aria-pressed',String(s.autoRepair));
     status.textContent=s.systems.hull.hp===0?'SHIP LOST · load a save or restart patrol.':`${s.fire?'FIRE · ':''}${s.breach?'PRESSURE LOSS · ':''}${s.breach||s.systems['life-support'].hp===0?`Emergency air ${Math.ceil(s.air)} s · `:''}${c.service?'Station service in progress':!s.spares?'Spare parts exhausted · onboard repairs stopped':`${s.jobs.length} repair jobs queued`}`;
     clock.textContent=flight.sector.running?'Pause local simulation':'Run local simulation';clock.disabled=flight.inTransit();rate.input.value=String(flight.sector.rate);
     for(const [id,r] of rows){const system=s.systems[id],cap=id==='hull'?.6:.75;
@@ -220,9 +223,10 @@ export function mountDamageConsole({root,flight}){
       r.value.textContent=`${percent}%`;r.bar.value=system.hp;r.bar.max=system.max;
       r.row.className=`damage-system is-${integrityStatus(system)}`;r.row.title=tooltip;r.value.title=tooltip;r.bar.title=tooltip;
       r.bar.setAttribute('aria-valuetext',`${percent}% · ${state(system)}`);
-      r.repair.disabled=!!c.service||system.hp<=0||system.hp>=system.max*cap||s.spares<1||s.jobs.some(j=>j.systemId===id);
+      r.repair.textContent=s.repairHolds.includes(id)?'Repair manually · held':'Queue repair';
+      r.repair.disabled=s.systems.hull.hp<=0||!!c.service||system.hp<=0||system.hp>=system.max*cap||s.spares<1||s.jobs.some(j=>j.systemId===id);
     }
-    queue.replaceChildren(...s.jobs.map((j,i)=>{const li=el('li','',`${i<s.teams?'Working':'Queued'} · ${s.systems[j.systemId].name}`);if(!j.station)li.append(button('Cancel',()=>flight.cancelRepair(j.systemId)));return li;}));
+    queue.replaceChildren(...s.jobs.map((j,i)=>{const li=el('li','',`${i<s.teams?'Working':'Queued'} · ${j.station?'Station':j.automatic?'Auto':'Manual'} · ${s.systems[j.systemId].name}`);if(!j.station)li.append(button('Cancel',()=>flight.cancelRepair(j.systemId)));return li;}));
     if(!s.jobs.length)queue.append(el('li','','No repair orders.'));
     containFire.disabled=!s.fire;containBreach.disabled=!s.breach;
     const support=stationSupport(flight.sector.location);

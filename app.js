@@ -4,6 +4,7 @@ import { miningCompanies, miningStations, MINING_SYMBOL_PATH } from './mining.mj
 import { mountBridge } from './bridge.mjs';
 import { createSave, parseSave, SAVE_STORAGE_KEY, LEGACY_SAVE_STORAGE_KEY } from './save-game.mjs';
 import { mountSaves } from './save-ui.mjs';
+import { mountStartMenu } from './start-menu.mjs';
 
 const $ = id => document.getElementById(id);
 const NS = 'http://www.w3.org/2000/svg';
@@ -25,11 +26,13 @@ let bridgeConsole;
 const earth = bodies.find(b => b.id === 'earth');
 let state = { ship:{ x:earth.x, y:earth.y }, location:'Earth', route:[], active:false, paused:false, days:0, speed:1 };
 let savedGame=null,saveLoadError=false,lastAutosave=0;
+let startMenu,missionStarted=false,hasLegacyPatrol=false;
 try{const json=localStorage.getItem(SAVE_STORAGE_KEY)||localStorage.getItem(LEGACY_SAVE_STORAGE_KEY);if(json){savedGame=parseSave(json);state=savedGame.navigation;}}catch{saveLoadError=true;}
 try {
   const saved = savedGame?null:JSON.parse(localStorage.getItem('sdf-navigation-v1'));
   const validPoint = p => p && Number.isFinite(p.x) && Number.isFinite(p.y) && Math.hypot(p.x,p.y) <= EDGE_AU + .01;
   if (saved && validPoint(saved.ship) && Array.isArray(saved.route) && saved.route.length <= 12 && saved.route.every(p => validPoint(p) && typeof p.name === 'string') && Number.isFinite(saved.days) && saved.days >= 0) {
+    hasLegacyPatrol=true;
     state = { ...state, ship:saved.ship, location:typeof saved.location === 'string' ? saved.location : 'Deep space', route:saved.route, days:saved.days, active:!!saved.active && saved.route.length > 0, paused:!!saved.active, speed:[1,10,100].includes(saved.speed) ? saved.speed : 1 };
   }
 } catch { /* Storage may be disabled; the session remains fully playable. */ }
@@ -41,7 +44,7 @@ const fmt = n => n.toFixed(2);
 const formatETA = days => days < 1/24 ? `${Math.max(1,Math.round(days*1440))} min` : days < 1 ? `${(days*24).toFixed(1)} hrs` : `${days.toFixed(1)} days`;
 function node(tag, attrs={}, text) { const el=document.createElementNS(NS,tag); for(const [key,value] of Object.entries(attrs)) el.setAttribute(key,value); if(text!==undefined) el.textContent=text; return el; }
 function captureSave(){return createSave({navigation:state,bridge:bridgeConsole.exportState(),selection:selected,logs});}
-function save() { if(!bridgeConsole)return;try { localStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(captureSave())); } catch { /* JSON downloads remain available when browser storage is disabled. */ } }
+function save() { if(!bridgeConsole||!missionStarted)return;try { localStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(captureSave())); } catch { /* JSON downloads remain available when browser storage is disabled. */ } }
 function toast(message) { $('toast').textContent=message; $('toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>$('toast').classList.remove('visible'),3500); }
 function date() { return new Date(Date.UTC(2250,0,1)+state.days*86400000); }
 function log(message) { logs.unshift({time:date().toISOString().slice(11,16),message}); logs=logs.slice(0,3); $('command-log').replaceChildren(...logs.map(item=>{const li=document.createElement('li');const time=document.createElement('time');time.textContent=item.time;const text=document.createElement('span');text.textContent=item.message;li.append(time,text);return li;})); }
@@ -289,11 +292,13 @@ document.querySelectorAll('.briefing-tabs button').forEach(button=>button.onclic
   document.querySelectorAll('.briefing-tabs button').forEach(item=>item.setAttribute('aria-pressed',String(item===button)));
 });
 for(const id of ['close-dialog','begin-button'])$(id).onclick=()=>$('briefing-dialog').close();
-$('restart-patrol').onclick=()=>{
+function newPatrol(){
+  missionStarted=true;
   state={ship:{x:earth.x,y:earth.y},location:'Earth',route:[],active:false,paused:false,days:0,speed:1};
   bridgeConsole?.resetPatrol();
   logs=[];routePage=0;log('New patrol initialized. Holding at Earth.');select(earth,false);showScreen('map');showView('map');resetView();renderPlan();save();$('briefing-dialog').close();toast('Patrol reset. Ready for your orders, Captain.');
-};
+}
+$('restart-patrol').onclick=newPatrol;
 $('briefing-dialog').addEventListener('click',e=>{if(e.target===$('briefing-dialog')){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();}});
 document.addEventListener('visibilitychange',()=>{lastTime=0;save();});
 window.addEventListener('pagehide',save);
@@ -303,6 +308,7 @@ window.addEventListener('resize',()=>{
 });
 function frame(time){
   const elapsed=lastTime?Math.min((time-lastTime)/1000,.25):0;lastTime=time;
+  if(startMenu?.isOpen()){requestAnimationFrame(frame);return;}
   if(state.active&&!state.paused&&elapsed){
     const available=elapsed*.08*state.speed;
     const days=Math.min(available,routeDistance(state.ship,state.route)/EPD_AU_PER_DAY);
@@ -332,14 +338,23 @@ bridgeConsole=mountBridge({
 });
 function restoredSelection(point){return [...bodies,...settlements,...miningStations].find(body=>body.id===point?.id)||point||earth;}
 function restoreSave(game){
+  missionStarted=true;
   state=game.navigation;selected=restoredSelection(game.selection);logs=game.logs.map(item=>({...item}));routePage=0;lastTime=0;
   bridgeConsole.restoreState(game.bridge);select(selected,false);renderPlan();
   const station=game.bridge.settings.selected;showScreen(['navigation','helm','tactical','engineering'].includes(station)?'bridge':'map');showView('map');
   log('JSON save restored. Flight paused.');save();toast('Save loaded. Strategic and local flight are paused.');
+  startMenu?.enter();
 }
 mountSaves({capture:captureSave,restore:restoreSave});
 buildMap();select(restoredSelection(savedGame?.selection),false);renderPlan();
 if(savedGame){logs=savedGame.logs;log('Autosave restored. Flight paused.');}
 else{log(state.active?'Saved journey restored. Transit paused.':'Sol Command link established.');log('Captain on deck. Awaiting orders.');}
 if(saveLoadError)toast('Browser save could not be restored. You can load a JSON backup from Saves.');
+startMenu=mountStartMenu({
+  hasPatrol:()=>missionStarted||!!savedGame||hasLegacyPatrol,
+  summary:()=>`${state.location} · ${date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'})} · flight paused`,
+  onPause:()=>{if(state.active)state.paused=true;bridgeConsole.pauseLocal();lastTime=0;updateTelemetry();save();},
+  onEnter:()=>{missionStarted=true;lastTime=0;save();},
+  onNewMission:newPatrol
+});
 requestAnimationFrame(frame);

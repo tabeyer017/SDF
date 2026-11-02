@@ -12,6 +12,8 @@ npm start
 
 Open http://127.0.0.1:2250. Run navigation checks with `npm test`.
 
+The start screen offers **New Mission**, **Load Saved Game**, **History** (setting and backstory), and **How to Play**. **Continue** appears when a browser patrol is available. New Mission opens a briefing before replacing the browser autosave, with an option to download the current patrol first. **New Campaign** explains that campaign progression is not yet implemented and links to the playable mission. Use **Menu** or the SDF logo to return to the start screen; strategic and local flight pause with their orders retained. Loading a JSON save opens that patrol paused. Merely visiting the start screen does not create or overwrite an autosave.
+
 ## Save games
 
 Open **Saves** in the top navigation. **Save game (.json)** downloads a versioned, readable SDF save. Choose that file and select **Load selected save** to restore it in this browser or another computer running the same save version. Import validates the whole file before changing the current game; malformed, oversized (over 1 MB), and unsupported-version files are rejected. Strategic and local flight restore paused, with their orders retained.

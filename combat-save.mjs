@@ -51,10 +51,17 @@ function ship(saved,classId,player){
   for(const weapon of Object.keys(result.roles)){const role=saved.roles[weapon];check(role===null&&weapon!=='as-missiles'||missileOptions[weapon].includes(role));result.roles[weapon]=role;}
   result.spares=integer(saved.spares,0,result.maxSpares);result.radar=bool(saved.radar);result.jammer=bool(saved.jammer);result.ciwsAuto=bool(saved.ciwsAuto);
   result.surrendered=saved.surrendered===undefined?false:bool(saved.surrendered);
+  result.autoRepair=saved.autoRepair===undefined?player:bool(saved.autoRepair);
+  result.repairHolds=saved.repairHolds===undefined?[]:array(saved.repairHolds,Object.keys(result.systems).length).map(id=>{
+    check(typeof id==='string'&&Object.hasOwn(result.systems,id));return id;
+  });
+  check(new Set(result.repairHolds).size===result.repairHolds.length);
   result.fire=bool(saved.fire);result.breach=bool(saved.breach);result.air=num(saved.air,0,1800);result.underFireUntil=num(saved.underFireUntil);
   const used=new Set();result.jobs=array(saved.jobs,Object.keys(result.systems).length).map(j=>{
     check(object(j)&&Object.hasOwn(result.systems,j.systemId)&&!used.has(j.systemId));used.add(j.systemId);
-    return {systemId:j.systemId,progress:num(j.progress,0,5),station:bool(j.station)};
+    const job={systemId:j.systemId,progress:num(j.progress,0,5),station:bool(j.station)};
+    if(j.automatic!==undefined){job.automatic=bool(j.automatic);check(!job.automatic||!job.station);}
+    return job;
   });
   return legacy?upgradePirateFit(result):result;
 }

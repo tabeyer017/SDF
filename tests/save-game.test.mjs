@@ -110,3 +110,12 @@ test('damage, missile presets, ammunition and repair jobs survive the complete J
   saved.bridge.combat.own.ammo['as-missiles']=4;saved.bridge.combat.own.jobs=[{systemId:'engine-1',progress:2.5,station:false}];
   const loaded=parseSave(JSON.stringify(saved));assert.deepEqual(loaded.bridge.combat,saved.bridge.combat);
 });
+
+test('automatic repair mode, per-system holds, and automatic labor survive the complete JSON codec',()=>{
+  const saved=createSave(game()),ship=saved.bridge.combat.own;
+  ship.repairHolds=['sensors'];ship.systems['engine-1'].hp=40;
+  ship.jobs=[{systemId:'engine-1',progress:2.5,station:false,automatic:true}];
+  assert.deepEqual(parseSave(JSON.stringify(saved)).bridge.combat,saved.bridge.combat);
+  ship.autoRepair=false;ship.jobs=[];
+  const loaded=parseSave(JSON.stringify(saved));assert.equal(loaded.bridge.combat.own.autoRepair,false);assert.deepEqual(loaded.bridge.combat.own.repairHolds,['sensors']);
+});

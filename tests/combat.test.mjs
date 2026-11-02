@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createCombat,createDamageShip,damageClasses,weapons,weaponAimOptions,aimPointState,nextAimPoint,applyDamage,shipPerformance,fireWeapon,canFire,startFiring,commandWeapons,ceaseFiring,stepCombat,queueRepair,advanceMaintenance,containEmergency,dock,requestService,changeEncounter } from '../combat-model.mjs';
+import { createCombat,createDamageShip,damageClasses,weapons,weaponAimOptions,aimPointState,nextAimPoint,applyDamage,shipPerformance,fireWeapon,canFire,startFiring,commandWeapons,ceaseFiring,stepCombat,queueRepair,scheduleRepairs,setAutomaticRepairs,cancelRepair,advanceMaintenance,containEmergency,dock,requestService,changeEncounter } from '../combat-model.mjs';
 import { createSector,stepSector } from '../sector-model.mjs';
 import { restoreCombat } from '../combat-save.mjs';
 import { shipTypes,trainingContacts } from '../tactical-model.mjs';
@@ -282,6 +282,79 @@ test('destroyed engines remove thrust without removing existing momentum',()=>{
   sector.enginePerformance=shipPerformance(combat.own).engines;stepSector(sector,10);
   assert.equal(sector.own.vx,3600);assert.equal(sector.own.x,10);
   combat.own.systems.epd.hp=0;assert.equal(shipPerformance(combat.own).epd,false);
+});
+
+test('Engineering automatically starts repairable damage and consumes parts as time advances',()=>{
+  const {combat}=setup();assert.equal(combat.own.autoRepair,true);
+  applyDamage(combat,'own',250,'engines');
+  assert.deepEqual(combat.own.jobs,[{systemId:'engine-1',progress:0,station:false,automatic:true}]);
+  const damaged=combat.own.systems['engine-1'].hp;combat.time=31;advanceMaintenance(combat,60);
+  assert.equal(combat.own.systems['engine-1'].hp,damaged+10);assert.equal(combat.own.spares,198);
+  scheduleRepairs(combat);assert.equal(combat.own.jobs.length,1);
+});
+
+test('automatic maintenance recovers existing damage within field limits without manual orders',()=>{
+  const {combat}=setup(),ship=combat.own;
+  ship.systems.hull.hp=550;ship.systems['engine-1'].hp=40;ship.systems.sensors.hp=0;
+  advanceMaintenance(combat,300);
+  assert.equal(ship.systems.hull.hp,600);assert.equal(ship.systems['engine-1'].hp,90);
+  assert.equal(ship.systems.sensors.hp,0);assert.equal(ship.spares,180);assert.equal(ship.jobs.length,0);
+  advanceMaintenance(combat,300);assert.equal(ship.spares,180);
+});
+
+test('manual override stops automatic jobs, keeps manual orders, and permits explicit repairs',()=>{
+  const {combat}=setup(),ship=combat.own;
+  ship.systems['engine-1'].hp=40;ship.systems['engine-2'].hp=40;
+  queueRepair(combat,'engine-2');scheduleRepairs(combat);advanceMaintenance(combat,15);
+  const manual=structuredClone(ship.jobs.find(j=>j.systemId==='engine-2'));
+  setAutomaticRepairs(combat,false);assert.deepEqual(ship.jobs,[manual]);
+  advanceMaintenance(combat,45);assert.equal(ship.systems['engine-2'].hp,50);assert.equal(ship.systems['engine-1'].hp,40);
+  applyDamage(combat,'own',100,'engines');assert.equal(ship.jobs.some(j=>j.automatic),false);
+  assert.equal(queueRepair(combat,'engine-1'),true);
+});
+
+test('canceling holds a system across scheduling, encounters, and saves until explicitly resumed',()=>{
+  const {combat,sector}=setup(),ship=combat.own;ship.systems['engine-1'].hp=40;
+  scheduleRepairs(combat);advanceMaintenance(combat,15);assert.ok(ship.jobs[0].progress>0);
+  assert.equal(cancelRepair(combat,'engine-1'),true);advanceMaintenance(combat,120);
+  assert.equal(ship.systems['engine-1'].hp,40);assert.deepEqual(ship.jobs,[]);
+  const loaded=restoreCombat(JSON.parse(JSON.stringify(combat)),sector.contacts);
+  changeEncounter(loaded,sector.contacts);advanceMaintenance(loaded,60);
+  assert.deepEqual(loaded.own.repairHolds,['engine-1']);assert.deepEqual(loaded.own.jobs,[]);
+  setAutomaticRepairs(loaded,true);assert.deepEqual(loaded.own.repairHolds,[]);
+  advanceMaintenance(loaded,30);assert.equal(loaded.own.systems['engine-1'].hp,45);
+  cancelRepair(loaded,'engine-1');assert.equal(queueRepair(loaded,'engine-1'),true);
+  assert.deepEqual(loaded.own.repairHolds,[]);assert.equal(loaded.own.jobs[0].automatic,undefined);
+});
+
+test('manual repair orders precede automatic work and automatic work prioritizes essential systems',()=>{
+  const {combat}=setup(),ship=combat.own;
+  for(const [id,value] of Object.entries({hull:550,'life-support':50,reactor:80,power:60,'engine-1':40,sensors:20}))ship.systems[id].hp=value;
+  scheduleRepairs(combat);assert.deepEqual(ship.jobs.map(j=>j.systemId),['hull','life-support','reactor','power','engine-1','sensors']);
+  cancelRepair(combat,'sensors');queueRepair(combat,'sensors');
+  assert.equal(ship.jobs[0].systemId,'sensors');assert.equal(ship.jobs[0].automatic,undefined);
+});
+
+test('automatic repair settings and partial jobs round-trip, old saves enable auto, and malformed overrides fail validation',()=>{
+  const {combat,sector}=setup();combat.own.systems['engine-1'].hp=40;
+  scheduleRepairs(combat);advanceMaintenance(combat,15);
+  assert.deepEqual(restoreCombat(JSON.parse(JSON.stringify(combat)),sector.contacts),combat);
+  setAutomaticRepairs(combat,false);assert.deepEqual(restoreCombat(JSON.parse(JSON.stringify(combat)),sector.contacts),combat);
+  const legacy=structuredClone(combat);delete legacy.own.autoRepair;delete legacy.own.repairHolds;
+  const loaded=restoreCombat(legacy,sector.contacts);assert.equal(loaded.own.autoRepair,true);assert.deepEqual(loaded.own.repairHolds,[]);
+  for(const edit of [c=>c.own.autoRepair='yes',c=>c.own.repairHolds=['unknown'],c=>c.own.repairHolds=['hull','hull'],c=>{c.own.jobs=[{systemId:'hull',progress:0,station:false,automatic:'yes'}];}]){
+    const bad=structuredClone(combat);edit(bad);assert.throws(()=>restoreCombat(bad,sector.contacts));
+  }
+});
+
+test('automatic repair obeys spare exhaustion and leaves explicit station service under player control',()=>{
+  const {combat,sector}=setup(),ship=combat.own;ship.systems['engine-1'].hp=40;ship.spares=1;
+  advanceMaintenance(combat,300);assert.equal(ship.systems['engine-1'].hp,45);assert.equal(ship.spares,0);
+  advanceMaintenance(combat,300);assert.equal(ship.systems['engine-1'].hp,45);assert.equal(combat.docked,false);assert.equal(combat.service,null);
+  sector.location='Moon station';assert.equal(dock(combat,sector),true);assert.equal(requestService(combat,sector),true);
+  setAutomaticRepairs(combat,false);assert.ok(ship.jobs.every(j=>j.station));
+  advanceMaintenance(combat,1000);assert.equal(ship.systems['engine-1'].hp,120);assert.equal(ship.spares,200);
+  ship.systems.hull.hp=0;setAutomaticRepairs(combat,true);scheduleRepairs(combat);assert.deepEqual(ship.jobs,[]);
 });
 
 test('onboard repair costs parts, obeys field ceilings, and stops when parts run out',()=>{

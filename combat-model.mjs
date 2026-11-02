@@ -87,7 +87,7 @@ export function createDamageShip(classId,player=false){
   // Retained for compatibility with version 2 saves; launches derive guidance from aim.
   const roles=Object.fromEntries(Object.keys(missileOptions).map(w=>[w,w==='mp-missiles'?'precision':'anti-ship']));
   return {classId,systems,mounts,ammo,maxAmmo:{...ammo},roles,spares,maxSpares:spares,teams,armor,
-    radar:true,jammer:classId.startsWith('pirate-'),ciwsAuto:true,surrendered:false,jobs:[],fire:false,breach:false,air:1800,underFireUntil:0};
+    radar:true,jammer:classId.startsWith('pirate-'),ciwsAuto:true,surrendered:false,jobs:[],autoRepair:player,repairHolds:[],fire:false,breach:false,air:1800,underFireUntil:0};
 }
 export function createCombat(contacts=trainingContacts){
   return {time:0,own:createDamageShip('sdf-frigate',true),contacts:Object.fromEntries(contacts.map(c=>[c.id,createDamageShip(c.shipType)])),
@@ -121,6 +121,7 @@ export function applyDamage(combat,id,damage,component='hull',penetration=0){
   if(ship.systems.hull.hp<ship.systems.hull.max*.5)ship.breach=true;
   if((key==='reactor'||key==='power')&&ship.systems[key].hp<ship.systems[key].max*.4)ship.fire=true;
   if(wasAlive&&!alive(ship)){ship.jobs=[];log(combat,`${id==='own'?'Wayfarer':id}: hull breached · disabled · internal systems exposed.`);}
+  if(id==='own')scheduleRepairs(combat);
   return amount;
 }
 
@@ -208,10 +209,34 @@ export function commandWeapons(combat,sector,orders,continuous=false,rng=Math.ra
   const count=results.filter(result=>result.ok).length,skipped=results.filter(result=>!result.ok);
   return {ok:count>0,results,message:`${count} weapon${count===1?'':'s'} ${continuous?'ordered to fire':'fired'}${skipped.length?` · ${skipped.length} skipped: ${skipped.map(result=>`${result.mountId}: ${result.message}`).join('; ')}`:''}.`};
 }
-export function queueRepair(combat,systemId){
+export function queueRepair(combat,systemId,automatic=false){
   const ship=combat.own,s=ship.systems[systemId],cap=systemId==='hull'?.6:.75;
   if(!alive(ship)||combat.service||!s||s.hp<=0||s.hp>=s.max*cap||ship.spares<1||ship.jobs.some(j=>j.systemId===systemId))return false;
-  ship.jobs.push({systemId,progress:0,station:false});return true;
+  const job={systemId,progress:0,station:false};
+  if(automatic){job.automatic=true;ship.jobs.push(job);}
+  else {
+    ship.repairHolds=ship.repairHolds.filter(id=>id!==systemId);
+    const firstAuto=ship.jobs.findIndex(j=>j.automatic);
+    ship.jobs.splice(firstAuto<0?ship.jobs.length:firstAuto,0,job);
+  }
+  return true;
+}
+export function scheduleRepairs(combat){
+  const ship=combat.own;if(!ship.autoRepair||!alive(ship)||combat.service||ship.spares<1)return;
+  const priority=['hull','life-support','reactor','power',...Object.keys(ship.systems).filter(id=>id.startsWith('engine-'))];
+  for(const id of new Set([...priority,...Object.keys(ship.systems)]))if(!ship.repairHolds.includes(id))queueRepair(combat,id,true);
+}
+export function setAutomaticRepairs(combat,enabled){
+  const ship=combat.own;ship.autoRepair=!!enabled;
+  if(enabled){ship.repairHolds=[];scheduleRepairs(combat);}
+  else ship.jobs=ship.jobs.filter(job=>!job.automatic);
+}
+export function cancelRepair(combat,systemId){
+  const ship=combat.own;
+  if(!ship.jobs.some(job=>job.systemId===systemId&&!job.station))return false;
+  ship.jobs=ship.jobs.filter(job=>job.systemId!==systemId);
+  if(!ship.repairHolds.includes(systemId))ship.repairHolds.push(systemId);
+  return true;
 }
 function repairStep(combat,seconds){
   const ship=combat.own;if(!alive(ship))return;
@@ -241,6 +266,7 @@ function repairStep(combat,seconds){
 }
 export function advanceMaintenance(combat,seconds){
   if(!Number.isFinite(seconds)||seconds<=0)return;
+  scheduleRepairs(combat);
   repairStep(combat,seconds);emergencyStep(combat.own,seconds);
 }
 function emergencyStep(ship,seconds){
