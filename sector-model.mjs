@@ -3,7 +3,7 @@ import { trainingContacts, observeContact, contactDistance, contactClosureRate }
 export const SENSOR_RANGE = 200;
 export const VECTOR_LIMIT = 7200; // Provisional Vector Drive performance, KPH.
 export const VECTOR_ACCELERATION = 120; // KPH gained per simulated second.
-export const maneuverNames = { intercept:'Intercept', match:'Match velocity', maintain:'Maintain range', open:'Open distance', break:'Break away', patrol:'Patrol route', manual:'Manual Helm', brake:'Braking to sector rest', coast:'Coasting' };
+export const maneuverNames = { intercept:'Intercept', match:'Match velocity', maintain:'Maintain range', open:'Open distance', break:'Break away', patrol:'Patrol route', manual:'Manual flight', brake:'Braking to sector rest', coast:'Coasting' };
 export const sectorHazards = [{ id:'debris', name:'Training debris field', x:50, y:60, z:0, radius:12 }];
 const keys = ['x','y','z'], speeds = ['vx','vy','vz'];
 const length = v => Math.hypot(v.x,v.y,v.z);
@@ -54,7 +54,7 @@ export function setManualHelm(sector, {thrust=0,bearing=0,elevation=0,bow=0}) {
   if(![thrust,bearing,elevation,bow].every(Number.isFinite) || Math.abs(thrust)>100 || bearing<0 || bearing>360 || bow<0 || bow>360 || Math.abs(elevation)>90) return false;
   sector.order={mode:'manual'};sector.manual={thrust,bearing,elevation}; sector.running=true;
   const angle=bow*Math.PI/180;sector.facing={x:Math.sin(angle),y:Math.cos(angle),z:0};
-  sector.status='Manual Helm override · automatic maneuver cancelled'; return true;
+  sector.status='Manual flight override · autopilot cancelled'; return true;
 }
 
 export function coast(sector) { sector.order=null;sector.manual.thrust=0;sector.status='Coasting · current velocity retained';sector.safety='Coasting · no automatic guidance'; }
@@ -65,7 +65,7 @@ export function addPatrolWaypoint(sector,point) {
 }
 export function startPatrol(sector) {
   if(!sector.route.length) return false;
-  sector.order={mode:'patrol'};sector.running=true;sector.manual.thrust=0;sector.status='Patrol route · Navigation guiding Helm';return true;
+  sector.order={mode:'patrol'};sector.running=true;sector.manual.thrust=0;sector.status='Patrol route · autopilot engaged';return true;
 }
 
 export function segmentHitsHazard(start,end,hazard,margin=2) {
@@ -88,7 +88,7 @@ function guidance(sector) {
       if(!waypoint){sector.order=null;sector.own.vx=sector.own.vy=sector.own.vz=0;sector.status='Patrol route complete · velocity zero in sector frame';return null;}
     }
     const r=subtract(waypoint,own); desired=limited(Object.fromEntries(keys.map(k=>[k,r[k]*180])),VECTOR_LIMIT);
-    sector.status=`Patrol route · ${waypoint.name} · Helm executing`;
+    sector.status=`Patrol route · ${waypoint.name} · autopilot executing`;
   } else {
     const target=sector.contacts.find(c=>c.id===order.targetId);
     if(!target || length(subtract(target,own))>(sector.sensorRange??SENSOR_RANGE)){coast(sector);sector.status='Target lost beyond sensor coverage · maneuver cancelled · coasting';return null;}
@@ -100,7 +100,7 @@ function guidance(sector) {
     if(order.mode==='open') correction=Math.min(0,(distance-order.range)*180);
     if(order.mode==='break') correction=-VECTOR_LIMIT;
     desired=limited(Object.fromEntries(keys.map((k,i)=>[k,target[speeds[i]]+direction[k]*correction])),VECTOR_LIMIT);
-    sector.status=`${maneuverNames[order.mode]} · TRK-${target.id.split('-').at(-1)} · Helm executing`;
+    sector.status=`${maneuverNames[order.mode]} · TRK-${target.id.split('-').at(-1)} · autopilot executing`;
   }
   // Check the stopping corridor as well as the commanded path; brake if either is obstructed.
   const speed=length(velocity(own)), horizon=speed/VECTOR_ACCELERATION+10;

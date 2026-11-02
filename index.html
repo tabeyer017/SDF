@@ -89,12 +89,11 @@
         <section class="activity-section"><div class="panel-label">COMMAND LOG <span class="live-text">LIVE</span></div><ol id="command-log"></ol></section>
       </aside>
     </section>
-    <section id="bridge-console" class="bridge-console" data-view="deck" aria-label="Ship bridge stations">
-      <div id="bridge-station-list" class="bridge-station-list" aria-label="Bridge station directory"></div>
-      <div class="bridge-station-picker"><label for="bridge-station-select">DUTY STATION</label><select id="bridge-station-select" aria-label="Bridge station"></select><button id="bridge-view-toggle">Station console ↗</button></div>
+    <section id="bridge-console" class="bridge-console" data-view="deck" aria-label="Ship bridge areas">
+      <header class="bridge-area-bar"><h1 id="bridge-area-name">Command</h1><div id="bridge-area-tabs" class="bridge-area-tabs" role="tablist" aria-label="Command controls"></div><button id="bridge-view-toggle">Command overview ↗</button><div class="bridge-area-clock"><span>SHIPBOARD TIME · UTC</span><time id="bridge-area-time"></time></div></header>
       <section class="bridge-deck-panel" aria-label="Main bridge deck plan">
         <div class="bridge-deck-header"><span>SDF WAYFARER / MAIN BRIDGE</span><span id="bridge-watch">ROUTINE WATCH</span></div>
-        <svg class="bridge-deck" viewBox="35 25 590 520" role="group" aria-label="Bridge deck plan. Select a duty station to open its console.">
+        <svg class="bridge-deck" viewBox="35 25 590 520" role="group" aria-label="Bridge deck plan. Select a bridge area to open its controls.">
           <defs><radialGradient id="bridge-floor"><stop stop-color="#1b2e3d"/><stop offset="1" stop-color="#0d1825"/></radialGradient></defs>
           <path d="M150 80Q330-15 510 80L610 350Q590 510 470 535H190Q70 510 50 350Z" fill="url(#bridge-floor)" stroke="#314454" stroke-width="2"/>
           <path d="M160 100Q330 18 500 100L587 350Q565 487 460 512H200Q95 487 73 350Z" fill="none" stroke="#253b4b"/>
@@ -107,7 +106,7 @@
           <text x="330" y="523" text-anchor="middle" fill="#6d8190" font-family="monospace" font-size="7" letter-spacing="2">AFT ACCESS / MAIN ENGINEERING</text>
           <g id="bridge-deck-stations"></g>
         </svg>
-        <div class="bridge-deck-footer"><span id="bridge-duty-seat">CAPTAIN HAS THE CONN</span><span>SELECT A STATION TO TAKE CONTROL</span></div>
+        <div class="bridge-deck-footer"><span id="bridge-duty-seat">CAPTAIN HAS THE CONN</span><span>SELECT A BRIDGE AREA</span></div>
       </section>
       <section id="tactical-console" class="tactical-console" aria-label="Tactical weapons interface"></section>
       <section id="bridge-station-detail" class="bridge-station-detail" aria-label="Selected bridge station">
@@ -153,7 +152,7 @@
   <dialog id="how-to-play-dialog" aria-labelledby="how-to-play-title">
     <button class="dialog-close" data-close-menu-dialog aria-label="Close how to play">×</button>
     <div class="eyebrow">CAPTAIN’S ORIENTATION</div><h2 id="how-to-play-title">Take the conn.</h2>
-    <ol class="menu-instructions"><li><strong>Plot a patrol.</strong> Select a planet, settlement, mining station, or point on the strategic map. Add it to your course, then Engage EPD.</li><li><strong>Set the pace.</strong> Use pause and the 1×, 10×, or 100× controls during transit.</li><li><strong>Work the bridge.</strong> Navigation and Helm control local flight. Tactical manages sensors, target locks, and weapons. Engineering handles damage and station service.</li><li><strong>Keep your progress.</strong> Browser autosave remembers your patrol. Saves downloads a portable JSON backup; Load Saved Game restores one.</li></ol>
+    <ol class="menu-instructions"><li><strong>Plot a patrol.</strong> Select a planet, settlement, mining station, or point on the strategic map. Add it to your course, then Engage EPD.</li><li><strong>Set the pace.</strong> Use pause and the 1×, 10×, or 100× controls during transit.</li><li><strong>Work the bridge.</strong> Local Flight plans routes and flies the ship automatically; advanced manual controls are optional. Tactical manages sensors, target locks, and weapons. Engineering handles damage and station service.</li><li><strong>Keep your progress.</strong> Browser autosave remembers your patrol. Saves downloads a portable JSON backup; Load Saved Game restores one.</li></ol>
     <p>Returning to the menu pauses strategic and local flight. Continue returns to your patrol with flight paused so you can review your orders.</p>
     <button class="secondary-button" data-close-menu-dialog>Return to menu</button>
   </dialog>

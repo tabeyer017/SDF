@@ -7,7 +7,7 @@ import { restoreBridgeState } from '../bridge-model.mjs';
 function game(){
   const sector=createSector();observeSector(sector);
   return {navigation:{ship:{x:.766,y:.643},location:'Earth',route:[],active:false,paused:false,days:3.25,speed:10},
-    bridge:{settings:{...restoreBridgeState(),selected:'tactical',watch:'heightened',radarRange:140},sector,tactical:{lockedIds:['F-03','U-01'],activeId:'F-03'}},
+    bridge:{settings:{...restoreBridgeState(),selected:'tactical',watch:'heightened',radarRange:140},sector,tactical:{lockedIds:['F-03','U-01'],activeId:'F-03',priorities:{'F-03':1,'U-01':2}}},
     selection:{id:'mars',name:'Mars',x:1.1,y:-1.1,type:'PLANET',color:'#c77d60',description:'Patrol destination'},
     logs:[{time:'06:00',message:'Patrol underway.'}]};
 }
@@ -19,6 +19,20 @@ test('JSON save preserves strategic progress, bridge settings, selection, logs, 
   assert.deepEqual(saved.navigation,original.navigation);assert.deepEqual(saved.bridge.settings,original.bridge.settings);
   assert.deepEqual(saved.selection,original.selection);assert.deepEqual(saved.logs,original.logs);
   assert.deepEqual(saved.bridge.tactical,original.bridge.tactical);assert.deepEqual(original,before);
+});
+
+test('target priorities survive saves, while old saves assign distinct priorities without changing locks',()=>{
+  const original=game();original.bridge.tactical.priorities={'F-03':8,'U-01':1};
+  const loaded=roundTrip(original);assert.deepEqual(loaded.bridge.tactical,original.bridge.tactical);
+  delete loaded.bridge.tactical.priorities;
+  const legacy=parseSave(JSON.stringify(loaded));assert.deepEqual(legacy.bridge.tactical.lockedIds,['F-03','U-01']);assert.equal(legacy.bridge.tactical.activeId,'F-03');
+  assert.deepEqual(legacy.bridge.tactical.priorities,{'F-03':1,'U-01':2});
+});
+
+test('save imports reject duplicate, missing, invalid, and unrelated target-priority assignments',()=>{
+  for(const priorities of [{'F-03':1,'U-01':1},{'F-03':1},{'F-03':0,'U-01':2},{'F-03':'1','U-01':2},{'F-03':1.5,'U-01':2},{'F-03':1,'U-01':2,'E-04':3},null]){
+    const saved=createSave(game());saved.bridge.tactical.priorities=priorities;assert.throws(()=>parseSave(JSON.stringify(saved)),/priorit/);
+  }
 });
 
 test('local maneuver reloads paused with ship velocity, contact motion, and order intact',()=>{
@@ -37,6 +51,14 @@ test('manual Helm and local patrol waypoints survive separate save round trips',
   let saved=roundTrip(original).bridge.sector;assert.deepEqual(saved.manual,sector.manual);assert.deepEqual(saved.order,{mode:'manual'});
   addPatrolWaypoint(sector,{x:-25,y:35,z:12});addPatrolWaypoint(sector,{x:-40,y:50,z:8});startPatrol(sector);
   saved=roundTrip(original).bridge.sector;assert.deepEqual(saved.route,sector.route);assert.deepEqual(saved.order,{mode:'patrol'});
+});
+
+test('legacy Helm saves reopen in Local Flight without changing manual orders or motion',()=>{
+  const original=game(),sector=original.bridge.sector;original.bridge.settings.selected='helm';
+  setManualHelm(sector,{thrust:65,bearing:75,elevation:20,bow:42});stepSector(sector,8);addPatrolWaypoint(sector,{x:-25,y:35,z:12});
+  const loaded=roundTrip(original);
+  assert.equal(loaded.bridge.settings.selected,'navigation');assert.equal(loaded.bridge.sector.running,false);
+  for(const key of ['manual','order','own','facing','route'])assert.deepEqual(loaded.bridge.sector[key],sector[key]);
 });
 
 test('active strategic journey resumes paused at the same position with all waypoints',()=>{
@@ -118,4 +140,11 @@ test('automatic repair mode, per-system holds, and automatic labor survive the c
   assert.deepEqual(parseSave(JSON.stringify(saved)).bridge.combat,saved.bridge.combat);
   ship.autoRepair=false;ship.jobs=[];
   const loaded=parseSave(JSON.stringify(saved));assert.equal(loaded.bridge.combat.own.autoRepair,false);assert.deepEqual(loaded.bridge.combat.own.repairHolds,['sensors']);
+});
+
+test('Flight Control System Map selection preserves the shared patrol and bridge settings in saves',()=>{
+  const original=game();original.bridge.settings.selected='system-map';
+  const loaded=roundTrip(original);assert.equal(loaded.bridge.settings.selected,'system-map');
+  assert.deepEqual(loaded.navigation,original.navigation);assert.deepEqual(loaded.bridge.sector.own,original.bridge.sector.own);
+  assert.deepEqual(loaded.bridge.settings,original.bridge.settings);
 });

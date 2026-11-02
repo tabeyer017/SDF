@@ -1,8 +1,35 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { radarRanges, rangeRings, projectContact, contactsInRange, projectVelocity, contactDistance, contactSpeed, contactClosureRate, armamentTypes, countermeasureTypes, shipTypes, shipFiveViews, trainingContacts, selectTargets, observeContact, IFF_RANGE_KM, IFF_IDENTIFICATION_CHANCE } from '../tactical-model.mjs';
+import { radarRanges, rangeRings, projectContact, contactsInRange, projectVelocity, contactDistance, contactSpeed, contactClosureRate, armamentTypes, countermeasureTypes, shipTypes, shipFiveViews, trainingContacts, selectTargets, prioritizeTargets, restoreTargetPriorities, MAX_TARGET_PRIORITY, observeContact, IFF_RANGE_KM, IFF_IDENTIFICATION_CHANCE } from '../tactical-model.mjs';
 import { restoreBridgeState } from '../bridge-model.mjs';
+
+test('target priorities remain unique when adding ships and preserve the original selection on rejection',()=>{
+  const first=prioritizeTargets([],{},'E-04',1),before=structuredClone(first);
+  const second=prioritizeTargets(first.lockedIds,first.priorities,'F-03',2,true);
+  assert.deepEqual(second,{lockedIds:['E-04','F-03'],priorities:{'E-04':1,'F-03':2}});
+  assert.deepEqual(first,before);assert.throws(()=>prioritizeTargets(first.lockedIds,first.priorities,'F-03',1,true),/unique/);
+  assert.deepEqual(first,before);
+});
+
+test('single-target replacement and release free priorities without renumbering retained ships',()=>{
+  const ids=['E-04','F-03'],priorities={'E-04':1,'F-03':8};
+  assert.deepEqual(prioritizeTargets(ids,priorities,'U-01',1),{lockedIds:['U-01'],priorities:{'U-01':1}});
+  const released=prioritizeTargets(ids,priorities,'E-04',undefined,true);
+  assert.deepEqual(released,{lockedIds:['F-03'],priorities:{'F-03':8}});
+  assert.deepEqual(prioritizeTargets(released.lockedIds,released.priorities,'U-01',1,true).priorities,{'F-03':8,'U-01':1});
+});
+
+test('priority validation rejects duplicate, fractional, zero, and out-of-range numbers',()=>{
+  for(const value of [0,-1,1.5,'1',true,NaN,Infinity,MAX_TARGET_PRIORITY+1])assert.throws(()=>prioritizeTargets([],{},'E-04',value));
+  for(const value of [null,[],{}, {'E-04':1,'F-03':1},{'E-04':1,'other':2}])assert.throws(()=>restoreTargetPriorities(['E-04','F-03'],value));
+  assert.deepEqual(restoreTargetPriorities(['E-04','F-03'],{'E-04':MAX_TARGET_PRIORITY,'F-03':1}),{'E-04':MAX_TARGET_PRIORITY,'F-03':1});
+});
+
+test('legacy locks gain stable priorities in their existing order and empty selections stay empty',()=>{
+  assert.deepEqual(restoreTargetPriorities(['F-03','E-04']),{'F-03':1,'E-04':2});
+  assert.deepEqual(restoreTargetPriorities([],{}),{});assert.deepEqual(restoreTargetPriorities([]),{});
+});
 
 test('all six ranges have three intermediate rings and an outer range ring', () => {
   assert.deepEqual(radarRanges, [10, 20, 60, 100, 140, 200]);

@@ -1,4 +1,4 @@
-import { bridgeStations, marineComplements, restoreBridgeState, flightControlState } from './bridge-model.mjs';
+import { bridgeStations, bridgeAreas, bridgeAreaFor, canonicalBridgeStation, marineComplements, restoreBridgeState } from './bridge-model.mjs';
 import { mountTactical } from './tactical.mjs';
 import { createSector, observeSector, issueManeuver, setManualHelm, coast, brake, addPatrolWaypoint, startPatrol, stepSector } from './sector-model.mjs';
 import { mountSectorConsole } from './sector-console.mjs';
@@ -14,6 +14,16 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLo
   let saved=savedGame?.settings;
   if(!saved)try{saved=JSON.parse(localStorage.getItem('sdf-bridge-v1'));}catch{}
   const state=restoreBridgeState(saved);
+  const areaStations=Object.fromEntries(bridgeAreas.map(area=>[area.id,area.tabs[0][0]]));
+  areaStations[bridgeAreaFor(state.selected).id]=state.selected;
+  const mapLayout=document.querySelector('.command-layout'),mapTabs=document.querySelector('.console-tabs'),mapHome=document.createComment('Strategic map home');
+  mapTabs.before(mapHome);
+  const systemRoot=document.createElement('section');systemRoot.className='bridge-system-map';systemRoot.id='bridge-system-map';systemRoot.setAttribute('aria-label','Strategic navigation console');$('bridge-console').append(systemRoot);
+  function placeSystemMap(){
+    const embedded=document.body.dataset.screen==='bridge'&&state.selected==='system-map';
+    if(embedded&&mapLayout.parentElement!==systemRoot)systemRoot.append(mapTabs,mapLayout);
+    else if(!embedded&&mapLayout.parentElement===systemRoot)mapHome.before(mapTabs,mapLayout);
+  }
   let notice='All stations report ready for the patrol watch.',lastReview=null;
   const compact=matchMedia('(max-width: 650px)');
   const save=()=>onSave();
@@ -47,9 +57,9 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLo
     service:()=>{if(requestService(combat,sector)){refresh();save();}}
   };
   function combatAction(fn){if(snapshot().active){report('Weapons unavailable during EPD transit.');return;}const result=fn();if(result.ok)sector.running=true;report(result.message);save();}
-  const localRoot=document.createElement('section');localRoot.className='sector-console';localRoot.setAttribute('aria-label','Navigation and Helm local sector');$('bridge-console').append(localRoot);
+  const localRoot=document.createElement('section');localRoot.className='sector-console';localRoot.setAttribute('aria-label','Local Flight');$('bridge-console').append(localRoot);
   const localConsole=mountSectorConsole({root:localRoot,flight,openSystem:openNavigation,strategic:{snapshot,engage,pause,abort}});
-  const tactical=mountTactical({root:$('tactical-console'),range:state.radarRange,onRangeChange:range=>{state.radarRange=range;save();},flight,onNavigate:()=>select('navigation')});
+  const tactical=mountTactical({root:$('tactical-console'),range:state.radarRange,onRangeChange:range=>{state.radarRange=range;save();},onChange:save,flight,onNavigate:()=>select('navigation')});
   const damageRoot=document.createElement('section');$('bridge-console').append(damageRoot);const damageConsole=mountDamageConsole({root:damageRoot,flight});
   const commsRoot=document.createElement('section');$('bridge-console').append(commsRoot);
   const communicationsContext=()=>({sector,combat,contacts:flight.contacts(),range:state.radarRange,inTransit:snapshot().active,days:snapshot().days});
@@ -58,12 +68,15 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLo
   function operate(fn){if(snapshot().active){report('EPD transit active. Disengage EPD before local maneuvering.');return false;}const result=fn();if(result)report(sector.status);else report('Local order unavailable: check the target, range, or waypoint limit.');onLocalChange();return result;}
   function report(text){notice=text;log(text);refresh();}
   function select(id){
+    id=canonicalBridgeStation(id);
     if(!bridgeStations.some(station=>station.id===id))return;
-    state.selected=id;save();renderControls();refresh();
+    state.selected=id;areaStations[bridgeAreaFor(id).id]=id;save();renderControls();refresh();
     if(compact.matches)$('bridge-console').dataset.view='station';
     updateViewButton();
   }
-  function updateViewButton(){ $('bridge-view-toggle').textContent=$('bridge-console').dataset.view==='deck'?'Station console ↗':'Deck view ↗'; }
+  function selectArea(id){const area=bridgeAreas.find(area=>area.id===id);if(area)select(areaStations[id]);}
+  function updateViewButton(){ $('bridge-view-toggle').textContent=$('bridge-console').dataset.view==='deck'?'Command overview ↗':'Deck view ↗'; }
+  function openBridge(){select('command');$('bridge-console').dataset.view='deck';updateViewButton();}
   function action(label,callback,disabled=false){const button=document.createElement('button');button.textContent=label;button.className='bridge-action';button.disabled=disabled;button.onclick=callback;return button;}
   function choice(label,key,options){
     const wrapper=document.createElement('label');wrapper.className='bridge-setting';
@@ -74,12 +87,10 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLo
   }
   function setWatch(){state.watch=state.watch==='routine'?'heightened':'routine';save();renderControls();report(`Command: ${state.watch==='routine'?'routine':'heightened'} watch set.`);}
   function renderControls(){
-    const controls=$('bridge-actions');controls.replaceChildren();const s=snapshot(),flight=flightControlState(s);
+    const controls=$('bridge-actions');controls.replaceChildren();
     switch(state.selected){
       case 'command':
         controls.append(choice('Command seat','seat',[['captain','Captain'],['first-officer','First officer']]),action(state.watch==='routine'?'Set heightened watch':'Return to routine watch',setWatch));break;
-      case 'helm':
-        controls.append(action('Engage plotted course',engage,!flight.canEngage),action(s.paused?'Resume transit':'Pause transit',pause,!flight.canPause),action('Abort transit / hold position',abort,!flight.canAbort));break;
       case 'navigation':controls.append(action('Open course planner ↗',openNavigation));break;
       case 'ops':controls.append(choice('Duty priority','ops',[['balanced','Balanced operations'],['sensors','Sensor coordination'],['engineering','Engineering readiness']]));break;
       case 'tactical':case 'security':controls.append(action(state.watch==='routine'?'Set heightened watch':'Return to routine watch',setWatch));break;
@@ -94,14 +105,14 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLo
         select.value=String(state.temperature);select.onchange=()=>{state.temperature=Number(select.value);save();report(`Life support: habitat setpoint ${state.temperature} °C.`);};wrapper.append(caption,select);controls.append(wrapper);break;
       }
     }
-    if(state.selected==='command'||state.selected==='ops')controls.append(action('Open damage control ↗',()=>select('engineering')));
+    if(state.selected==='command')controls.append(action('Open Flight Control ↗',()=>selectArea('flight')),action('Open Tactical / Security ↗',()=>selectArea('tactical-security')),action('Open Science / Comms ↗',()=>selectArea('science-comms')));
+    if(state.selected==='command'||state.selected==='ops')controls.append(action('Open Engineering / Support ↗',()=>select('engineering')));
     if(state.selected==='security'||state.selected==='environment')controls.append(action('Isolate fire',()=>flight.contain('fire'),!combat.own.fire),action('Seal bulkheads / isolate pressure loss',()=>flight.contain('breach'),!combat.own.breach),action('Open damage control ↗',()=>select('engineering')));
   }
   function readouts(s){
     const watch=state.watch==='routine'?'Routine watch':'Heightened watch';
     switch(state.selected){
-      case 'command':return [['Command seat',state.seat==='captain'?'Captain':'First officer'],['Watch condition',watch],['Vessel',s.shipName],['Patrol status',s.active?`To ${s.nextWaypoint}`:`At ${s.location}`]];
-      case 'helm':return [['EPD drive',s.active?(s.paused?'Transit paused':'In transit'):'Standby'],['Next waypoint',s.nextWaypoint||'None plotted'],['Remaining distance',s.distance],['Transit estimate',s.eta]];
+      case 'command':return [['Command seat',state.seat==='captain'?'Captain':'First officer'],['Watch condition',watch],['Hull integrity',`${Math.round(combat.own.systems.hull.hp/combat.own.systems.hull.max*100)}%`],['Current orders',s.active?`${s.paused?'Paused transit':'Transit'} to ${s.nextWaypoint}`:sector.order?.mode||'Holding position'],['Location',s.location],['Alerts',combat.own.systems.hull.hp===0?'SHIP LOST':[[combat.own.fire,'Fire'],[combat.own.breach,'Pressure loss'],[combat.own.spares===0,'No repair spares'],[unreadCommunications(communications)>0,`${unreadCommunications(communications)} unread messages`]].filter(([active])=>active).map(([,label])=>label).join(' · ')||'No active alerts']];
       case 'ops':return [['Duty priority',{balanced:'Balanced',sensors:'Sensor coordination',engineering:'Engineering readiness'}[state.ops]],['Spare parts',`${combat.own.spares} / ${combat.own.maxSpares}`],['Repair teams',`${combat.own.teams} · ${combat.own.jobs.length} jobs`],['Flight plan',`${s.routeCount} waypoints`]];
       case 'navigation':return [['Chart reference','Heliocentric / Sol'],['Selected destination',s.targetName],['Flight plan',`${s.routeCount} waypoints`],['Course safety',s.unsafe?'Detour required':'Clear of Sol exclusion']];
       case 'tactical':return [['Watch condition',watch],['Weapons posture','Safed'],['Defensive protection','Shielding secure'],['Fire-control target','None designated']];
@@ -117,15 +128,38 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLo
     }
   }
   let lastControlKey='';
+  let areaTabKey='';
+  const panelFor=id=>id==='system-map'?systemRoot:id==='navigation'?localRoot:id==='tactical'?$('tactical-console'):id==='engineering'?damageRoot:id==='communications'?commsRoot:$('bridge-station-detail');
+  for(const [panel,id] of [[localRoot,'bridge-flight-panel'],[damageRoot,'bridge-engineering-panel'],[commsRoot,'bridge-comms-panel']])panel.id=id;
+  function refreshArea(area){
+    $('bridge-area-name').textContent=area.name;
+    const tabs=$('bridge-area-tabs');tabs.setAttribute('aria-label',`${area.name} controls`);
+    if(areaTabKey!==area.id){
+      areaTabKey=area.id;tabs.replaceChildren(...area.tabs.map(([id,label])=>{
+        const tab=document.createElement('button');tab.id=`bridge-tab-${id}`;tab.dataset.bridgeTab=id;tab.setAttribute('role','tab');tab.setAttribute('aria-controls',panelFor(id).id);tab.textContent=label;tab.onclick=()=>select(id);
+        tab.onkeydown=event=>{const index=area.tabs.findIndex(([key])=>key===id);let next;
+          if(event.key==='ArrowRight')next=(index+1)%area.tabs.length;
+          if(event.key==='ArrowLeft')next=(index+area.tabs.length-1)%area.tabs.length;
+          if(event.key==='Home')next=0;if(event.key==='End')next=area.tabs.length-1;
+          if(next!==undefined){event.preventDefault();select(area.tabs[next][0]);$(`bridge-tab-${area.tabs[next][0]}`).focus();}
+        };return tab;
+      }));
+    }
+    for(const tab of tabs.children){const active=tab.dataset.bridgeTab===state.selected;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;}
+    for(const panel of [systemRoot,localRoot,$('tactical-console'),damageRoot,commsRoot,$('bridge-station-detail')]){
+      panel.setAttribute('role','tabpanel');if(panel===panelFor(state.selected))panel.setAttribute('aria-labelledby',`bridge-tab-${state.selected}`);else panel.removeAttribute('aria-labelledby');
+    }
+  }
   function refresh(){
-    const s=snapshot(),station=bridgeStations.find(item=>item.id===state.selected);
+    const s=snapshot(),station=bridgeStations.find(item=>item.id===state.selected),area=bridgeAreaFor(state.selected);
     if(pollCommunications(communications,communicationsContext()))save();
     const controlKey=[state.selected,state.watch,s.active,s.paused,s.routeCount,s.unsafe,combat.own.fire,combat.own.breach].join('|');
     if(controlKey!==lastControlKey){lastControlKey=controlKey;renderControls();}
-    $('bridge-station-select').value=station.id;
     $('bridge-console').dataset.station=station.id;
+    $('bridge-console').dataset.area=area.id;refreshArea(area);placeSystemMap();
+    const shipDate=new Date(Date.UTC(2250,0,1)+s.days*86400000);$('bridge-area-time').dateTime=shipDate.toISOString();$('bridge-area-time').textContent=shipDate.toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'UTC'});
     $('bridge-station-name').textContent=station.name;
-    $('bridge-station-group').textContent=station.group;
+    $('bridge-station-group').textContent=area.name;
     $('bridge-station-summary').textContent=station.summary;
     $('bridge-station-detail').style.setProperty('--station-color',station.color);
     $('bridge-watch').textContent=state.watch==='routine'?'ROUTINE WATCH':'HEIGHTENED WATCH';
@@ -133,44 +167,41 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLo
     $('bridge-duty-seat').textContent=state.seat==='captain'?'CAPTAIN HAS THE CONN':'FIRST OFFICER HAS THE CONN';
     $('bridge-main-display').textContent=s.active?`TRANSIT TO ${s.nextWaypoint.toUpperCase()}`:'SOL SYSTEM / PATROL WATCH';
     $('bridge-last-report').textContent=notice;
-    document.querySelectorAll('[data-bridge-station]').forEach(el=>{const chosen=el.dataset.bridgeStation===station.id;el.classList.toggle('selected',chosen);el.setAttribute('aria-pressed',String(chosen));});
+    document.querySelectorAll('[data-bridge-area]').forEach(el=>{const chosen=el.dataset.bridgeArea===area.id;el.classList.toggle('selected',chosen);el.setAttribute('aria-pressed',String(chosen));});
     const list=$('bridge-readouts');list.replaceChildren(...readouts(s).map(([label,value])=>{const row=document.createElement('div'),dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=value;row.append(dt,dd);return row;}));
-    if(['navigation','helm'].includes(state.selected))localConsole.refresh(state.selected);
+    if(state.selected==='navigation')localConsole.refresh();
     if(state.selected==='tactical')tactical.refresh();
     if(state.selected==='engineering')damageConsole.refresh();
     if(state.selected==='communications'&&document.body.dataset.screen==='bridge')commsConsole.refresh();
     updateCommsBadge();
   }
   function updateCommsBadge(){
-    const count=unreadCommunications(communications),label=`Communications${count?` (${count})`:''}`;
-    const button=$('bridge-station-list').querySelector('[data-bridge-station="communications"]');if(button)button.lastElementChild.textContent=label;
-    const option=$('bridge-station-select').querySelector('option[value="communications"]');if(option)option.textContent=label;
+    const count=unreadCommunications(communications),suffix=count?` (${count})`:'';
+    const label=`${bridgeAreas.find(area=>area.id==='science-comms').summary}${count?` · ${count} unread`:''}`;
+    for(const id of ['bridge-deck-description-science-comms','bridge-mobile-description-science-comms']){const description=$(id);if(description)description.textContent=label;}
+    const tab=$('bridge-tab-communications');if(tab)tab.textContent=`Comms${suffix}`;
   }
-  const groupLabels=new Map();
-  for(const station of bridgeStations){
-    if(!groupLabels.has(station.group)){
-      const group=document.createElement('div');group.className='bridge-station-group';const caption=document.createElement('h3');caption.textContent=station.group;group.append(caption);$('bridge-station-list').append(group);groupLabels.set(station.group,group);
-    }
-    const button=document.createElement('button');button.dataset.bridgeStation=station.id;button.style.setProperty('--station-color',station.color);button.setAttribute('aria-pressed','false');
-    const icon=document.createElement('span');icon.textContent=station.symbol;const label=document.createElement('span');label.textContent=station.name;button.append(icon,label);button.onclick=()=>select(station.id);groupLabels.get(station.group).append(button);
-    $('bridge-station-select').append(Object.assign(document.createElement('option'),{value:station.id,textContent:station.name}));
-    const g=svg('g',{class:'bridge-deck-station',transform:`translate(${station.x} ${station.y})`,'data-bridge-station':station.id,role:'button',tabindex:0,'aria-label':`Open ${station.name} station`});
+  const mobileAreas=document.createElement('div');mobileAreas.className='bridge-mobile-areas';document.querySelector('.bridge-deck-panel').insertBefore(mobileAreas,document.querySelector('.bridge-deck-footer'));
+  for(const station of bridgeAreas){
+    const mobileButton=document.createElement('button');mobileButton.dataset.bridgeArea=station.id;mobileButton.style.setProperty('--station-color',station.color);mobileButton.setAttribute('aria-label',`Open ${station.name}`);
+    const mobileIcon=document.createElement('span'),mobileName=document.createElement('strong'),mobileDescription=document.createElement('small');mobileIcon.className='bridge-area-icon';mobileIcon.setAttribute('aria-hidden','true');mobileIcon.textContent=station.symbol;mobileName.textContent=station.name;mobileDescription.textContent=station.summary;mobileDescription.id=`bridge-mobile-description-${station.id}`;mobileButton.setAttribute('aria-describedby',mobileDescription.id);mobileButton.append(mobileIcon,mobileName,mobileDescription);mobileButton.onclick=()=>selectArea(station.id);mobileAreas.append(mobileButton);
+    const g=svg('g',{class:'bridge-deck-station',transform:`translate(${station.x} ${station.y})`,'data-bridge-area':station.id,role:'button',tabindex:0,'aria-label':`Open ${station.name}`,'aria-describedby':`bridge-deck-description-${station.id}`});
     g.style.setProperty('--station-color',station.color);
     if(station.id==='command'){
-      g.append(svg('circle',{r:62,class:'command-platform'}),svg('path',{d:'M-30-19h23v31h-23ZM8-19h23v31H8ZM-35-14v30h34M3 16h34v-30',class:'command-chairs'}),svg('text',{y:35,'text-anchor':'middle',class:'bridge-deck-label'},'COMMAND'),svg('text',{y:48,'text-anchor':'middle',class:'bridge-deck-caption'},'CAPTAIN / FIRST OFFICER'));
+      g.append(svg('circle',{r:62,class:'command-platform'}),svg('path',{d:'M-30-19h23v31h-23ZM8-19h23v31H8ZM-35-14v30h34M3 16h34v-30',class:'command-chairs'}),svg('text',{y:-34,'text-anchor':'middle',class:'bridge-deck-command-icon','aria-hidden':'true'},station.symbol),svg('text',{y:35,'text-anchor':'middle',class:'bridge-deck-label'},'COMMAND'),svg('text',{id:`bridge-deck-description-${station.id}`,y:48,'text-anchor':'middle',class:'bridge-deck-command-description'},station.summary));
     }else{
-      g.append(svg('rect',{x:-48,y:-23,width:96,height:46,rx:9,class:'bridge-console-shell'}),svg('path',{d:'M-34-11h68v9h-68ZM-29 7h13m7 0H5m8 0h16',class:'bridge-screen-lines'}),svg('text',{y:41,'text-anchor':'middle',class:'bridge-deck-label'},station.short));
+      g.append(svg('rect',{x:-92,y:-34,width:184,height:80,rx:10,class:'bridge-console-shell'}),svg('text',{y:-10,'text-anchor':'middle',class:'bridge-deck-area-icon','aria-hidden':'true'},station.symbol),svg('text',{y:13,'text-anchor':'middle',class:'bridge-deck-label'},station.name),svg('text',{id:`bridge-deck-description-${station.id}`,y:32,'text-anchor':'middle',class:'bridge-deck-description'},station.summary));
     }
-    g.onclick=()=>select(station.id);g.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();select(station.id);}};$('bridge-deck-stations').append(g);
+    g.onclick=()=>selectArea(station.id);g.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();selectArea(station.id);}};$('bridge-deck-stations').append(g);
   }
-  $('bridge-station-select').onchange=()=>select($('bridge-station-select').value);
   $('bridge-view-toggle').onclick=()=>{const root=$('bridge-console');root.dataset.view=root.dataset.view==='deck'?'station':'deck';updateViewButton();};
   updateViewButton();refresh();
   return {
-    refresh,selectStation:select,
+    refresh,selectStation:select,openBridge,
     exportState:()=>({settings:{...state},sector:structuredClone(sector),tactical:tactical.exportState(),combat:structuredClone(combat),communications:structuredClone(communications)}),
     restoreState(saved){
-      Object.assign(state,saved.settings);sector=structuredClone(saved.sector);combat=structuredClone(saved.combat);syncPerformance();localElapsed=0;lastReview=null;
+      Object.assign(state,restoreBridgeState(saved.settings));sector=structuredClone(saved.sector);combat=structuredClone(saved.combat);syncPerformance();localElapsed=0;lastReview=null;
+      areaStations[bridgeAreaFor(state.selected).id]=state.selected;
       scheduleRepairs(combat);
       communications=restoreCommunications(saved.communications);
       tactical.restoreState(saved.tactical,state.radarRange);notice='JSON save restored · flight paused.';
@@ -187,7 +218,7 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLo
       let advanced=0,remaining=Math.min(120,seconds*sector.rate);
       while(remaining>1e-8){const quantum=(combat.shots.length||combat.firing||combat.hostiles.length)? .05:.25;const dt=Math.min(quantum,remaining);syncPerformance();if(!sector.enginePerformance&&sector.order)coast(sector);advanced+=stepSector(sector,dt);stepCombat(combat,sector,dt);remaining-=dt;}
       localElapsed+=seconds;
-      if(localElapsed>=.35){localElapsed=0;if(pollCommunications(communications,communicationsContext()))save();updateCommsBadge();if(document.body.dataset.screen==='bridge'){if(state.selected==='tactical')tactical.refresh();if(state.selected==='engineering')damageConsole.refresh();if(state.selected==='communications')commsConsole.refresh();if(['navigation','helm'].includes(state.selected))localConsole.refresh(state.selected);}}
+      if(localElapsed>=.35){localElapsed=0;if(pollCommunications(communications,communicationsContext()))save();updateCommsBadge();if(document.body.dataset.screen==='bridge'){if(state.selected==='tactical')tactical.refresh();if(state.selected==='engineering')damageConsole.refresh();if(state.selected==='communications')commsConsole.refresh();if(state.selected==='navigation')localConsole.refresh();}}
       return advanced;
     }
   };

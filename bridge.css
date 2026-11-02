@@ -178,6 +178,14 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 .radar-track.selected .radar-selection, .radar-track:focus-visible .radar-selection, .radar-track:hover .radar-selection { opacity: 1; }
 .radar-track:focus-visible .radar-selection { stroke-width: 2; stroke-dasharray: none; }
 .radar-track-label { fill: #d2e2e6; font: 9px var(--mono); paint-order: stroke; stroke: #0b2025; stroke-width: 3px; pointer-events: none; }
+.radar-priority-number { fill: #07131a; stroke: none; font: 700 9px var(--mono); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.target-priority-dialog { width: min(440px,calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow: auto; }
+.target-priority-form { display: grid; gap: 14px; }
+.target-priority-form p { margin: 0; }
+.target-priority-actions { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
+.target-priority-error { color: #f4a5a5; font-size: 11px; }
+.target-priority-error:empty { display: none; }
+.target-priority-change { width: 100%; padding: 8px; margin: 8px 0; border: 1px solid #8a744e; color: #e5ce9f; font: 10px var(--mono); }
 .radar-own-ship { pointer-events: none; }
 .radar-own-ship circle { fill: #0b2025; stroke: #a8e4ea; stroke-width: .7; }
 .radar-own-ship path { fill: #a8e4ea; stroke: #a8e4ea; stroke-width: 1; }
@@ -425,7 +433,9 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 .sector-status { font: 12px/1.7 var(--body); color: #e5d2a6; margin: 8px 0; }
 .sector-readout { font: 10px/1.8 var(--mono); color: #9edce0; }
 .sector-safety,.sector-position { font: 9px/1.8 var(--mono); color: #9eafba; }
-.sector-clock { display: grid; gap: 7px; margin: 14px 0; }
+.sector-clock { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; margin: 14px 0; }
+.sector-primary-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; margin: 12px 0; }
+.sector-primary-actions .sector-stop { margin: 0; }
 .sector-controls h3 { font: 9px var(--mono); color: #a4c4cb; letter-spacing: 1px; margin: 18px 0 12px; }
 .sector-waypoint-form,.sector-helm-form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; }
 .sector-waypoint-form > button,.sector-helm-form > button { grid-column: 1/-1; }
@@ -434,6 +444,11 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 .sector-route li { margin: 7px 0; overflow-wrap: anywhere; }
 .sector-route-actions { display: grid; gap: 7px; margin-bottom: 15px; }
 .sector-helm p { font: 10px/1.7 var(--body); color: #9eafba; }
+.sector-help { font: 11px/1.7 var(--body); color: #a9bfcb; }
+.sector-advanced { border-top: 1px solid #2b3e4b; padding-top: 12px; margin-top: 16px; color: #9eafba; font: 10px/1.7 var(--body); }
+.sector-advanced summary { color: #b9cbd6; cursor: pointer; font: 10px/1.7 var(--body); }
+.sector-advanced > :not(summary) { margin-top: 12px; }
+.sector-stop { width: 100%; margin-top: 12px; }
 .sector-epd { display: grid; gap: 7px; }
 .sector-track-list { border-top: 1px solid #2b3e4b; padding-top: 12px; font: 9px/1.8 var(--mono); color: #9eafba; }
 .sector-track-list summary { cursor: pointer; color: #d5b77c; }
@@ -644,3 +659,75 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 @media (max-width: 1100px), (max-height: 760px) { .bridge-console[data-station="communications"] > .communications-console { grid-column: 1/-1; grid-row: 2; } }
 @media (max-width: 750px) { .comms-workspace { grid-template-columns: 185px minmax(0,1fr); } .comms-channel-heading,.comms-messages,.comms-composer { padding: 12px; } .comms-heading { padding: 14px; } }
 @media (max-width: 550px) { .comms-workspace { grid-template-columns: minmax(0,1fr); grid-template-rows: 150px minmax(0,1fr); } .comms-directory { grid-template-columns: 1fr 1fr; grid-template-rows: auto minmax(0,1fr); gap: 6px; padding: 8px; border-right: 0; border-bottom: 1px solid #2b3e4b; } .comms-channel-list { grid-column: 1/-1; } .comms-channel-list h3 { display: none; } .comms-recipient { padding: 5px; } .comms-conversation { overflow: auto; grid-template-rows: auto minmax(100px,1fr) auto; } .comms-message.is-sent { margin-left: 10px; } .comms-channel-description { display: none; } }
+
+/* Four bridge areas share their original consoles and simulation state. */
+body[data-screen="bridge"] .page-heading { display: none; }
+body[data-screen="bridge"] main { grid-template-rows: minmax(0,1fr) auto; }
+body[data-screen="bridge"] .bridge-console { grid-template-columns: minmax(0,1fr) 320px; grid-template-rows: auto minmax(0,1fr); }
+.bridge-area-bar { grid-column: 1/-1; grid-row: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; padding: 14px 20px 0; border-bottom: 1px solid var(--line); min-width: 0; background: #0d1722; }
+.bridge-area-bar h1 { font: 500 25px var(--display); color: #dce6ec; margin: 0 0 12px; letter-spacing: .5px; }
+.bridge-area-tabs { display: flex; flex-wrap: wrap; gap: 4px; align-self: stretch; min-width: 0; }
+.bridge-area-tabs button { color: #91a8b7; border-bottom: 2px solid transparent; padding: 9px 12px 12px; font: 11px var(--body); }
+.bridge-area-tabs button[aria-selected="true"] { color: #e5ce9f; border-bottom-color: #d5b77c; background: #d5b77c09; }
+.bridge-area-tabs button:focus-visible { outline-offset: -3px; }
+.bridge-area-clock { margin: 0 0 12px auto; text-align: right; white-space: nowrap; }
+.bridge-area-clock span { display: block; font: 7px var(--mono); color: #8298a8; margin-bottom: 4px; }
+.bridge-area-clock time { font: 10px var(--mono); color: #cfb884; }
+.bridge-console[data-area] > :is(.tactical-console,.sector-console,.damage-console,.communications-console,.bridge-system-map) { grid-column: 1/-1; grid-row: 2; }
+.bridge-console[data-area="command"] > .bridge-deck-panel { grid-column: 1; grid-row: 2; }
+.bridge-console[data-area="command"] > .bridge-station-detail { grid-column: 2; grid-row: 2; overflow: auto; scrollbar-width: thin; }
+.bridge-console[data-area]:not([data-area="command"]) > .bridge-deck-panel { display: none; }
+.bridge-console[data-area]:not([data-area="command"]) > .bridge-station-detail { grid-column: 1/-1; grid-row: 2; overflow: auto; border-left: 0; padding: clamp(18px,3vw,38px); }
+.bridge-console[data-area]:not([data-area="command"]) .bridge-station-detail > * { width: 100%; max-width: 850px; }
+.bridge-console[data-area]:not([data-area="command"]) .bridge-readouts { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 30px; }
+.bridge-console[data-area]:not([data-area="command"]) .bridge-actions { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.bridge-console[data-area="command"] #bridge-station-summary { font-size: 10px; }
+.bridge-console[data-area="command"] .bridge-readouts { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 12px; }
+.bridge-console[data-area="command"] .bridge-actions { gap: 7px; }
+.bridge-console[data-area="command"] .bridge-deck-label { font: 500 11.5px var(--body); fill: #d9e4ea; }
+.bridge-deck-area-icon { font: 24px var(--body); fill: var(--station-color); }
+.bridge-deck-command-icon { font: 18px var(--body); fill: var(--station-color); }
+.bridge-deck-command-description { font: 7px var(--body); fill: #9cb1c1; }
+.bridge-deck-description { font: 8px var(--body); fill: #9cb1c1; }
+.bridge-mobile-areas { display: none; }
+.bridge-console[data-area][data-station="tactical"] > .tactical-console { display: grid; }
+.bridge-console[data-area][data-station]:is([data-station="navigation"],[data-station="helm"]) > .sector-console { display: grid; }
+.bridge-console[data-area][data-station="system-map"] > :is(.bridge-deck-panel,.bridge-station-detail) { display: none; }
+.bridge-system-map { display: none; min-height: 0; min-width: 0; }
+.bridge-console[data-area][data-station="system-map"] > .bridge-system-map { display: grid; grid-template-rows: minmax(0,1fr); }
+body[data-screen="bridge"] .bridge-system-map > .command-layout { display: grid; border: 0; grid-template-columns: 185px minmax(0,1fr) 238px; }
+.bridge-console:not([data-area="command"]) #bridge-view-toggle { display: none; }
+@media (max-width: 1100px), (max-height: 760px) {
+  body[data-screen="bridge"] .bridge-console { grid-template-columns: minmax(0,1fr) 300px; grid-template-rows: auto minmax(0,1fr); }
+  .bridge-area-bar { padding: 10px 14px 0; }
+  .bridge-area-bar h1 { font-size: 22px; margin-bottom: 10px; }
+}
+@media (max-width: 980px), (max-height: 620px) {
+  .bridge-console[data-area][data-station="system-map"] > .bridge-system-map { grid-template-rows: auto minmax(0,1fr); }
+  body[data-screen="bridge"] .bridge-system-map > .console-tabs { display: flex; }
+  body[data-screen="bridge"] .bridge-system-map > .command-layout { grid-template-columns: minmax(0,1fr); }
+}
+@media (max-width: 650px) {
+  body[data-screen="bridge"] .bridge-console { grid-template-columns: minmax(0,1fr); }
+  .bridge-console[data-area="command"] > :is(.bridge-deck-panel,.bridge-station-detail) { grid-column: 1; grid-row: 2; }
+  .bridge-console[data-area="command"][data-view="station"] > .bridge-deck-panel { display: none; }
+  .bridge-console[data-area="command"][data-view="deck"] > .bridge-station-detail { display: none; }
+  .bridge-console[data-area]:not([data-area="command"]) > .bridge-station-detail { display: flex; }
+  .bridge-console[data-area][data-station]:is([data-station="navigation"],[data-station="helm"],[data-station="tactical"],[data-station="engineering"],[data-station="communications"],[data-station="system-map"]) > .bridge-station-detail { display: none; }
+  .bridge-area-bar { gap: 2px; display: grid; grid-template-columns: minmax(0,1fr) auto; padding: 9px 10px 0; }
+  .bridge-area-bar h1 { font-size: 22px; margin-bottom: 3px; }
+  .bridge-area-tabs { gap: 0; }.bridge-area-tabs button { padding: 9px 10px; font-size: 10px; }
+  .bridge-area-tabs { grid-column: 1/-1; grid-row: 2; }.bridge-area-clock { grid-column: 2; grid-row: 1; margin-bottom: 4px; }
+  .bridge-area-bar > #bridge-view-toggle { grid-column: 2; grid-row: 2; justify-self: end; }
+  .bridge-area-clock span { font-size: 5px; }.bridge-area-clock time { font-size: 7px; }
+  .bridge-console[data-area]:not([data-area="command"]) .bridge-actions { grid-template-columns: minmax(0,1fr); }
+  .bridge-console[data-area="command"] #bridge-station-summary { display: block; }
+  .bridge-deck { display: none; }
+  .bridge-mobile-areas { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; padding: 12px; overflow: auto; min-height: 0; align-content: start; flex: 1; }
+  .bridge-mobile-areas button { min-width: 0; display: grid; gap: 8px; padding: 14px 10px; text-align: center; border: 1px solid #3b4d60; border-radius: 8px; background: #172433; }
+  .bridge-mobile-areas button:first-child { grid-column: 1/-1; }
+  .bridge-mobile-areas button.selected { border-color: var(--station-color); }
+  .bridge-mobile-areas .bridge-area-icon { color: var(--station-color); font-size: 24px; }
+  .bridge-mobile-areas strong { font-size: 12px; font-weight: 500; }
+  .bridge-mobile-areas small { font-size: 10px; line-height: 1.6; color: #9cb1c1; }
+}

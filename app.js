@@ -58,8 +58,8 @@ function showScreen(screen){
   $('bridge-button').classList.toggle('nav-active',screen==='bridge');
   document.querySelector('.page-heading h1').textContent=screen==='bridge'?'Command deck.':'The watch begins.';
   document.querySelector('.page-heading .eyebrow').textContent=screen==='bridge'?'SDF WAYFARER / MAIN BRIDGE':'SOL SECTOR / NAVIGATION';
-  document.querySelector('.page-heading p').textContent=screen==='bridge'?'Ten stations. One command.':'One system. Our home. Your command.';
-  if(screen==='bridge')bridgeConsole?.refresh();
+  document.querySelector('.page-heading p').textContent=screen==='bridge'?'Four areas. One command.':'One system. Our home. Your command.';
+  bridgeConsole?.refresh();
 }
 function select(body, navigate=true) {
   selected=body;
@@ -285,7 +285,7 @@ $('pause-button').onclick=()=>{if(!state.active)return;state.paused=!state.pause
 document.querySelectorAll('.speed').forEach(button=>button.onclick=()=>{state.speed=Number(button.dataset.speed);updateTelemetry();save();});
 for(const id of ['briefing-button','about-button'])$(id).onclick=()=>$('briefing-dialog').showModal();
 $('map-tab').onclick=()=>{showScreen('map');showView('map');resetView();svg.focus({preventScroll:true});};
-$('bridge-button').onclick=()=>{bridgeConsole.selectStation('command');showScreen('bridge');};
+$('bridge-button').onclick=()=>{bridgeConsole.openBridge();showScreen('bridge');};
 document.querySelectorAll('.briefing-tabs button').forEach(button=>button.onclick=()=>{
   $('briefing-mission').hidden=button.dataset.briefing!=='mission';
   $('briefing-details').hidden=button.dataset.briefing!=='details';
@@ -330,7 +330,7 @@ new ResizeObserver(entries=>{
 }).observe($('map-surface'));
 bridgeConsole=mountBridge({
   snapshot:()=>({shipName:'SDF Wayfarer',location:state.location,days:state.days,canEPD:bridgeConsole?.localStatus().canEPD!==false,active:state.active,paused:state.paused,routeCount:state.route.length,nextWaypoint:state.route[0]?.name||'',unsafe:routeUnsafe(),distance:formatDistance(routeDistance(state.ship,state.route)),eta:state.route.length?formatETA(routeDistance(state.ship,state.route)/EPD_AU_PER_DAY):'Awaiting course',targetName:selected.name}),
-  openNavigation:()=>{showScreen('map');showView('navigation');},
+  openNavigation:()=>{bridgeConsole.selectStation('system-map');showScreen('bridge');showView('navigation');},
   engage:()=>{if(!state.active)$('engage-button').click();},
   pause:()=>{if(state.active)$('pause-button').click();},
   abort:()=>{if(state.active)$('engage-button').click();},
@@ -341,7 +341,7 @@ function restoreSave(game){
   missionStarted=true;
   state=game.navigation;selected=restoredSelection(game.selection);logs=game.logs.map(item=>({...item}));routePage=0;lastTime=0;
   bridgeConsole.restoreState(game.bridge);select(selected,false);renderPlan();
-  const station=game.bridge.settings.selected;showScreen(['navigation','helm','tactical','engineering'].includes(station)?'bridge':'map');showView('map');
+  showScreen('bridge');showView('map');
   log('JSON save restored. Flight paused.');save();toast('Save loaded. Strategic and local flight are paused.');
   startMenu?.enter();
 }
@@ -354,7 +354,7 @@ startMenu=mountStartMenu({
   hasPatrol:()=>missionStarted||!!savedGame||hasLegacyPatrol,
   summary:()=>`${state.location} · ${date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'})} · flight paused`,
   onPause:()=>{if(state.active)state.paused=true;bridgeConsole.pauseLocal();lastTime=0;updateTelemetry();save();},
-  onEnter:()=>{missionStarted=true;lastTime=0;save();},
+  onEnter:()=>{if(!missionStarted&&savedGame)showScreen('bridge');missionStarted=true;lastTime=0;save();},
   onNewMission:newPatrol
 });
 requestAnimationFrame(frame);

@@ -1,7 +1,7 @@
 import { EDGE_AU } from './navigation.mjs';
 import { restoreBridgeState } from './bridge-model.mjs';
 import { createSector } from './sector-model.mjs';
-import { trainingContacts, observeContact } from './tactical-model.mjs';
+import { trainingContacts, observeContact, restoreTargetPriorities } from './tactical-model.mjs';
 import { createCombat,stationSupport } from './combat-model.mjs';
 import { restoreCombat } from './combat-save.mjs';
 import { restoreCommunications } from './communications-model.mjs';
@@ -102,9 +102,10 @@ function validateSave(value,pause){
   });
   requireValue(new Set(lockedIds).size===lockedIds.length,'Duplicate target locks.');
   requireValue(tactical.activeId===null||lockedIds.includes(tactical.activeId),'Selected target is not locked.');
+  const priorities=restoreTargetPriorities(lockedIds,tactical.priorities);
   const logs=list(value.logs,3,'command log').map(l=>({time:string(l.time,'log time',20),message:string(l.message,'log message',500)}));
   return {format:'sdf-save',version:2,savedAt,navigation:nav,
-    bridge:{settings:restoreBridgeState(value.bridge.settings),sector,tactical:{lockedIds,activeId:tactical.activeId},combat,communications:restoreCommunications(value.bridge.communications)},
+    bridge:{settings:restoreBridgeState(value.bridge.settings),sector,tactical:{lockedIds,activeId:tactical.activeId,priorities},combat,communications:restoreCommunications(value.bridge.communications)},
     selection:point(value.selection),logs};
 }
 

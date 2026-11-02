@@ -221,3 +221,19 @@ export function selectTargets(ids, id, toggle = false) {
   if (ids.includes(id)) return ids.filter(value => value !== id);
   return [...ids, id];
 }
+
+export const MAX_TARGET_PRIORITY = trainingContacts.length;
+export function restoreTargetPriorities(lockedIds, saved) {
+  if(saved===undefined)return Object.fromEntries(lockedIds.map((id,index)=>[id,index+1]));
+  if(!saved||typeof saved!=='object'||Array.isArray(saved)||Object.keys(saved).length!==lockedIds.length)throw new Error('Invalid target priorities.');
+  const used=new Set();
+  return Object.fromEntries(lockedIds.map(id=>{
+    const priority=saved[id];
+    if(!Object.hasOwn(saved,id)||!Number.isInteger(priority)||priority<1||priority>MAX_TARGET_PRIORITY||used.has(priority))throw new Error('Target priorities must be unique whole numbers starting at 1.');
+    used.add(priority);return [id,priority];
+  }));
+}
+export function prioritizeTargets(lockedIds, priorities, id, priority, toggle=false) {
+  const next=selectTargets(lockedIds,id,toggle);
+  return {lockedIds:next,priorities:restoreTargetPriorities(next,Object.fromEntries(next.map(key=>[key,key===id?priority:priorities[key]])))};
+}
