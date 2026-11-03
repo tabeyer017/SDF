@@ -2,7 +2,7 @@ import { bridgeStations, bridgeAreas, bridgeAreaFor, canonicalBridgeStation, mar
 import { mountTactical } from './tactical.mjs';
 import { createSector, observeSector, issueManeuver, setManualHelm, coast, brake, addPatrolWaypoint, startPatrol, stepSector } from './sector-model.mjs';
 import { mountSectorConsole } from './sector-console.mjs';
-import { createCombat,changeEncounter,shipPerformance,commandWeapons,ceaseFiring,queueRepair,scheduleRepairs,setAutomaticRepairs,cancelRepair,containEmergency,dock,requestService,stepCombat,advanceMaintenance } from './combat-model.mjs';
+import { createCombat,changeEncounter,shipPerformance,orderEngagement,commandWeapons,ceaseFiring,queueRepair,scheduleRepairs,setAutomaticRepairs,cancelRepair,containEmergency,dock,requestService,stepCombat,advanceMaintenance } from './combat-model.mjs';
 import { mountDamageConsole } from './combat-console.mjs';
 import { createCommunications,restoreCommunications,pollCommunications,unreadCommunications } from './communications-model.mjs';
 import { mountCommunications } from './communications-console.mjs';
@@ -46,6 +46,7 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLo
     toggle:()=>operate(()=>{sector.running=!sector.running;sector.status=sector.running?'Local simulation running · current flight order resumed':'Local simulation paused · flight order retained';return true;}),
     setRate:value=>{if([1,10,60].includes(value)){sector.rate=value;refresh();save();}},
     toggleEmitter:key=>{if(['radar','jammer','ciwsAuto'].includes(key)){combat.own[key]=!combat.own[key];syncPerformance();refresh();save();}},
+    engageTargets:(objective,ids)=>combatAction(()=>orderEngagement(combat,sector,objective,ids)),
     fire:orders=>combatAction(()=>commandWeapons(combat,sector,orders)),
     startFire:orders=>combatAction(()=>commandWeapons(combat,sector,orders,true)),
     ceaseFire:mountIds=>{ceaseFiring(combat,mountIds);refresh();save();},
@@ -218,6 +219,7 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLo
       let advanced=0,remaining=Math.min(120,seconds*sector.rate);
       while(remaining>1e-8){const quantum=(combat.shots.length||combat.firing||combat.hostiles.length)? .05:.25;const dt=Math.min(quantum,remaining);syncPerformance();if(!sector.enginePerformance&&sector.order)coast(sector);advanced+=stepSector(sector,dt);stepCombat(combat,sector,dt);remaining-=dt;}
       localElapsed+=seconds;
+      if(document.body.dataset.screen==='bridge'&&state.selected==='tactical')tactical.refreshProjectiles();
       if(localElapsed>=.35){localElapsed=0;if(pollCommunications(communications,communicationsContext()))save();updateCommsBadge();if(document.body.dataset.screen==='bridge'){if(state.selected==='tactical')tactical.refresh();if(state.selected==='engineering')damageConsole.refresh();if(state.selected==='communications')commsConsole.refresh();if(state.selected==='navigation')localConsole.refresh();}}
       return advanced;
     }

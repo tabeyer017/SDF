@@ -36,6 +36,7 @@ export function restoreBridgeState(saved={}) {
   const selected=canonicalBridgeStation(saved.selected);
   if(bridgeStations.some(station=>station.id===selected))result.selected=selected;
   if(radarRanges.includes(saved.radarRange))result.radarRange=saved.radarRange;
+  if(saved.radarRange===20)result.radarRange=30;
   return result;
 }
 export function flightControlState(snapshot) {

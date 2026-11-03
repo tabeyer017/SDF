@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createCombat,createDamageShip,damageClasses,weapons,weaponAimOptions,aimPointState,nextAimPoint,applyDamage,shipPerformance,fireWeapon,canFire,startFiring,commandWeapons,ceaseFiring,stepCombat,queueRepair,scheduleRepairs,setAutomaticRepairs,cancelRepair,advanceMaintenance,containEmergency,dock,requestService,changeEncounter } from '../combat-model.mjs';
+import { createCombat,createDamageShip,damageClasses,weapons,weaponAimOptions,aimPointState,nextAimPoint,applyDamage,shipPerformance,fireWeapon,canFire,orderEngagement,startFiring,commandWeapons,ceaseFiring,stepCombat,queueRepair,scheduleRepairs,setAutomaticRepairs,cancelRepair,advanceMaintenance,containEmergency,dock,requestService,changeEncounter } from '../combat-model.mjs';
 import { createSector,stepSector } from '../sector-model.mjs';
 import { restoreCombat } from '../combat-save.mjs';
 import { shipTypes,trainingContacts } from '../tactical-model.mjs';
@@ -25,7 +25,7 @@ test('rail-gun impacts retain full damage and ballistic velocity at close and lo
     assert.equal(fireWeapon(combat,sector,'own','rail-gun-1','U-01','hull',()=>0).ok,true);combat.hostiles=[];
     const shot=combat.shots[0],v=[shot.vx,shot.vy,shot.vz],before=combat.contacts['U-01'].systems.hull.hp;
     assert.equal(shot.damage,180);stepCombat(combat,sector,.01,()=>1);assert.deepEqual([shot.vx,shot.vy,shot.vz],v);
-    step(combat,sector,range/100+.2,()=>1);
+    step(combat,sector,range/weapons['rail-gun'].speed+.2,()=>1);
     assert.ok(Math.abs(before-combat.contacts['U-01'].systems.hull.hp-180*(1-.2*(1-.8)))<1e-8);
   }
 });
@@ -166,7 +166,7 @@ test('MP launches directly at subsystems, rejects hull attacks, and damages the 
   assert.equal(startFiring(combat,sector,'mp-missiles-1','U-01','engines').ok,true);
   stepCombat(combat,sector,.01,()=>0);combat.firing=null;combat.hostiles=[];
   assert.equal(combat.shots[0].role,'precision');assert.equal(combat.shots[0].component,'engines');
-  step(combat,sector,1.2,()=>1);assert.ok(engine.hp<before);
+  step(combat,sector,12,()=>1);assert.ok(engine.hp<before);
 });
 
 test('GP and AS strike hull or equipment, with AS retaining its heavy warhead',()=>{
@@ -194,7 +194,7 @@ test('AS missiles hit exposed internal systems after hull destruction and surviv
   assert.equal(fireWeapon(combat,sector,'own','as-missiles-1','U-01','reactor',()=>0).ok,true);
   assert.equal(combat.shots[0].component,'reactor');assert.equal(combat.shots[0].role,'precision');assert.equal(combat.shots[0].damage,160);
   assert.deepEqual(restoreCombat(JSON.parse(JSON.stringify(combat)),sector.contacts).shots,combat.shots);
-  combat.hostiles=[];step(combat,sector,.6,()=>1);
+  combat.hostiles=[];step(combat,sector,6,()=>1);
   assert.ok(target.systems.reactor.hp<before);assert.equal(target.systems.hull.hp,0);
 });
 
@@ -219,7 +219,7 @@ test('intact hull protects every internal aim point while exposed equipment stay
   const reactor=target.systems.reactor.hp;
   Object.assign(sector.contacts[0],{x:0,y:5,z:0,vx:0,vy:0,vz:0});
   assert.equal(fireWeapon(combat,sector,'own','mp-missiles-1','U-01','reactor',()=>0).ok,true);
-  combat.hostiles=[];step(combat,sector,.6,()=>1);assert.ok(target.systems.reactor.hp<reactor);
+  combat.hostiles=[];step(combat,sector,6,()=>1);assert.ok(target.systems.reactor.hp<reactor);
   assert.match(canFire(combat,sector,'own','as-missiles-1','U-01','hull'),/destroyed/);
 });
 
@@ -259,12 +259,32 @@ test('aiming at radar or jammer automatically chooses emitter seeking and retain
 });
 
 test('each CIWS mount tracks incoming missiles independently of ship radar and fire control',()=>{
-  const {sector,combat}=setup();Object.assign(sector.contacts[3],{x:0,y:3,z:0,vx:0,vy:0,vz:0});
+  const {sector,combat}=setup();Object.assign(sector.contacts[3],{x:0,y:18,z:0,vx:0,vy:0,vz:0});
   const enemy=combat.contacts['E-04'];assert.equal(fireWeapon(combat,sector,'E-04','gp-missiles-1','own','hull',()=>0).ok,true);
   combat.own.systems.sensors.hp=0;combat.own.radar=false;combat.own.systems['ciws-30-1'].hp=0;
   const ammo=combat.own.ammo['ciws-30'];stepCombat(combat,sector,.05,()=>0);
-  assert.equal(combat.shots.length,0);assert.equal(combat.own.ammo['ciws-30'],ammo-10);
+  assert.equal(combat.shots.length,1);assert.equal(combat.own.ammo['ciws-30'],ammo-75);
+  combat.hostiles=[];step(combat,sector,10.1,()=>0);assert.equal(combat.shots.length,0);
   assert.ok(combat.own.mounts.find(m=>m.id==='ciws-30-2').readyAt>0);assert.ok(enemy);
+});
+
+test('CIWS cycles persist through saves and a close salvo overwhelms two mounts',()=>{
+  const {sector,combat}=setup();
+  Object.assign(sector.contacts[3],{x:0,y:8,z:0,vx:0,vy:0,vz:0});
+  fireWeapon(combat,sector,'E-04','gp-missiles-1','own','hull',()=>0);
+  combat.hostiles=[];
+  const template=combat.shots[0];
+  for(let i=0;i<2;i++)combat.shots.push({...template,id:`shot:${combat.nextShot++}`});
+  const ammo=combat.own.ammo['ciws-30'],hull=combat.own.systems.hull.hp;
+  stepCombat(combat,sector,.05,()=>0);
+  const mounts=combat.own.mounts.filter(m=>m.weapon==='ciws-30');
+  assert.equal(new Set(mounts.map(m=>m.ciwsTarget)).size,2);
+  assert.equal(combat.own.ammo['ciws-30'],ammo-150);
+  assert.ok(mounts.every(m=>m.readyAt-combat.time>=10&&m.readyAt-combat.time<=15));
+  const restored=restoreCombat(JSON.parse(JSON.stringify(combat)),sector.contacts);
+  assert.deepEqual(restored.own.mounts,combat.own.mounts);
+  step(restored,sector,8,()=>0);
+  assert.ok(restored.own.systems.hull.hp<hull);
 });
 
 test('GP automatically intercepts incoming missiles; MP cannot launch against them',()=>{
@@ -400,4 +420,33 @@ test('combat saves preserve automatic missile guidance, legacy presets, repairs,
   for(const edit of [c=>c.own.spares=-1,c=>c.own.roles['mp-missiles']='anti-ship',c=>c.shots[0].vx=null,c=>c.own.systems.hull.hp=1001]){
     const bad=structuredClone(combat);edit(bad);assert.throws(()=>restoreCombat(bad,sector.contacts));
   }
+});
+
+test('automatic objectives respect range, priorities, manual overrides and cease fire',()=>{
+  const {combat,sector}=setup();
+  Object.assign(sector.contacts[0],{x:0,y:10,z:0});
+  const id=sector.contacts[0].id;
+  assert.equal(orderEngagement(combat,sector,'disable',[id]).ok,true);
+  assert.ok(combat.firing.length);
+  assert.ok(combat.firing.every(f=>['engines','weapons'].includes(f.component)));
+  const mount=combat.firing[0].mountId;
+  commandWeapons(combat,sector,[{mountId:mount,targetId:id,component:'hull'}],true);
+  stepCombat(combat,sector,.01,()=>1);
+  assert.ok(combat.engagement.overrides.includes(mount));
+  assert.equal(combat.firing.find(f=>f.mountId===mount).component,'hull');
+  const restored=restoreCombat(JSON.parse(JSON.stringify(combat)),sector.contacts);
+  assert.deepEqual(restored.engagement,combat.engagement);
+  ceaseFiring(combat);assert.equal(combat.engagement,null);assert.equal(combat.firing,null);
+  orderEngagement(combat,sector,'disable',[id]);
+  for(const [key,system] of Object.entries(combat.contacts[id].systems))if(key.startsWith('engine-')||combat.contacts[id].mounts.some(m=>m.id===key))system.hp=0;
+  stepCombat(combat,sector,.01,()=>1);
+  assert.equal(combat.engagement,null);assert.equal(combat.firing,null);
+});
+test('automatic destroy selects reachable targets in priority order and waits beyond range',()=>{
+  const {combat,sector}=setup();const [a,b]=sector.contacts;
+  Object.assign(a,{x:0,y:250,z:0});Object.assign(b,{x:0,y:10,z:0});
+  orderEngagement(combat,sector,'destroy',[a.id,b.id]);
+  assert.ok(combat.firing.every(f=>f.targetId===b.id&&['hull','engines'].includes(f.component)));
+  Object.assign(a,{y:5});stepCombat(combat,sector,.01,()=>1);
+  assert.ok(combat.firing.every(f=>f.targetId===a.id));
 });

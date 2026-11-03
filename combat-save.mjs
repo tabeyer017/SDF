@@ -47,7 +47,7 @@ function ship(saved,classId,player){
   for(const [id,s] of Object.entries(result.systems)){check(object(saved.systems[id]));s.hp=num(saved.systems[id].hp,0,s.max);}
   for(const weapon of Object.keys(result.ammo))result.ammo[weapon]=integer(saved.ammo[weapon],0,result.maxAmmo[weapon]);
   const mounts=array(saved.mounts,result.mounts.length);check(mounts.length===result.mounts.length);
-  for(const mount of result.mounts){const source=mounts.find(m=>object(m)&&m.id===mount.id);check(!!source);mount.readyAt=num(source.readyAt);}
+  for(const mount of result.mounts){const source=mounts.find(m=>object(m)&&m.id===mount.id);check(!!source);mount.readyAt=num(source.readyAt);if(source.ciwsTarget!==undefined){check(mount.weapon==='ciws-30'&&typeof source.ciwsTarget==='string'&&/^shot:\d+$/.test(source.ciwsTarget));mount.ciwsTarget=source.ciwsTarget;}}
   for(const weapon of Object.keys(result.roles)){const role=saved.roles[weapon];check(role===null&&weapon!=='as-missiles'||missileOptions[weapon].includes(role));result.roles[weapon]=role;}
   result.spares=integer(saved.spares,0,result.maxSpares);result.radar=bool(saved.radar);result.jammer=bool(saved.jammer);result.ciwsAuto=bool(saved.ciwsAuto);
   result.surrendered=saved.surrendered===undefined?false:bool(saved.surrendered);
@@ -97,6 +97,13 @@ export function restoreCombat(saved,contacts){
       const component=text(f.component,100);check(['hull','engines','weapons','reactor','power','bridge','epd','sensors','communications','life-support','jammer'].includes(component));
       return {mountId:f.mountId,targetId:f.targetId,component};
     });
+  }
+  if(saved.engagement!=null){
+    const order=saved.engagement;check(object(order)&&['disable','destroy'].includes(order.objective));
+    const targetIds=array(order.targetIds,contacts.length).map(id=>{check(id!=='own'&&validId(id));return id;});
+    const overrides=array(order.overrides,result.own.mounts.length).map(id=>{check(result.own.mounts.some(m=>m.id===id));return id;});
+    check(targetIds.length>0&&new Set(targetIds).size===targetIds.length&&new Set(overrides).size===overrides.length);
+    result.engagement={objective:order.objective,targetIds,overrides};
   }
   result.docked=bool(saved.docked);
   if(saved.service!==null){check(object(saved.service)&&result.docked);result.service={full:bool(saved.service.full),remaining:num(saved.service.remaining,0,60)};}

@@ -3,6 +3,20 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { radarRanges, rangeRings, projectContact, contactsInRange, projectVelocity, contactDistance, contactSpeed, contactClosureRate, armamentTypes, countermeasureTypes, shipTypes, shipFiveViews, trainingContacts, selectTargets, prioritizeTargets, restoreTargetPriorities, MAX_TARGET_PRIORITY, observeContact, IFF_RANGE_KM, IFF_IDENTIFICATION_CHANCE } from '../tactical-model.mjs';
 import { restoreBridgeState } from '../bridge-model.mjs';
+import { expandRadarRounds } from '../tactical.mjs';
+
+test('radar displays one dot per cannon round and leaves missiles individual',()=>{
+  const shot={sourceId:'own',targetId:'E-04',weapon:'autocannon-120',component:'hull',damage:12,x:0,y:0,z:0,vx:0,vy:3600,vz:0};
+  const shots=Array.from({length:7},(_,i)=>({...shot,id:`shot:${i}`,y:i}));
+  shots.push({...shot,id:'enemy',sourceId:'E-04',targetId:'own'});
+  const missile={...shot,id:'missile',weapon:'as-missiles',damage:160};shots.push(missile);
+  const before=structuredClone(shots),result=expandRadarRounds(shots);
+  assert.equal(result.length,9);
+  assert.equal(result[0].y,0);assert.equal(result[1].y,1);
+  assert.equal(result[8],missile);assert.deepEqual(shots,before);
+  assert.equal(expandRadarRounds([{...shot,weapon:'ciws-30',damage:1}]).length,10);
+  assert.equal(expandRadarRounds([{...shot,damage:24}]).length,2);
+});
 
 test('target priorities remain unique when adding ships and preserve the original selection on rejection',()=>{
   const first=prioritizeTargets([],{},'E-04',1),before=structuredClone(first);
@@ -32,10 +46,12 @@ test('legacy locks gain stable priorities in their existing order and empty sele
 });
 
 test('all six ranges have three intermediate rings and an outer range ring', () => {
-  assert.deepEqual(radarRanges, [10, 20, 60, 100, 140, 200]);
+  assert.deepEqual(radarRanges, [10, 30, 60, 100, 140, 200]);
   for (const range of radarRanges) assert.deepEqual(rangeRings(range), [range * .25, range * .5, range * .75, range]);
   assert.equal(restoreBridgeState({ radarRange: 140 }).radarRange, 140);
-  assert.equal(restoreBridgeState({ radarRange: 30 }).radarRange, 60);
+  assert.equal(restoreBridgeState({ radarRange: 30 }).radarRange, 30);
+  assert.equal(restoreBridgeState({ radarRange: 20 }).radarRange, 30);
+  assert.equal(restoreBridgeState({ radarRange: 40 }).radarRange, 60);
   assert.equal(restoreBridgeState({ radarRange: '200' }).radarRange, 60);
 });
 

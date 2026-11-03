@@ -178,7 +178,7 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 .radar-track.selected .radar-selection, .radar-track:focus-visible .radar-selection, .radar-track:hover .radar-selection { opacity: 1; }
 .radar-track:focus-visible .radar-selection { stroke-width: 2; stroke-dasharray: none; }
 .radar-track-label { fill: #d2e2e6; font: 9px var(--mono); paint-order: stroke; stroke: #0b2025; stroke-width: 3px; pointer-events: none; }
-.radar-priority-number { fill: #07131a; stroke: none; font: 700 9px var(--mono); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.radar-priority-number { fill: #07131a; stroke: none; font: 700 5px var(--mono); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
 .target-priority-dialog { width: min(440px,calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow: auto; }
 .target-priority-form { display: grid; gap: 14px; }
 .target-priority-form p { margin: 0; }

@@ -357,4 +357,14 @@ startMenu=mountStartMenu({
   onEnter:()=>{if(!missionStarted&&savedGame)showScreen('bridge');missionStarted=true;lastTime=0;save();},
   onNewMission:newPatrol
 });
+window.addEventListener('keydown',event=>{
+  if(event.defaultPrevented||event.repeat||event.isComposing||event.ctrlKey||event.altKey||event.metaKey)return;
+  if(startMenu?.isOpen()||document.querySelector('dialog[open]'))return;
+  if(event.target instanceof Element&&(event.target.closest('input,textarea,select,[role="textbox"]')||event.target.isContentEditable))return;
+  const station={f:'navigation',t:'tactical',s:'science',e:'engineering',c:'communications'}[event.key.toLowerCase()];
+  if(event.key.toLowerCase()!=='b'&&!station)return;
+  event.preventDefault();
+  if(station)bridgeConsole.selectStation(station);else bridgeConsole.openBridge();
+  showScreen('bridge');
+});
 requestAnimationFrame(frame);

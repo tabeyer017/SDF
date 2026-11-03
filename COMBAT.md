@@ -25,15 +25,15 @@ Rates are per barrel or missile firing channel. Range is the maximum launch/fire
 
 | Weapon | Maximum range | Rounds/minute | Damage/round | Launch speed (km/s) |
 | --- | ---: | ---: | ---: | ---: |
-| 120 mm autocannon | 30 km | 60 | 12 | 5 |
-| 75 mm autocannon | 20 km | 120 | 5 | 5 |
-| 30 mm CIWS | 5 km | 3,000 | 0.1 | 2 |
-| Rail gun | 150 km | 6 | 180 | 100 |
-| AS missile | 200 km | 4 | 160 | 10 |
-| MP missile | 80 km | 7.5 | 60 | 10 |
-| GP missile | 120 km | 6 | 90 | 10 |
+| 120 mm autocannon | 30 km | 20 | 12 | 1 |
+| 75 mm autocannon | 20 km | 40 | 5 | 1 |
+| 30 mm CIWS | 20 km | 3,000 | 0.1 | 1 |
+| Rail gun | 150 km | 6 | 180 | 10 |
+| AS missile | 200 km | 4 | 160 | 1 |
+| MP missile | 80 km | 7.5 | 60 | 1 |
+| GP missile | 120 km | 6 | 90 | 1 |
 
-Turrets discharge all their barrels together and consume ammunition per barrel. CIWS uses ten-round bursts. Automatic CIWS engages incoming missiles within 5 km, with separate ammunition expenditure, cooldown, tracking condition and interception rolls per mount. It does not intercept cannon shells or rail-gun rounds. With a GP mount, choose **Incoming missile · AA** under **Aim at system**, then choose the incoming missile from the AA target selector.
+Turrets discharge all their barrels together and consume ammunition per barrel. CIWS uses ten-round bursts. Automatic CIWS defaults on and engages incoming missiles within 20 km. Each mount independently reserves one missile, consumes 75 rounds, and takes 10–15 simulated seconds per attempt, with an 85% interception chance at full condition. Separate mounts choose separate threats. Close launches, exhausted ammunition, damaged mounts, failed attempts, and large salvos can allow missiles through. Active cycles persist in saves. It does not intercept cannon shells or rail-gun rounds. With a GP mount, choose **Incoming missile · AA** under **Aim at system**, then choose the incoming missile from the AA target selector.
 
 Hit probability depends on range, fire-control condition, and radar jamming; impact damage depends on armor and penetration, not distance. Anti-radiation and anti-jammer shots require their respective emitter and lose the lock if that emitter stops. Main radar can be silenced; passive coverage then has a provisional 60 km baseline, compared with 200 km active radar. Sensor damage reduces coverage. Radar jammers are confirmed on both pirate classes; jammer hardware on other classes remains provisional. Pirate contacts start with their jammers emitting.
 

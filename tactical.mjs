@@ -1,8 +1,16 @@
 import { radarRanges, contactTypes, armamentTypes, countermeasureTypes, armamentLabel, shipTypes, shuttleTypes, crewDoctrine, trainingContacts, contactDistance, contactSpeed, contactClosureRate, contactsInRange, rangeRings, projectContact, projectVelocity, selectTargets, prioritizeTargets, restoreTargetPriorities, MAX_TARGET_PRIORITY, observeContact, IFF_RANGE_KM, IFF_IDENTIFICATION_CHANCE } from './tactical-model.mjs';
 import { mountManeuverControls, flightReadout } from './sector-console.mjs';
 import { mountWeaponsConsole } from './combat-console.mjs';
-import { weapons } from './combat-model.mjs';
+import { weapons, recentInterceptions } from './combat-model.mjs';
+import { relativeContact } from './sector-model.mjs';
 
+export function expandRadarRounds(shots){
+  return shots.flatMap(shot=>{
+    if(weapons[shot.weapon].missile)return [shot];
+    const count=Math.max(1,Math.round(shot.damage/weapons[shot.weapon].damage));
+    return Array.from({length:count},(_,index)=>({...shot,roundIndex:index,roundCount:count}));
+  });
+}
 export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, flight, onNavigate }) {
   const NS = 'http://www.w3.org/2000/svg';
   const el = (tag, className, text) => { const node = document.createElement(tag); node.className = className; if (text !== undefined) node.textContent = text; return node; };
@@ -37,7 +45,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
   rangeGroup.append(el('span', '', 'RANGE · KM'));
   const rangeButtons = radarRanges.map(value => {
     const button = el('button', '', String(value)); button.type = 'button'; button.setAttribute('aria-label', `Radar range ${value} km`);
-    button.onclick = () => { range = value; onRangeChange(value); render(); }; rangeGroup.append(button); return button;
+    button.onclick = () => changeRange(value); rangeGroup.append(button); return button;
   });
   const sensorStatus = el('div', 'radar-sensor-status');
   const count = el('span', 'radar-count'); count.setAttribute('role', 'status');
@@ -56,6 +64,53 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
   const chart = svg('svg', { viewBox: '-165 -165 330 330', role: 'group', 'aria-label': 'Tactical radar: X starboard, Y forward; hover or focus a contact for elevation' });
   card.append(caption, chart); screens.append(card);
   const charts = [{ view:'top', chart }];
+  let radarPan={x:0,y:0},radarZoom=1,radarDrag=null,suppressRadarClick=false;
+  function updateRadarView(){
+    const size=330/radarZoom;
+    chart.setAttribute('viewBox',`${-size/2-radarPan.x} ${-size/2-radarPan.y} ${size} ${size}`);
+  }
+  function changeRange(value){
+    if(value===range)return;
+    range=value;hideTooltip();onRangeChange(value);render();
+  }
+  const centerRadar=el('button','','Center');centerRadar.type='button';centerRadar.setAttribute('aria-label','Center tactical radar on own ship');centerRadar.onclick=()=>{radarPan={x:0,y:0};updateRadarView();};rangeGroup.append(centerRadar);
+  const resetZoom=el('button','','Reset zoom');resetZoom.type='button';resetZoom.onclick=()=>{radarZoom=1;radarPan={x:0,y:0};hideTooltip();updateRadarView();};rangeGroup.append(resetZoom);
+  chart.style.touchAction='none';
+  chart.style.cursor='grab';
+  chart.addEventListener('wheel',event=>{
+    event.preventDefault();
+    if(!event.deltaY)return;
+    const matrix=chart.getScreenCTM();
+    if(!matrix)return;
+    const point=new DOMPoint(event.clientX,event.clientY).matrixTransform(matrix.inverse());
+    const delta=event.deltaY*(event.deltaMode===1?16:event.deltaMode===2?chart.clientHeight:1);
+    const next=Math.max(1,Math.min(12,radarZoom*Math.exp(-Math.max(-300,Math.min(300,delta))*.002)));
+    const ratio=radarZoom/next;
+    radarPan={x:radarPan.x+(point.x+radarPan.x)*(ratio-1),y:radarPan.y+(point.y+radarPan.y)*(ratio-1)};
+    radarZoom=next;hideTooltip();updateRadarView();
+  },{passive:false});
+  chart.addEventListener('pointerdown',event=>{
+    if(event.button!==0)return;
+    suppressRadarClick=false;
+    radarDrag={id:event.pointerId,x:event.clientX,y:event.clientY,pan:{...radarPan},moved:false};
+  });
+  chart.addEventListener('pointermove',event=>{
+    if(!radarDrag||radarDrag.id!==event.pointerId)return;
+    const dx=event.clientX-radarDrag.x,dy=event.clientY-radarDrag.y;
+    if(!radarDrag.moved&&Math.hypot(dx,dy)<=5)return;
+    radarDrag.moved=true;suppressRadarClick=true;hideTooltip();chart.setPointerCapture(event.pointerId);chart.style.cursor='grabbing';
+    const matrix=chart.getScreenCTM();
+    if(matrix){radarPan={x:radarDrag.pan.x+dx/matrix.a,y:radarDrag.pan.y+dy/matrix.d};updateRadarView();}
+  });
+  const endRadarDrag=event=>{
+    if(!radarDrag||radarDrag.id!==event.pointerId)return;
+    radarDrag=null;chart.style.cursor='grab';
+    if(chart.hasPointerCapture(event.pointerId))chart.releasePointerCapture(event.pointerId);
+  };
+  window.addEventListener('pointerup',endRadarDrag);window.addEventListener('pointercancel',endRadarDrag);
+  chart.addEventListener('click',event=>{if(suppressRadarClick){event.preventDefault();event.stopImmediatePropagation();suppressRadarClick=false;}},true);
+  chart.setAttribute('aria-label','Tactical radar: drag to pan, scroll to zoom; range buttons set coverage; X starboard, Y forward; hover or focus a contact for elevation');
+  caption.lastElementChild.textContent='DRAG TO PAN · SCROLL TO ZOOM';
   const legend = el('div', 'radar-legend'); legend.setAttribute('aria-label', 'Target classifications');
   function symbol(type, size = 6) {
     const attrs = { fill: contactTypes[type].color, stroke: contactTypes[type].color, 'stroke-width': 1.4 };
@@ -66,6 +121,10 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
   }
   for (const [type, info] of Object.entries(contactTypes)) {
     const item = el('span', ''); const icon = svg('svg', { viewBox: '-10 -10 20 20', 'aria-hidden': 'true' }); icon.append(symbol(type)); item.append(icon, document.createTextNode(info.label)); legend.append(item);
+  }
+  for(const [label,color] of [['Outgoing fire','#7cffff'],['Incoming fire','#ff795f'],['Other fire','#ffd166']]){
+    const item=el('span',''),icon=svg('svg',{viewBox:'-10 -10 20 20','aria-hidden':'true'});
+    icon.append(svg('path',{d:'M-8 5L6-4M1-5L7-5L5 1',stroke:color,'stroke-width':2,fill:'none'}));item.append(icon,document.createTextNode(label));legend.append(item);
   }
   const selection = el('div', 'tactical-contact');
   const label = el('label', 'radar-contact-picker'); label.append(el('span', '', 'LOCK TARGET'));
@@ -97,14 +156,13 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     catch(error){priorityError.textContent=error.message;return;}
     lockedIds=next.lockedIds;priorities=next.priorities;activeId=draft.id;priorityDialog.close();finishLock(draft.id,draft.sourceView,draft.toggle,draft.quick);
   };
-  // Numbered symbols have a fixed readable size, independent of chart scale.
-  function markerScale(chart,numbered=false){
+  // All contact symbols keep the same size when locked or unlocked.
+  function markerScale(chart){
     const bounds=chart.getBoundingClientRect(),scale=Math.min(bounds.width/330,bounds.height/330);
-    if(numbered)return scale>0?1.25/scale:1;
     const legendWidth=legend.querySelector('svg').getBoundingClientRect().width;
     return scale>0&&legendWidth>0?(legendWidth*6/20)/(4.5*scale):1;
   }
-  const chartResize=new ResizeObserver(()=>{for(const {chart} of charts)for(const marker of chart.querySelectorAll('.radar-contact-glyph'))marker.setAttribute('transform',`scale(${markerScale(chart,marker.classList.contains('numbered'))})`);});
+  const chartResize=new ResizeObserver(()=>{for(const {chart} of charts)for(const marker of chart.querySelectorAll('.radar-contact-glyph'))marker.setAttribute('transform',`scale(${markerScale(chart)})`);});
   for(const {chart} of charts)chartResize.observe(chart);
   const weaponControls=flight?.combat?mountWeaponsConsole({flight}):null;
 
@@ -289,6 +347,51 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     if(weaponControls)combatPanel.append(weaponControls.settings);
   }
 
+  function renderProjectiles(chart,view){
+    let layer=chart.querySelector('.radar-projectiles');
+    if(!layer){layer=svg('g',{class:'radar-projectiles','pointer-events':'none','aria-label':'Weapon fire in flight'});chart.append(layer);}
+    const markers=[];
+    const visibleShots=(flight?.combat.shots??[]).filter(shot=>contactDistance(relativeContact(flight.sector,shot))<=range);
+    for(const shot of expandRadarRounds(visibleShots)){
+      const relative=relativeContact(flight.sector,shot);
+      if(contactDistance(relative)>range)continue;
+      const point=projectContact(relative,view,range),direction=projectVelocity(relative,view,1)||{x:0,y:-1};
+      const missile=!!weapons[shot.weapon]?.missile;
+      if(!missile){
+        // Separate simultaneous barrels/burst rounds so each dot stays visible.
+        const offset=(shot.roundIndex-(shot.roundCount-1)/2)*2.5;
+        point.x-=direction.y*offset;point.y+=direction.x*offset;
+      }
+      const outgoing=shot.sourceId==='own',incoming=shot.targetId==='own';
+      if(missile){
+        // Separate the launcher from the ship glyph, blending into the live
+        // flight track as the missile clears the ship's starboard side.
+        const source=outgoing?flight.sector.own:flight.sector.contacts.find(c=>c.id===shot.sourceId);
+        if(source){
+          const clearance=Math.hypot(shot.x-source.x,shot.y-source.y,shot.z-source.z)*148/range;
+          point.x+=6*Math.exp(-clearance/8);
+        }
+      }
+      const color=outgoing?'#7cffff':incoming?'#ff795f':'#ffd166';
+      const marker=svg('g',{class:`radar-projectile ${missile?'missile':'cannon'} ${outgoing?'outgoing':incoming?'incoming':'other'}`,'data-shot':shot.id,transform:`translate(${point.x} ${point.y}) rotate(${Math.atan2(direction.y,direction.x)*180/Math.PI})`});
+      marker.append(svg('title',{},`${outgoing?'Outgoing':incoming?'Incoming':'Other'} ${missile?'missile':'cannon round'} · ${armamentTypes[shot.weapon]?.name??shot.weapon} · ${contactDistance(relative).toFixed(1)} km`));
+      marker.append(missile?svg('path',{d:'M5 0L-3-1.5V1.5Z',fill:color,stroke:color,'stroke-width':.35}):svg('circle',{r:1.8,fill:outgoing?'#7cffff':incoming||flight.combat.hostiles.includes(shot.sourceId)||contacts.some(c=>c.id===shot.sourceId&&c.type==='enemy')?'#ff795f':color}));
+      markers.push(marker);
+    }
+    if(flight)for(const event of recentInterceptions(flight.combat)){
+      const own=event.shipId==='own',ship=own?flight.sector.own:flight.sector.contacts.find(c=>c.id===event.shipId);
+      if(!ship)continue;
+      const relative=relativeContact(flight.sector,ship);
+      if(!own&&!contactsInRange(contacts.filter(c=>!c.stale),range).some(c=>c.id===event.shipId))continue;
+      const point=projectContact(relative,view,range);
+      const flash=svg('text',{x:point.x+11,y:point.y-7,fill:'#fff5ce','font-size':14,'font-weight':'bold','aria-label':'Missile shot down'},'*');
+      markers.push(flash);
+      // Also expire while paused, when the simulation stops refreshing.
+      setTimeout(()=>flash.remove(),Math.max(0,event.expires-performance.now()));
+    }
+    layer.replaceChildren(...markers);
+  }
+
   function render() {
     hideTooltip();
     const visible = contactsInRange(contacts.filter(c=>!c.stale), range);
@@ -316,19 +419,15 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
         if (!direction) continue;
         const vector = svg('g', { transform: `translate(${point.x} ${point.y})`, class: 'radar-direction', 'aria-hidden': 'true', 'data-track':target.id });
         const ux = direction.x / 26, uy = direction.y / 26;
-        vector.append(svg('path', { d: `M${ux * 8} ${uy * 8}L${direction.x} ${direction.y}M${direction.x - ux * 5 - uy * 3} ${direction.y - uy * 5 + ux * 3}L${direction.x} ${direction.y}L${direction.x - ux * 5 + uy * 3} ${direction.y - uy * 5 - ux * 3}`, stroke: contactTypes[target.type].color }));
+        vector.append(svg('path', { d: `M${ux * 8} ${uy * 8}L${direction.x} ${direction.y}`, stroke: contactTypes[target.type].color }));
         chart.append(vector);
       }
       for (const target of [...visible].sort((a,b)=>Number(!!priorities[a.id])-Number(!!priorities[b.id])||(priorities[b.id]||0)-(priorities[a.id]||0))) {
         const point = projectContact(target, view, range), isLocked = lockedIds.includes(target.id);
         const marker = svg('g', { transform: `translate(${point.x} ${point.y})`, class: `radar-track${isLocked ? ' selected' : ''}${target.id === activeId ? ' active-target' : ''}`, role: 'button', tabindex: 0, 'aria-pressed': String(isLocked), 'aria-label':radarLabel(target) });
-        const scale=markerScale(chart,isLocked),glyph=svg('g',{class:`radar-contact-glyph${isLocked?' numbered':''}`,transform:`scale(${scale})`});
-        glyph.append(svg('circle', { r: isLocked?18:14, class: 'radar-track-hit' }), svg('path', { d: isLocked?'M-9-16H-16V-9M9-16H16V-9M-16 9V16H-9M16 9V16H9':'M-4.5-9H-9V-4.5M4.5-9H9V-4.5M-9 4.5V9H-4.5M9 4.5V9H4.5', class: 'radar-selection' }), symbol(target.type,isLocked?12:4.5));
-        if(isLocked){marker.dataset.priority=String(priorities[target.id]);glyph.append(svg('text',{x:0,y:target.type==='neutral'?4:0,class:'radar-priority-number','aria-hidden':'true'},String(priorities[target.id])));}marker.append(glyph);
-        // Keep labels outside the button bounds so long track IDs never move its click center.
-        const offset=isLocked?18*scale:12;
-        const trackLabel = svg('text', { x: point.x + (point.x > 110 ? -offset : offset), y: point.y - offset, 'text-anchor': point.x > 110 ? 'end' : 'start', class: 'radar-track-label' }, target.trackLabel);
-        trackLabel.dataset.track=target.id;
+        const scale=markerScale(chart),glyph=svg('g',{class:`radar-contact-glyph${isLocked?' numbered':''}`,transform:`scale(${scale})`});
+        glyph.append(svg('circle', { r: 14, class: 'radar-track-hit' }), svg('path', { d: 'M-4.5-9H-9V-4.5M4.5-9H9V-4.5M-9 4.5V9H-4.5M9 4.5V9H4.5', class: 'radar-selection' }), symbol(target.type,4.5));
+        if(isLocked){marker.dataset.priority=String(priorities[target.id]);glyph.append(svg('text',{x:0,y:target.type==='neutral'?1.5:0,class:'radar-priority-number','aria-hidden':'true'},String(priorities[target.id])));}marker.append(glyph);
         marker.dataset.track = target.id;
         marker.onclick = event => { if (event.button === 0) lock(target.id, view, event.ctrlKey); };
         marker.oncontextmenu=event=>openQuickFire(target.id,event,marker);
@@ -337,10 +436,11 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
         marker.onpointermove = event => { if (hoverMarker === marker) positionTooltip(event.clientX, event.clientY); };
         marker.onpointerleave = hideTooltip;
         marker.onfocus = () => showTooltip(contacts.find(c=>c.id===target.id)||target, marker); marker.onblur = hideTooltip;
-        marker.onkeydown = event => { if (event.key==='ContextMenu'||event.key==='F10'&&event.shiftKey)openQuickFire(target.id,event,marker);else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); lock(target.id, view, event.ctrlKey); } }; chart.append(marker, trackLabel);
+        marker.onkeydown = event => { if (event.key==='ContextMenu'||event.key==='F10'&&event.shiftKey)openQuickFire(target.id,event,marker);else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); lock(target.id, view, event.ctrlKey); } }; chart.append(marker);
       }
       const ship = svg('g', { class: 'radar-own-ship', 'aria-label': 'Our ship at origin' });
       ship.append(svg('circle', { r: 9 }), svg('path', { d: view === 'top' ? 'M0-6 4 4 0 2-4 4Z' : 'M-6 2-3-3H3L6 2H-6M-9 0H9' })); chart.append(ship);
+      renderProjectiles(chart,view);
     }
   }
   let signature='';
@@ -353,14 +453,13 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     flightStatus.textContent=flight?`${flight.inTransit()?'EPD IN TRANSIT · LOCAL FLIGHT SUSPENDED':flightReadout(flight)}${flight.sector.running?'':' · PAUSED'}`:'TRAINING SNAPSHOT';
     if(currentSignature!==signature){signature=currentSignature;const scroll=targetPanel.scrollTop,combatScroll=combatPanel.scrollTop;render();targetPanel.scrollTop=scroll;combatPanel.scrollTop=combatScroll;return;}
     for(const {chart,view} of charts){
+      renderProjectiles(chart,view);
       for(const marker of chart.querySelectorAll('.radar-track')){
         const target=contacts.find(c=>c.id===marker.dataset.track);if(!target)continue;
         const point=projectContact(target,view,range);marker.setAttribute('transform',`translate(${point.x} ${point.y})`);
         marker.setAttribute('aria-label',radarLabel(target));
-        const offset=priorities[target.id]?18*markerScale(chart,true):12;
-        const label=chart.querySelector(`.radar-track-label[data-track="${target.id}"]`);label.setAttribute('x',point.x+(point.x>110?-offset:offset));label.setAttribute('y',point.y-offset);label.setAttribute('text-anchor',point.x>110?'end':'start');
         const direction=projectVelocity(target,view),vector=chart.querySelector(`.radar-direction[data-track="${target.id}"]`);
-        if(vector&&direction){vector.setAttribute('transform',`translate(${point.x} ${point.y})`);const ux=direction.x/26,uy=direction.y/26;vector.firstElementChild.setAttribute('d',`M${ux*8} ${uy*8}L${direction.x} ${direction.y}M${direction.x-ux*5-uy*3} ${direction.y-uy*5+ux*3}L${direction.x} ${direction.y}L${direction.x-ux*5+uy*3} ${direction.y-uy*5-ux*3}`);vector.style.display='';}else if(vector)vector.style.display='none';
+        if(vector&&direction){vector.setAttribute('transform',`translate(${point.x} ${point.y})`);const ux=direction.x/26,uy=direction.y/26;vector.firstElementChild.setAttribute('d',`M${ux*8} ${uy*8}L${direction.x} ${direction.y}`);vector.style.display='';}else if(vector)vector.style.display='none';
       }
     }
     const active=contacts.find(c=>c.id===activeId);
@@ -372,7 +471,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     if(hoverMarker&&!tooltip.hidden){const target=contacts.find(c=>c.id===hoverMarker.dataset.track);if(target)showTooltip(target,hoverMarker);}
   }
   setMode('radar'); render();refresh();
-  return {refresh,
+  return {refresh,refreshProjectiles:()=>{for(const {chart,view} of charts)renderProjectiles(chart,view);},
     exportState:()=>({lockedIds:[...lockedIds],activeId,priorities:{...priorities}}),
     restoreState(saved,savedRange=range){weaponControls?.closeQuickFire();if(priorityDialog.open)priorityDialog.close();lockedIds=[...saved.lockedIds];priorities=restoreTargetPriorities(lockedIds,saved.priorities);activeId=saved.activeId;range=savedRange;signature='';hideTooltip();render();refresh();},
     reset(){weaponControls?.closeQuickFire();if(priorityDialog.open)priorityDialog.close();lockedIds=[];priorities={};activeId=null;signature='';refresh();}};

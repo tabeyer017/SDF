@@ -1,4 +1,4 @@
-export const radarRanges = [10, 20, 60, 100, 140, 200];
+export const radarRanges = [10, 30, 60, 100, 140, 200];
 export const IFF_RANGE_KM = 60;
 export const IFF_IDENTIFICATION_CHANCE = .9;
 export const crewDoctrine={

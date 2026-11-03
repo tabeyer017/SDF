@@ -47,6 +47,7 @@ export function mountWeaponsConsole({flight}){
     const singleFire=weaponActionIcon(false,name,()=>fireMount(rows.get(m.id))),singleContinuous=weaponActionIcon(true,name,()=>fireMount(rows.get(m.id),true));
     singleActions.append(singleFire,singleContinuous);const mountHeading=el('div','weapon-mount-heading');mountHeading.append(label,singleActions);row.prepend(mountHeading);
     rows.set(m.id,{m,name,check,status,details,summary,assigned,component,threat,protection,info,singleFire,singleContinuous});
+    for(const control of [assigned,component,threat])control.input.onchange=()=>{if(flight.combat.engagement)flight.ceaseFire([m.id]);refresh();};
     check.onchange=()=>setMountSelected(rows.get(m.id),check.checked);
   }
   const selectedRows=()=>[...rows.values()].filter(row=>row.check.checked);
@@ -54,6 +55,7 @@ export function mountWeaponsConsole({flight}){
   const order=row=>({mountId:row.m.id,targetId:row.component.input.value==='incoming'?row.threat.input.value:shipTarget(row)?.stale?undefined:shipTarget(row)?.id,component:row.component.input.value==='incoming'?'hull':row.component.input.value});
   const orders=()=>selectedRows().map(order);
   function setMountSelected(row,checked){
+    if(flight.combat.engagement)flight.ceaseFire([row.m.id]);
     row.check.checked=checked;
     if(checked){for(const other of rows.values())other.details.open=other===row;}
     else flight.ceaseFire([row.m.id]);
@@ -77,7 +79,11 @@ export function mountWeaponsConsole({flight}){
   const events=el('ol','combat-events');events.setAttribute('aria-label','Combat events');
   const targetDetails=el('section','target-combat-details');targetDetails.setAttribute('aria-label','Target combat status');targetDetails.append(targetStatus,targetSystems);
   const settings=el('details','combat-settings');settings.append(el('summary','','Combat settings'),emitters,speed.wrap,events);
-  root.append(ownStatus,commandBar,selection,list);
+  const objectives=el('div','combat-actions');
+  const objectiveStatus=el('p','combat-note');objectiveStatus.setAttribute('role','status');
+  const engage=objective=>{flight.engageTargets(objective,lockedTargets.map(contact=>contact.id));refresh();};
+  objectives.append(button('Disable ships',()=>engage('disable')),button('Destroy ships',()=>engage('destroy')));
+  root.append(ownStatus,objectives,objectiveStatus,commandBar,selection,list);
   const quick=el('section','radar-fire-popup');quick.popover='auto';quick.setAttribute('role','dialog');quick.setAttribute('aria-labelledby','quick-fire-title');
   const quickHeader=el('header','quick-fire-heading'),quickTitle=el('h3','');quickTitle.id='quick-fire-title';
   const closeQuick=button('×',()=>closeQuickFire());closeQuick.setAttribute('aria-label','Close quick fire control');quickHeader.append(quickTitle,closeQuick);
@@ -91,11 +97,11 @@ export function mountWeaponsConsole({flight}){
     singleActions.append(singleFire,singleContinuous);
     entry.append(choice,aim,status,singleActions);quickList.append(entry);quickRows.set(id,{check,aim,status,singleFire,singleContinuous});
     check.onchange=()=>setMountSelected(row,check.checked);
-    aim.onchange=()=>{row.component.input.value=aim.value;refresh();};
+    aim.onchange=()=>{row.component.input.value=aim.value;if(flight.combat.engagement)flight.ceaseFire([row.m.id]);refresh();};
   }
   const quickStatus=el('p','combat-note weapon-readiness');quickStatus.setAttribute('role','status');
   const quickCeaseAll=button('Cease All Fire',ceaseAllWeapons);quickCeaseAll.title='Cease All Fire · uncheck all weapons';quickCeaseAll.setAttribute('aria-label','Quick Cease All Fire');
-  const quickFooter=el('footer','quick-fire-footer');quickFooter.append(quickStatus,quickCeaseAll);quick.append(quickHeader,quickList,quickFooter);document.body.append(quick);
+  const quickFooter=el('footer','quick-fire-footer');quickFooter.append(quickStatus,quickCeaseAll);const quickObjectives=el('div','combat-actions');quickObjectives.append(button('Disable ships',()=>engage('disable')),button('Destroy ships',()=>engage('destroy')));quick.append(quickHeader,quickObjectives,quickList,quickFooter);document.body.append(quick);
   quick.oncontextmenu=event=>event.preventDefault();
   function closeQuickFire(){if(quick.matches(':popover-open'))quick.hidePopover();quickTargetId=null;quickAnchor=null;}
   function positionQuickFire(){
@@ -128,11 +134,18 @@ export function mountWeaponsConsole({flight}){
         row.details.open=row.check.checked&&!expanded;if(row.details.open)expanded=true;
       }
     }
+    objectiveStatus.textContent=c.engagement?'Automatic '+c.engagement.objective+' · priority order · '+c.engagement.overrides.length+' manual overrides. Waiting weapons engage when in range.':'Choose an objective for locked targets in priority order, or select weapons manually.';
+    for(const group of [objectives,quickObjectives])for(const button of group.children)button.disabled=!lockedTargets.length;
     let ready=0,queueable=0;
     for(const row of rows.values()){
       const {m,assigned,component,threat}=row,spec=weapons[m.weapon],choices=[['',`Active radar target · ${target?.trackLabel||'none'}`],...lockedTargets.map(contact=>[contact.id,`${contact.trackLabel} · ${contact.name}`])];
       if(assigned.input.value&&!lockedTargets.some(contact=>contact.id===assigned.input.value))choices.push([assigned.input.value,'Target no longer locked']);
       syncOptions(assigned.input,choices);syncOptions(threat.input,incoming.map(shot=>[shot.id,`${shot.id} · ${armamentTypes[shot.weapon].name}`]));
+      if(c.engagement&&!c.engagement.overrides.includes(m.id)){
+        const automatic=c.firing?.find(f=>f.mountId===m.id);
+        row.check.checked=!!automatic;
+        if(automatic){assigned.input.value=automatic.targetId;component.input.value=automatic.component;}
+      }
       const contact=shipTarget(row),aimShip=contact&&!contact.stale?c.contacts[contact.id]:null,previous=component.input.value;
       const aimOptions=weaponAimOptions(m.weapon).map(([id,label])=>({id,label,...aimPointState(aimShip,id)}));
       const next=aimOptions.find(option=>option.id===previous)?.available?previous:nextAimPoint(aimShip,m.weapon,previous);
