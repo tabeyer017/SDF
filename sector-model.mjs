@@ -3,6 +3,8 @@ import { trainingContacts, observeContact, contactDistance, contactClosureRate }
 export const SENSOR_RANGE = 200;
 export const VECTOR_LIMIT = 7200; // Provisional Vector Drive performance, KPH.
 export const VECTOR_ACCELERATION = 120; // KPH gained per simulated second.
+export const HARD_TURN_DEGREES = 40;
+export const isHardTurn = mode => mode === 'port' || mode === 'starboard';
 export const maneuverNames = { intercept:'Intercept', match:'Match velocity', maintain:'Maintain range', open:'Open distance', break:'Break away', patrol:'Patrol route', manual:'Manual flight', brake:'Braking to sector rest', coast:'Coasting' };
 export const sectorHazards = [{ id:'debris', name:'Training debris field', x:50, y:60, z:0, radius:12 }];
 const keys = ['x','y','z'], speeds = ['vx','vy','vz'];
@@ -42,10 +44,18 @@ export function observeSector(sector) {
 }
 
 export function issueManeuver(sector, mode, targetId, range=25) {
+  if(isHardTurn(mode)) {
+    const forward=unit(sector.facing),reference=Math.abs(forward.z)>.99?{x:0,y:1,z:0}:{x:0,y:0,z:1};
+    const right=unit(cross(forward,reference)),angle=(mode==='port'?-1:1)*HARD_TURN_DEGREES*Math.PI/180;
+    sector.facing=unit(Object.fromEntries(keys.map(k=>[k,forward[k]*Math.cos(angle)+right[k]*Math.sin(angle)])));
+    sector.faceTarget=false;
+    sector.status=`Hard a ${mode==='port'?'Port':'Starboard'} · bow turned ${HARD_TURN_DEGREES}° ${mode==='port'?'left':'right'} · current flight motion retained`;
+    return true;
+  }
   if(!['intercept','match','maintain','open','break'].includes(mode) || !Number.isFinite(range) || range<5 || range>200) return false;
   const target=observeSector(sector).find(c=>c.id===targetId);
   if(!target) return false;
-  sector.order={mode,targetId,range}; sector.running=true; sector.manual.thrust=0;sector.safety='Clear';
+  sector.order={mode,targetId,range}; sector.running=true; sector.manual.thrust=0;sector.safety='Clear';sector.faceTarget=true;
   sector.status=`${maneuverNames[mode]} · ${target.trackLabel} · Navigation calculating`;
   return true;
 }

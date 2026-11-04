@@ -60,6 +60,44 @@ test('active braking removes velocity while coasting leaves it intact',()=>{
   assert.match(sector.status,/zero velocity/);
 });
 
+test('hard port and starboard turn the bow 40 degrees without a target or changing motion',()=>{
+  for(const [mode,sign] of [['port',-1],['starboard',1]]){
+    const sector=createSector([]);sector.own.vx=1200;sector.own.vy=600;
+    const own={...sector.own};
+    assert.equal(issueManeuver(sector,mode),true);
+    assert.ok(Math.abs(sector.facing.x-sign*Math.sin(40*Math.PI/180))<1e-12);
+    assert.ok(Math.abs(sector.facing.y-Math.cos(40*Math.PI/180))<1e-12);
+    assert.equal(sector.facing.z,0);assert.deepEqual(sector.own,own);
+    assert.equal(sector.order,null);assert.equal(sector.running,false);assert.equal(sector.faceTarget,false);
+  }
+});
+
+test('hard turns are relative to the current bow and repeat across a full revolution',()=>{
+  const sector=createSector([]);
+  for(let i=0;i<9;i++)issueManeuver(sector,'starboard');
+  assert.ok(Math.abs(sector.facing.x)<1e-12);assert.ok(Math.abs(sector.facing.y-1)<1e-12);
+  issueManeuver(sector,'port');issueManeuver(sector,'starboard');
+  assert.ok(Math.abs(sector.facing.x)<1e-12);assert.ok(Math.abs(sector.facing.y-1)<1e-12);
+});
+
+test('hard turns rotate tilted and vertical bows by 40 degrees while retaining unit length',()=>{
+  for(const facing of [{x:0,y:.6,z:.8},{x:0,y:0,z:1},{x:0,y:0,z:-1}])for(const mode of ['port','starboard']){
+    const sector=createSector([]);sector.facing={...facing};issueManeuver(sector,mode);
+    const dot=facing.x*sector.facing.x+facing.y*sector.facing.y+facing.z*sector.facing.z;
+    assert.ok(Math.abs(Math.acos(dot)*180/Math.PI-40)<1e-10);
+    assert.ok(Math.abs(Math.hypot(...Object.values(sector.facing))-1)<1e-12);
+  }
+});
+
+test('a hard turn holds its bow through autopilot updates until another target maneuver resumes tracking',()=>{
+  const sector=createSector([target]);issueManeuver(sector,'maintain',target.id,25);
+  const order={...sector.order};issueManeuver(sector,'port');const facing={...sector.facing};
+  assert.deepEqual(sector.order,order);assert.equal(sector.running,true);
+  stepSector(sector,1);assert.deepEqual(sector.facing,facing);
+  assert.equal(issueManeuver(sector,'match',target.id),true);assert.equal(sector.faceTarget,true);
+  stepSector(sector,1);assert.notDeepEqual(sector.facing,facing);
+});
+
 test('match velocity converges to all three target velocity components',()=>{
   const sector=createSector([target]);issueManeuver(sector,'match',target.id);advance(sector,60);
   for(const key of ['vx','vy','vz'])assert.ok(Math.abs(sector.own[key]-target[key])<.001);

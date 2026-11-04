@@ -93,7 +93,7 @@ function validateSave(value,pause){
   const sector=localSector(value.bridge.sector,sectorLocation,pause);
   const combat=value.version===1?createCombat(sector.contacts):restoreCombat(value.bridge.combat,sector.contacts);
   requireValue(!combat.docked||(!nav.active&&!!stationSupport(nav.location)&&Math.hypot(sector.own.x,sector.own.y,sector.own.z)<=5&&Math.hypot(sector.own.vx,sector.own.vy,sector.own.vz)<=10),'Invalid docked state.');
-  requireValue(!nav.active||(!combat.firing&&!combat.shots.length&&!combat.docked),'Combat cannot run during EPD transit.');
+  requireValue(!nav.active||(!combat.firing&&!combat.shots.length&&!combat.docked&&!Object.keys(combat.alliedOrders).length),'Combat cannot run during EPD transit.');
   requireValue(!nav.active||(!sector.running && !sector.order),'EPD transit cannot run alongside local flight orders.');
   const tactical=value.bridge.tactical;
   requireValue(record(tactical),'Missing tactical state.');

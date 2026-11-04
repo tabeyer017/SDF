@@ -74,6 +74,14 @@ export function restoreCombat(saved,contacts){
   const shotId=id=>typeof id==='string'&&/^shot:\d+$/.test(id)&&Number(id.slice(5))<result.nextShot;
   const targetId=id=>validId(id)||shotId(id);
   result.hostiles=array(saved.hostiles,contacts.length).map(id=>{check(id!=='own'&&validId(id));return id;});check(new Set(result.hostiles).size===result.hostiles.length);
+  if(saved.alliedOrders!==undefined){
+    check(object(saved.alliedOrders)&&Object.keys(saved.alliedOrders).length<=contacts.length);
+    for(const [id,order] of Object.entries(saved.alliedOrders)){
+      check(contacts.some(c=>c.id===id&&c.type==='friendly'&&c.shipType.startsWith('sdf-'))&&object(order)&&['attack-targets','battle-assistance'].includes(order.mode));
+      const targetIds=array(order.targetIds,contacts.length).map(targetId=>{check(contacts.some(c=>c.id===targetId&&c.type==='enemy'));return targetId;});
+      check(targetIds.length>0&&new Set(targetIds).size===targetIds.length);result.alliedOrders[id]={mode:order.mode,targetIds};
+    }
+  }
   const seen=new Set();result.shots=array(saved.shots,1000).map(s=>{
     check(object(s)&&shotId(s.id)&&!seen.has(s.id)&&validId(s.sourceId)&&targetId(s.targetId)&&Object.hasOwn(weapons,s.weapon));seen.add(s.id);
     const source=s.sourceId==='own'?result.own:result.contacts[s.sourceId],mounts=source.mounts.filter(m=>m.weapon===s.weapon);

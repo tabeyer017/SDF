@@ -1,5 +1,5 @@
 import { contactTypes } from './tactical-model.mjs';
-import { maneuverNames, maneuverTelemetry, predictedPath, sectorHazards, SENSOR_RANGE } from './sector-model.mjs';
+import { maneuverNames, maneuverTelemetry, predictedPath, sectorHazards, SENSOR_RANGE, isHardTurn } from './sector-model.mjs';
 import { flightControlState } from './bridge-model.mjs';
 import { sectorBodies, planetaryOverview } from './sector-bodies.mjs';
 
@@ -15,16 +15,17 @@ export function flightReadout(flight) {
   return `${maneuverNames[t.mode]}${t.target!=='None'?` · ${t.target}`:''} · ${number(t.speed)} KPH${t.distance!==null?` · Range ${t.distance.toFixed(1)} km · Vc ${closure} KPH`:''}${['maintain','open'].includes(t.mode)?` · Requested ${t.requestedRange} km`:''}${s.safety.startsWith('Blocked')?' · NAV BRAKING':''}`;
 }
 
-export function mountManeuverControls({flight,targetId,onNavigate}) {
+export function mountManeuverControls({flight,targetId,onNavigate,canExecute=()=>true}) {
   const wrap=el('section','combat-maneuvers');wrap.append(el('h4','','COMBAT MANEUVER'));
   const label=el('label','bridge-setting');label.append(el('span','','Maneuver'));const choice=el('select','');choice.setAttribute('aria-label','Combat maneuver');
-  for(const [value,text] of [['intercept','Intercept · 5 km standoff'],['match','Match velocity'],['maintain','Maintain range'],['open','Open distance'],['break','Break away']]) choice.append(Object.assign(el('option','',text),{value}));
+  for(const [value,text] of [['intercept','Intercept · 5 km standoff'],['match','Match velocity'],['maintain','Maintain range'],['open','Open distance'],['break','Break away'],['port','Hard a Port · left 40°'],['starboard','Hard a Starboard · right 40°']]) choice.append(Object.assign(el('option','',text),{value}));
   choice.value='maintain';label.append(choice);wrap.append(label);
   const form=el('form','maneuver-form');const range=field(form,'Engagement range · km',25,5,200);
-  choice.onchange=()=>{range.disabled=!['maintain','open'].includes(choice.value);};
+  const available=()=>!flight.inTransit()&&(isHardTurn(choice.value)||!!targetId)&&canExecute(choice.value);
+  choice.onchange=()=>{range.disabled=!['maintain','open'].includes(choice.value);execute.disabled=!available();};
   const execute=el('button','bridge-action','Execute maneuver');execute.type='submit';form.append(execute);
-  form.onsubmit=e=>{e.preventDefault();flight.command(choice.value,targetId,Number(range.value));};
-  wrap.append(form,el('p','target-fit-note','Orders apply to this target. Autopilot handles flight; the bow tracks the target.'),button('View Local Flight ↗',onNavigate));return wrap;
+  form.onsubmit=e=>{e.preventDefault();if(available())flight.command(choice.value,targetId,Number(range.value));};
+  wrap.append(form,el('p','target-fit-note','Target maneuvers use autopilot and bow tracking. Hard turns rotate the bow 40° without a target and retain current flight motion.'),button('View Local Flight ↗',onNavigate));choice.onchange();return wrap;
 }
 
 export function mountSectorConsole({root,flight,openSystem,strategic}) {

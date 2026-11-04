@@ -186,7 +186,8 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 .target-priority-error { color: #f4a5a5; font-size: 11px; }
 .target-priority-error:empty { display: none; }
 .target-priority-change { width: 100%; padding: 8px; margin: 8px 0; border: 1px solid #8a744e; color: #e5ce9f; font: 10px var(--mono); }
-.radar-own-ship { pointer-events: none; }
+.radar-own-ship { pointer-events: all; cursor: context-menu; }
+.radar-own-ship .radar-own-hit { fill: transparent; stroke: none; }
 .radar-own-ship circle { fill: #0b2025; stroke: #a8e4ea; stroke-width: .7; }
 .radar-own-ship path { fill: #a8e4ea; stroke: #a8e4ea; stroke-width: 1; }
 .radar-legend { display: flex; justify-content: center; gap: 23px; padding: 10px 12px; color: #b4c2cc; font: 9px var(--mono); }
@@ -562,6 +563,17 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 .radar-fire-popup { position: fixed; inset: auto; margin: 0; width: min(410px,calc(100vw - 20px)); max-height: calc(100dvh - 20px); padding: 13px; border: 1px solid #6f8e98; border-radius: 4px; color: #c9dae2; background: #0d1723; box-shadow: 0 12px 44px #000b; overflow: hidden; }
 .radar-fire-popup:popover-open { display: grid; grid-template-rows: auto minmax(0,1fr) auto; gap: 10px; }
 .radar-fire-popup::backdrop { background: transparent; }
+.radar-maneuver-popup { position: fixed; inset: auto; margin: 0; width: min(340px,calc(100vw - 20px)); max-height: calc(100dvh - 20px); padding: 14px; border: 1px solid #6f8e98; border-radius: 4px; color: #c9dae2; background: #0d1723; box-shadow: 0 12px 44px #000b; overflow: auto; }
+.radar-maneuver-popup:popover-open { display: grid; gap: 10px; }
+.radar-maneuver-popup::backdrop { background: transparent; }
+.radar-maneuver-popup .combat-maneuvers { margin: 0; padding: 0; border: 0; }
+.radar-maneuver-popup .combat-maneuvers h4 { display: none; }
+.radar-maneuver-popup p { margin: 0; }
+.radar-friendly-popup .quick-fire-heading h3,.friendly-ship-name { color: #74d79c; }
+.friendly-command-actions { display: grid; gap: 7px; }
+.friendly-command-actions button { width: 100%; padding: 10px; font-size: 11px; text-align: left; }
+.friendly-command-reply { padding: 10px; border: 1px solid #38535f; color: #c9dae2; font: 11px/1.6 var(--body); }
+.friendly-command-reply[data-result="refused"],.friendly-command-reply[data-result="unavailable"] { color: #e6b78a; }
 .quick-fire-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .quick-fire-heading h3 { margin: 0; color: #d5b77c; font: 10px/1.6 var(--mono); }
 .quick-fire-heading button { flex: 0 0 auto; min-width: 28px; height: 28px; padding: 0; font-size: 22px; text-align: center; }

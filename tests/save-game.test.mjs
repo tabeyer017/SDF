@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createSave, parseSave, MAX_SAVE_BYTES } from '../save-game.mjs';
 import { createSector, observeSector, issueManeuver, setManualHelm, addPatrolWaypoint, startPatrol, stepSector } from '../sector-model.mjs';
 import { restoreBridgeState } from '../bridge-model.mjs';
+import { createCombat,orderAlliedSupport } from '../combat-model.mjs';
 
 function game(){
   const sector=createSector();observeSector(sector);
@@ -19,6 +20,24 @@ test('JSON save preserves strategic progress, bridge settings, selection, logs, 
   assert.deepEqual(saved.navigation,original.navigation);assert.deepEqual(saved.bridge.settings,original.bridge.settings);
   assert.deepEqual(saved.selection,original.selection);assert.deepEqual(saved.logs,original.logs);
   assert.deepEqual(saved.bridge.tactical,original.bridge.tactical);assert.deepEqual(original,before);
+});
+
+test('hard-turn bow and suspended target tracking survive a JSON save',()=>{
+  const original=game();issueManeuver(original.bridge.sector,'maintain','F-03',25);
+  issueManeuver(original.bridge.sector,'port');
+  const loaded=roundTrip(original);
+  assert.deepEqual(loaded.bridge.sector.facing,original.bridge.sector.facing);
+  assert.equal(loaded.bridge.sector.faceTarget,false);
+  assert.deepEqual(loaded.bridge.sector.order,original.bridge.sector.order);
+});
+
+test('JSON saves retain allied support and reject support orders during EPD transit',()=>{
+  const original=game();original.bridge.combat=createCombat(original.bridge.sector.contacts);
+  assert.equal(orderAlliedSupport(original.bridge.combat,original.bridge.sector,'F-03','attack-targets',['E-04']).accepted,true);
+  const loaded=roundTrip(original);assert.deepEqual(loaded.bridge.combat.alliedOrders,original.bridge.combat.alliedOrders);
+  assert.equal(loaded.bridge.sector.running,false);
+  original.navigation.route=[original.selection];original.navigation.active=true;
+  assert.throws(()=>createSave(original),/Combat cannot run during EPD transit/);
 });
 
 test('target priorities survive saves, while old saves assign distinct priorities without changing locks',()=>{

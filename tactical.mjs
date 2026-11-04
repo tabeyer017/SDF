@@ -2,7 +2,8 @@ import { radarRanges, contactTypes, armamentTypes, countermeasureTypes, armament
 import { mountManeuverControls, flightReadout } from './sector-console.mjs';
 import { mountWeaponsConsole } from './combat-console.mjs';
 import { weapons, recentInterceptions } from './combat-model.mjs';
-import { relativeContact } from './sector-model.mjs';
+import { relativeContact, isHardTurn } from './sector-model.mjs';
+import { friendlyCommands } from './communications-model.mjs';
 
 export function expandRadarRounds(shots){
   return shots.flatMap(shot=>{
@@ -16,6 +17,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
   const el = (tag, className, text) => { const node = document.createElement(tag); node.className = className; if (text !== undefined) node.textContent = text; return node; };
   const svg = (tag, attrs = {}, text) => { const node = document.createElementNS(NS, tag); for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value); if (text !== undefined) node.textContent = text; return node; };
   const compact = matchMedia('(max-width: 800px)');
+  const directionLineEnd = 8 + (26 - 8) * 0.75;
   let contacts = flight ? flight.contacts() : trainingContacts.map(observeContact);
   const signed = value => `${value > 0 ? '+' : value < 0 ? '−' : ''}${Number(Math.abs(value).toFixed(1))}`;
   const signClass = value => value > 0 ? 'positive' : value < 0 ? 'negative' : 'zero';
@@ -122,7 +124,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
   for (const [type, info] of Object.entries(contactTypes)) {
     const item = el('span', ''); const icon = svg('svg', { viewBox: '-10 -10 20 20', 'aria-hidden': 'true' }); icon.append(symbol(type)); item.append(icon, document.createTextNode(info.label)); legend.append(item);
   }
-  for(const [label,color] of [['Outgoing fire','#7cffff'],['Incoming fire','#ff795f'],['Other fire','#ffd166']]){
+  for(const [label,color] of [['Outgoing fire','#7cffff'],['Hostile / incoming fire',contactTypes.enemy.color],['Friendly missiles',contactTypes.friendly.color],['Other fire','#ffd166']]){
     const item=el('span',''),icon=svg('svg',{viewBox:'-10 -10 20 20','aria-hidden':'true'});
     icon.append(svg('path',{d:'M-8 5L6-4M1-5L7-5L5 1',stroke:color,'stroke-width':2,fill:'none'}));item.append(icon,document.createTextNode(label));legend.append(item);
   }
@@ -165,6 +167,87 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
   const chartResize=new ResizeObserver(()=>{for(const {chart} of charts)for(const marker of chart.querySelectorAll('.radar-contact-glyph'))marker.setAttribute('transform',`scale(${markerScale(chart)})`);});
   for(const {chart} of charts)chartResize.observe(chart);
   const weaponControls=flight?.combat?mountWeaponsConsole({flight}):null;
+
+  const maneuverPopup=el('section','radar-maneuver-popup');maneuverPopup.id='radar-maneuver-popup';maneuverPopup.popover='auto';maneuverPopup.setAttribute('role','dialog');maneuverPopup.setAttribute('aria-labelledby','radar-maneuver-title');
+  const maneuverHeader=el('header','quick-fire-heading'),maneuverTitle=el('h3','','WAYFARER · COMBAT MANEUVER');maneuverTitle.id='radar-maneuver-title';
+  const closeManeuver=el('button','','×');closeManeuver.type='button';closeManeuver.setAttribute('aria-label','Close combat maneuver');closeManeuver.onclick=()=>maneuverPopup.hidePopover();maneuverHeader.append(maneuverTitle,closeManeuver);
+  const maneuverTarget=el('p','combat-note'),maneuverBody=el('div',''),maneuverStatus=el('p','combat-note');maneuverStatus.setAttribute('role','status');
+  maneuverPopup.append(maneuverHeader,maneuverTarget,maneuverBody,maneuverStatus);root.append(maneuverPopup);
+  let maneuverTargetId;
+  function maneuverUnavailable(mode=maneuverBody.querySelector('select')?.value){
+    const target=contacts.find(c=>c.id===activeId&&lockedIds.includes(c.id));
+    if(!flight)return 'Local flight controls are unavailable.';
+    if(flight.inTransit())return 'Combat maneuvers are unavailable during EPD transit.';
+    if(isHardTurn(mode))return '';
+    if(!target)return 'Lock a radar contact to choose a maneuver target.';
+    if(target.stale||!contactsInRange(contacts.filter(c=>!c.stale),range).includes(target))return 'Target is outside radar coverage. Choose a live contact.';
+    return '';
+  }
+  function refreshManeuverPopup(){
+    if(!maneuverPopup.matches(':popover-open'))return;
+    const target=contacts.find(c=>c.id===activeId&&lockedIds.includes(c.id));
+    maneuverTarget.textContent=target?`TARGET · ${target.trackLabel} · ${target.name}`:'NO TARGET LOCKED';
+    if(maneuverTargetId!==(target?.id??null)){
+      maneuverTargetId=target?.id??null;maneuverBody.replaceChildren();
+      if(flight){
+        const controls=mountManeuverControls({flight,targetId:target?.id,canExecute:mode=>!maneuverUnavailable(mode),onNavigate:()=>{maneuverPopup.hidePopover();onNavigate();}});
+        controls.querySelector('select').addEventListener('change',refreshManeuverPopup);
+        controls.querySelector('form').addEventListener('submit',event=>{
+          if(maneuverUnavailable()){event.preventDefault();event.stopImmediatePropagation();refreshManeuverPopup();return;}
+        },true);
+        controls.querySelector('form').addEventListener('submit',()=>{onChange();refreshManeuverPopup();});maneuverBody.append(controls);
+      }
+    }
+    const unavailable=maneuverUnavailable(),execute=maneuverBody.querySelector('button[type="submit"]');
+    if(execute)execute.disabled=!!unavailable;
+    const bearing=flight?(Math.atan2(flight.sector.facing.x,flight.sector.facing.y)*180/Math.PI+360)%360:0;
+    maneuverStatus.textContent=unavailable||`${flightReadout(flight)} · Bow ${bearing.toFixed(0)}°`;
+  }
+  function openManeuverPopup(event,marker){
+    event.preventDefault();hideTooltip();weaponControls?.closeQuickFire();
+    maneuverPopup.showPopover();refreshManeuverPopup();
+    const anchor=marker.getBoundingClientRect(),box=maneuverPopup.getBoundingClientRect();
+    maneuverPopup.style.left=`${Math.max(10,Math.min((event.clientX||anchor.right)+10,innerWidth-box.width-10))}px`;
+    maneuverPopup.style.top=`${Math.max(10,Math.min((event.clientY||anchor.top)+10,innerHeight-box.height-10))}px`;
+    (maneuverBody.querySelector('select')||closeManeuver).focus({preventScroll:true});
+  }
+  window.addEventListener('resize',()=>{if(maneuverPopup.matches(':popover-open'))maneuverPopup.hidePopover();});
+
+  const friendlyPopup=el('section','radar-maneuver-popup radar-friendly-popup');friendlyPopup.id='radar-friendly-popup';friendlyPopup.popover='auto';friendlyPopup.setAttribute('role','dialog');friendlyPopup.setAttribute('aria-labelledby','radar-friendly-title');
+  const friendlyHeader=el('header','quick-fire-heading'),friendlyTitle=el('h3','','SDF SHIP COMMANDS');friendlyTitle.id='radar-friendly-title';
+  const closeFriendly=el('button','','×');closeFriendly.type='button';closeFriendly.setAttribute('aria-label','Close friendly ship commands');closeFriendly.onclick=()=>friendlyPopup.hidePopover();friendlyHeader.append(friendlyTitle,closeFriendly);
+  const friendlyName=el('p','friendly-ship-name'),friendlyContext=el('p','combat-note'),friendlyActions=el('div','friendly-command-actions'),friendlyReply=el('p','friendly-command-reply');friendlyReply.setAttribute('role','status');
+  let friendlyShipId=null;
+  for(const command of friendlyCommands){
+    const control=el('button','bridge-action',command.label);control.type='button';
+    control.onclick=()=>{
+      const result=flight?.requestFriendly?.(friendlyShipId,command.id,orderedLocks());
+      friendlyReply.textContent=result?(result.response||result.message):'Ship communications are unavailable.';
+      friendlyReply.dataset.result=result?.accepted===false?'refused':result?.ok?'received':'unavailable';refreshFriendlyPopup();
+    };friendlyActions.append(control);
+  }
+  friendlyPopup.append(friendlyHeader,friendlyName,friendlyContext,friendlyActions,el('p','target-fit-note','Requests depend on ship readiness, communications, weapons range, and confirmed threats. Accepted orders provide fire support; ships keep their present course.'),friendlyReply);root.append(friendlyPopup);
+  function closeFriendlyPopup(){if(friendlyPopup.matches(':popover-open'))friendlyPopup.hidePopover();friendlyShipId=null;}
+  function refreshFriendlyPopup(){
+    if(!friendlyPopup.matches(':popover-open'))return;
+    const contact=contactsInRange(contacts.filter(c=>!c.stale),range).find(c=>c.id===friendlyShipId&&c.type==='friendly');
+    if(!contact){closeFriendlyPopup();return;}
+    friendlyName.textContent=`${contact.trackLabel} · ${contact.name}`;
+    const unavailable=flight?.friendlyLink?.(friendlyShipId)??(!flight?.requestFriendly?'Ship communications are unavailable.':null);
+    const order=flight?.combat.alliedOrders?.[friendlyShipId],targets=lockedContacts().filter(c=>!c.stale&&c.type==='enemy'&&contactDistance(c)<=range);
+    friendlyContext.textContent=unavailable||`${targets.length} locked hostile target${targets.length===1?'':'s'} available. ${order?`Supporting ${order.targetIds.length} transmitted target${order.targetIds.length===1?'':'s'}.`:'No support order active.'}`;
+    for(const control of friendlyActions.children)control.disabled=!!unavailable;
+  }
+  function openFriendlyPopup(id,event,marker){
+    event.preventDefault();hideTooltip();weaponControls?.closeQuickFire();friendlyShipId=id;friendlyReply.textContent='Choose a request. This ship will reply on its Comms channel.';delete friendlyReply.dataset.result;
+    friendlyPopup.showPopover();refreshFriendlyPopup();
+    if(!friendlyPopup.matches(':popover-open'))return;
+    const anchor=marker.getBoundingClientRect(),box=friendlyPopup.getBoundingClientRect();
+    friendlyPopup.style.left=`${Math.max(10,Math.min((event.clientX||anchor.right)+10,innerWidth-box.width-10))}px`;
+    friendlyPopup.style.top=`${Math.max(10,Math.min((event.clientY||anchor.top)+10,innerHeight-box.height-10))}px`;
+    (friendlyActions.querySelector('button:not(:disabled)')||closeFriendly).focus({preventScroll:true});
+  }
+  window.addEventListener('resize',closeFriendlyPopup);
 
   const shipDialog = el('dialog', 'ship-reference-dialog');
   shipDialog.id = 'ship-reference-dialog'; shipDialog.setAttribute('aria-labelledby', 'ship-reference-title');
@@ -256,7 +339,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     tooltip.hidden = false;
     const bounds = marker.getBoundingClientRect(); positionTooltip(event?.clientX ?? bounds.right, event?.clientY ?? bounds.top);
   }
-  const hideWhenInactive = () => { if (root.parentElement.dataset.station !== 'tactical' || document.body.dataset.screen !== 'bridge') { hideTooltip(); weaponControls?.closeQuickFire();if(priorityDialog.open)priorityDialog.close(); } };
+  const hideWhenInactive = () => { if (root.parentElement.dataset.station !== 'tactical' || document.body.dataset.screen !== 'bridge') { hideTooltip(); weaponControls?.closeQuickFire();closeFriendlyPopup();if(maneuverPopup.matches(':popover-open'))maneuverPopup.hidePopover();if(priorityDialog.open)priorityDialog.close(); } };
   const observer = new MutationObserver(hideWhenInactive);
   observer.observe(document.body, { attributes: true, attributeFilter: ['data-screen'] });
   observer.observe(root.parentElement, { attributes: true, attributeFilter: ['data-station'] });
@@ -290,6 +373,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     else if (sourceView) charts.find(item => item.view === sourceView).chart.querySelector(`.radar-track[data-track="${id}"]`)?.focus({ preventScroll: true });
   }
   function openQuickFire(id,event,marker){
+    if(contacts.find(c=>c.id===id)?.type==='friendly'){openFriendlyPopup(id,event,marker);return;}
     if(!weaponControls)return;event.preventDefault();
     const bounds=marker.getBoundingClientRect(),x=event.clientX||bounds.right,y=event.clientY||bounds.top;
     if(!lockedIds.includes(id)){askPriority(id,{toggle:true,quick:{x,y}});return;}
@@ -343,7 +427,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     const release = el('button', 'target-release', 'Release all target locks'); release.onclick = () => { lockedIds = [];priorities={}; activeId = null; render();onChange(); setMode('radar'); picker.focus({ preventScroll: true }); };
     targetPanel.replaceChildren(status, lockedList, name, shipClass, changePriority, release, telemetry, identity, armaments, countermeasures, hangar, boarding, crew, engines, el('p', 'target-fit-note', contact.identified ? ship.fitConfirmed?'CONFIRMED EQUIPMENT & ENGINE COUNTS · PROVISIONAL ENGINE MODELS & SIZE':ship.boarding?'CONFIRMED RAIDERS & ASSAULT SHUTTLES · OTHER FITTINGS PROVISIONAL':'TRAINING DATA · PROVISIONAL SHIP FIT & SIZE' : 'Identity, type, size, and equipment unconfirmed.'));
     if(weaponControls)targetPanel.insertBefore(weaponControls.targetDetails,release);
-    if(flight){const maneuvers=mountManeuverControls({flight,targetId:contact.id,onNavigate});combatPanel.append(maneuvers);maneuvers.querySelector('button[type="submit"]').disabled=!inRange||flight.inTransit();}
+    if(flight){const maneuvers=mountManeuverControls({flight,targetId:contact.id,onNavigate,canExecute:mode=>isHardTurn(mode)||contactsInRange(contacts.filter(c=>!c.stale),range).some(c=>c.id===contact.id)});combatPanel.append(maneuvers);}
     if(weaponControls)combatPanel.append(weaponControls.settings);
   }
 
@@ -363,6 +447,9 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
         point.x-=direction.y*offset;point.y+=direction.x*offset;
       }
       const outgoing=shot.sourceId==='own',incoming=shot.targetId==='own';
+      const sourceTrack=contacts.find(c=>c.id===shot.sourceId)||flight.sector.memory[shot.sourceId]?.observed;
+      const hostile=sourceTrack?.type==='enemy'||flight.combat.hostiles.includes(shot.sourceId);
+      const friendly=missile&&sourceTrack?.type==='friendly'&&!hostile;
       if(missile){
         // Separate the launcher from the ship glyph, blending into the live
         // flight track as the missile clears the ship's starboard side.
@@ -372,10 +459,10 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
           point.x+=6*Math.exp(-clearance/8);
         }
       }
-      const color=outgoing?'#7cffff':incoming?'#ff795f':'#ffd166';
-      const marker=svg('g',{class:`radar-projectile ${missile?'missile':'cannon'} ${outgoing?'outgoing':incoming?'incoming':'other'}`,'data-shot':shot.id,transform:`translate(${point.x} ${point.y}) rotate(${Math.atan2(direction.y,direction.x)*180/Math.PI})`});
-      marker.append(svg('title',{},`${outgoing?'Outgoing':incoming?'Incoming':'Other'} ${missile?'missile':'cannon round'} · ${armamentTypes[shot.weapon]?.name??shot.weapon} · ${contactDistance(relative).toFixed(1)} km`));
-      marker.append(missile?svg('path',{d:'M5 0L-3-1.5V1.5Z',fill:color,stroke:color,'stroke-width':.35}):svg('circle',{r:1.8,fill:outgoing?'#7cffff':incoming||flight.combat.hostiles.includes(shot.sourceId)||contacts.some(c=>c.id===shot.sourceId&&c.type==='enemy')?'#ff795f':color}));
+      const color=outgoing?'#7cffff':incoming||hostile?contactTypes.enemy.color:friendly?contactTypes.friendly.color:'#ffd166';
+      const marker=svg('g',{class:`radar-projectile ${missile?'missile':'cannon'} ${outgoing?'outgoing':incoming?'incoming':hostile?'hostile':friendly?'friendly':'other'}`,'data-shot':shot.id,transform:`translate(${point.x} ${point.y}) rotate(${Math.atan2(direction.y,direction.x)*180/Math.PI})`});
+      marker.append(svg('title',{},`${outgoing?'Outgoing':incoming?'Incoming':hostile?'Hostile':friendly?'Friendly':'Other'} ${missile?'missile':'cannon round'} · ${armamentTypes[shot.weapon]?.name??shot.weapon} · ${contactDistance(relative).toFixed(1)} km`));
+      marker.append(missile?svg('path',{d:'M5 0L-3-1.5V1.5Z',fill:color,stroke:color,'stroke-width':.35}):svg('circle',{r:1.8,fill:color}));
       markers.push(marker);
     }
     if(flight)for(const event of recentInterceptions(flight.combat)){
@@ -405,6 +492,8 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
       option.disabled = !visible.includes(target); return option;
     })); picker.value = activeId || '';
     renderTarget(contact, visible);
+    refreshManeuverPopup();
+    refreshFriendlyPopup();
     for (const { view, chart } of charts) {
       chart.replaceChildren(svg('circle', { r: 148, class: 'radar-field' }));
       for (const distance of rangeRings(range)) {
@@ -419,7 +508,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
         if (!direction) continue;
         const vector = svg('g', { transform: `translate(${point.x} ${point.y})`, class: 'radar-direction', 'aria-hidden': 'true', 'data-track':target.id });
         const ux = direction.x / 26, uy = direction.y / 26;
-        vector.append(svg('path', { d: `M${ux * 8} ${uy * 8}L${direction.x} ${direction.y}`, stroke: contactTypes[target.type].color }));
+        vector.append(svg('path', { d: `M${ux * 8} ${uy * 8}L${ux * directionLineEnd} ${uy * directionLineEnd}`, stroke: contactTypes[target.type].color }));
         chart.append(vector);
       }
       for (const target of [...visible].sort((a,b)=>Number(!!priorities[a.id])-Number(!!priorities[b.id])||(priorities[b.id]||0)-(priorities[a.id]||0))) {
@@ -438,8 +527,10 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
         marker.onfocus = () => showTooltip(contacts.find(c=>c.id===target.id)||target, marker); marker.onblur = hideTooltip;
         marker.onkeydown = event => { if (event.key==='ContextMenu'||event.key==='F10'&&event.shiftKey)openQuickFire(target.id,event,marker);else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); lock(target.id, view, event.ctrlKey); } }; chart.append(marker);
       }
-      const ship = svg('g', { class: 'radar-own-ship', 'aria-label': 'Our ship at origin' });
-      ship.append(svg('circle', { r: 9 }), svg('path', { d: view === 'top' ? 'M0-6 4 4 0 2-4 4Z' : 'M-6 2-3-3H3L6 2H-6M-9 0H9' })); chart.append(ship);
+      const ship = svg('g', { class: 'radar-own-ship', role:'button', tabindex:0, 'aria-label': 'Our ship at origin · Combat maneuver', 'aria-haspopup':'dialog', 'aria-controls':maneuverPopup.id });
+      ship.oncontextmenu=event=>openManeuverPopup(event,ship);
+      ship.onkeydown=event=>{if(['Enter',' ','ContextMenu'].includes(event.key)||event.key==='F10'&&event.shiftKey)openManeuverPopup(event,ship);};
+      ship.append(svg('title',{},'Right-click for combat maneuvers'),svg('circle',{r:14,class:'radar-own-hit'}),svg('circle', { r: 9 }), svg('path', { d: view === 'top' ? 'M0-6 4 4 0 2-4 4Z' : 'M-6 2-3-3H3L6 2H-6M-9 0H9' })); chart.append(ship);
       renderProjectiles(chart,view);
     }
   }
@@ -449,6 +540,8 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     if(weaponControls)weaponControls.refresh(contacts.find(c=>c.id===activeId)||null,lockedContacts());
     // Retain locked tracks as stale sensor records without exposing unseen motion.
     if(flight)for(const id of lockedIds)if(!contacts.some(c=>c.id===id)&&flight.sector.memory[id])contacts.push({...flight.sector.memory[id].observed,stale:true});
+    refreshManeuverPopup();
+    refreshFriendlyPopup();
     const visible=contactsInRange(contacts.filter(c=>!c.stale),range),currentSignature=contacts.map(c=>`${c.id}:${c.identified}:${c.stale||false}`).join('|')+`/${visible.map(c=>c.id).join(',')}`;
     flightStatus.textContent=flight?`${flight.inTransit()?'EPD IN TRANSIT · LOCAL FLIGHT SUSPENDED':flightReadout(flight)}${flight.sector.running?'':' · PAUSED'}`:'TRAINING SNAPSHOT';
     if(currentSignature!==signature){signature=currentSignature;const scroll=targetPanel.scrollTop,combatScroll=combatPanel.scrollTop;render();targetPanel.scrollTop=scroll;combatPanel.scrollTop=combatScroll;return;}
@@ -459,20 +552,20 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
         const point=projectContact(target,view,range);marker.setAttribute('transform',`translate(${point.x} ${point.y})`);
         marker.setAttribute('aria-label',radarLabel(target));
         const direction=projectVelocity(target,view),vector=chart.querySelector(`.radar-direction[data-track="${target.id}"]`);
-        if(vector&&direction){vector.setAttribute('transform',`translate(${point.x} ${point.y})`);const ux=direction.x/26,uy=direction.y/26;vector.firstElementChild.setAttribute('d',`M${ux*8} ${uy*8}L${direction.x} ${direction.y}`);vector.style.display='';}else if(vector)vector.style.display='none';
+        if(vector&&direction){vector.setAttribute('transform',`translate(${point.x} ${point.y})`);const ux=direction.x/26,uy=direction.y/26;vector.firstElementChild.setAttribute('d',`M${ux*8} ${uy*8}L${ux*directionLineEnd} ${uy*directionLineEnd}`);vector.style.display='';}else if(vector)vector.style.display='none';
       }
     }
     const active=contacts.find(c=>c.id===activeId);
     if(active){
       const values=[`${contactDistance(active).toFixed(1)} KM`,speedText(active),zText(active),yText(active),closureReadout(active).text];
       targetPanel.querySelectorAll('.target-telemetry dd').forEach((dd,i)=>{dd.textContent=values[i];if(i===2)dd.className=signClass(active.z);if(i===3)dd.className=signClass(active.y);if(i===4)dd.className=closureReadout(active).className;});
-      const execute=combatPanel.querySelector('button[type="submit"]');if(execute)execute.disabled=!!active.stale||flight?.inTransit();
+      const execute=combatPanel.querySelector('button[type="submit"]');if(execute)execute.disabled=flight?.inTransit()||!isHardTurn(combatPanel.querySelector('.combat-maneuvers select')?.value)&&(!!active.stale||contactDistance(active)>range);
     }
     if(hoverMarker&&!tooltip.hidden){const target=contacts.find(c=>c.id===hoverMarker.dataset.track);if(target)showTooltip(target,hoverMarker);}
   }
   setMode('radar'); render();refresh();
   return {refresh,refreshProjectiles:()=>{for(const {chart,view} of charts)renderProjectiles(chart,view);},
     exportState:()=>({lockedIds:[...lockedIds],activeId,priorities:{...priorities}}),
-    restoreState(saved,savedRange=range){weaponControls?.closeQuickFire();if(priorityDialog.open)priorityDialog.close();lockedIds=[...saved.lockedIds];priorities=restoreTargetPriorities(lockedIds,saved.priorities);activeId=saved.activeId;range=savedRange;signature='';hideTooltip();render();refresh();},
-    reset(){weaponControls?.closeQuickFire();if(priorityDialog.open)priorityDialog.close();lockedIds=[];priorities={};activeId=null;signature='';refresh();}};
+    restoreState(saved,savedRange=range){weaponControls?.closeQuickFire();closeFriendlyPopup();if(maneuverPopup.matches(':popover-open'))maneuverPopup.hidePopover();if(priorityDialog.open)priorityDialog.close();lockedIds=[...saved.lockedIds];priorities=restoreTargetPriorities(lockedIds,saved.priorities);activeId=saved.activeId;range=savedRange;signature='';hideTooltip();render();refresh();},
+    reset(){weaponControls?.closeQuickFire();closeFriendlyPopup();if(maneuverPopup.matches(':popover-open'))maneuverPopup.hidePopover();if(priorityDialog.open)priorityDialog.close();lockedIds=[];priorities={};activeId=null;signature='';refresh();}};
 }

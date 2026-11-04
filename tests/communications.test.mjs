@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCommunications,restoreCommunications,communicationsRecipients,communicationChannels,communicationRequests,communicationLink,sendCommunication,pollCommunications,markChannelRead,unreadCommunications,MAX_MESSAGES } from '../communications-model.mjs';
-import { createCombat,canFire,fireWeapon,startFiring,stepCombat } from '../combat-model.mjs';
+import { createCombat,canFire,fireWeapon,startFiring,stepCombat,changeEncounter } from '../combat-model.mjs';
 import { createSector,observeSector } from '../sector-model.mjs';
 import { restoreCombat } from '../combat-save.mjs';
 import { createSave,parseSave } from '../save-game.mjs';
@@ -86,4 +86,87 @@ test('history stays bounded and save validation rejects malformed communication 
   }
   const old=createCombat(context.sector.contacts);delete old.contacts['E-04'].surrendered;
   assert.equal(restoreCombat(old,context.sector.contacts).contacts['E-04'].surrendered,false);
+});
+
+test('only identified friendly SDF channels offer battle commands',()=>{
+  const {state,context}=setup(),recipients=communicationsRecipients(state,context);
+  const ally=recipients.find(r=>r.contactId==='F-03');assert.equal(ally.friendly,true);
+  assert.ok(communicationRequests(ally).some(r=>r.id==='attack-targets'));
+  for(const id of ['E-04','N-02','U-01'])assert.ok(!communicationRequests(recipients.find(r=>r.contactId===id)).some(r=>r.id==='attack-targets'));
+  assert.equal(sendCommunication(state,context,'ship:0:N-02','attack-targets').ok,false);
+});
+
+test('accepted attack requests produce allied fire and hostile retaliation without taking over player weapons',()=>{
+  const {state,context}=setup();context.lockedTargetIds=['N-02','F-03','U-01','E-04'];
+  const result=sendCommunication(state,context,'ship:0:F-03','attack-targets');
+  assert.equal(result.accepted,true);assert.equal(context.sector.running,true);
+  assert.deepEqual(context.combat.alliedOrders['F-03'].targetIds,['E-04']);assert.equal(context.combat.firing,null);
+  const ammo=context.combat.contacts['F-03'].ammo['as-missiles'];stepCombat(context.combat,context.sector,.05,()=>0);
+  assert.ok(context.combat.shots.some(s=>s.sourceId==='F-03'&&s.targetId==='E-04'));
+  assert.ok(context.combat.shots.some(s=>s.sourceId==='E-04'&&s.targetId==='F-03'));
+  assert.ok(context.combat.contacts['F-03'].ammo['as-missiles']<ammo);
+  assert.deepEqual(context.combat.hostiles,[]);assert.equal(context.combat.firing,null);
+  assert.match(state.messages.at(-1).body,/Acknowledged/);
+});
+
+test('battle assistance uses confirmed threats without requiring a target lock',()=>{
+  const {state,context}=setup();context.combat.hostiles=['E-04'];
+  const result=sendCommunication(state,context,'ship:0:F-03','battle-assistance');
+  assert.equal(result.accepted,true);assert.deepEqual(context.combat.alliedOrders['F-03'].targetIds,['E-04']);
+  assert.match(result.response,/fire support/);
+});
+
+test('friendly ships refuse unsafe or impossible battle requests and explain their reason',()=>{
+  const cases=[
+    {change:c=>c.lockedTargetIds=['F-03','N-02','U-01'],reason:/will not attack/},
+    {change:c=>c.combat.contacts['F-03'].systems.hull.hp=100,reason:/damage control/},
+    {change:c=>c.combat.contacts['F-03'].breach=true,reason:/damage control/},
+    {change:c=>c.combat.contacts['F-03'].systems.bridge.hp=0,reason:/bridge/},
+    {change:c=>{for(const weapon in c.combat.contacts['F-03'].ammo)c.combat.contacts['F-03'].ammo[weapon]=0;},reason:/ammunition/},
+    {change:c=>c.combat.hostiles=['F-03'],reason:/not accepting/},
+    {change:c=>{c.range=200;Object.assign(c.sector.contacts.find(s=>s.id==='F-03'),{x:-199,y:0,z:0});Object.assign(c.sector.contacts.find(s=>s.id==='E-04'),{x:199,y:0,z:0});c.contacts=observeSector(c.sector);},reason:/weapons range/}
+  ];
+  for(const {change,reason} of cases){
+    const {state,context}=setup();context.lockedTargetIds=['E-04'];change(context);
+    const result=sendCommunication(state,context,'ship:0:F-03','attack-targets');
+    assert.equal(result.ok,true);assert.equal(result.accepted,false);assert.match(result.response,reason);
+    assert.deepEqual(context.combat.alliedOrders,{});assert.equal(context.sector.running,false);
+  }
+});
+
+test('offline, out-of-range, and transit links cannot issue allied orders',()=>{
+  for(const change of [c=>c.combat.own.systems.communications.hp=0,c=>c.combat.contacts['F-03'].systems.communications.hp=0,c=>c.range=10,c=>c.inTransit=true]){
+    const {state,context}=setup();context.lockedTargetIds=['E-04'];change(context);const before=state.messages.length;
+    assert.equal(sendCommunication(state,context,'ship:0:F-03','attack-targets').ok,false);
+    assert.equal(state.messages.length,before);assert.deepEqual(context.combat.alliedOrders,{});
+  }
+});
+
+test('stand down stops allied firing orders while leaving existing shots in flight',()=>{
+  const {state,context}=setup();context.lockedTargetIds=['E-04'];
+  sendCommunication(state,context,'ship:0:F-03','attack-targets');stepCombat(context.combat,context.sector,.05,()=>0);
+  const shots=structuredClone(context.combat.shots),ammo={...context.combat.contacts['F-03'].ammo};
+  assert.equal(sendCommunication(state,context,'ship:0:F-03','stand-down').accepted,true);
+  assert.deepEqual(context.combat.alliedOrders,{});assert.deepEqual(context.combat.shots,shots);
+  stepCombat(context.combat,context.sector,.05,()=>0);assert.deepEqual(context.combat.contacts['F-03'].ammo,ammo);
+});
+
+test('allied orders survive saves, reject unsafe assignments, and clear on encounter changes',()=>{
+  const {state,context}=setup();context.lockedTargetIds=['E-04'];sendCommunication(state,context,'ship:0:F-03','attack-targets');
+  stepCombat(context.combat,context.sector,.05,()=>0);
+  const saved=JSON.parse(JSON.stringify(context.combat)),restored=restoreCombat(saved,context.sector.contacts);
+  assert.deepEqual(restored.alliedOrders,context.combat.alliedOrders);assert.deepEqual(restored.shots,context.combat.shots);
+  for(const change of [s=>s.alliedOrders['F-03'].targetIds=['N-02'],s=>s.alliedOrders['F-03'].targetIds=['E-04','E-04'],s=>s.alliedOrders['F-03'].mode='invalid',s=>s.alliedOrders['E-04']=s.alliedOrders['F-03']]){
+    const bad=structuredClone(saved);change(bad);assert.throws(()=>restoreCombat(bad,context.sector.contacts),/combat data/);
+  }
+  delete saved.alliedOrders;assert.deepEqual(restoreCombat(saved,context.sector.contacts).alliedOrders,{});
+  changeEncounter(context.combat,context.sector.contacts);assert.deepEqual(context.combat.alliedOrders,{});
+});
+
+test('surrender and critical damage end allied support against that target',()=>{
+  const {state,context}=setup();context.lockedTargetIds=['E-04'];sendCommunication(state,context,'ship:0:F-03','attack-targets');
+  context.combat.contacts['E-04'].systems.hull.hp=100;
+  assert.equal(sendCommunication(state,context,'ship:0:E-04','surrender').ok,true);assert.deepEqual(context.combat.alliedOrders,{});
+  context.combat.contacts['E-04'].surrendered=false;sendCommunication(state,context,'ship:0:F-03','attack-targets');
+  context.combat.contacts['F-03'].breach=true;stepCombat(context.combat,context.sector,.05,()=>0);assert.deepEqual(context.combat.alliedOrders,{});
 });

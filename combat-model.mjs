@@ -100,11 +100,11 @@ export function createDamageShip(classId,player=false){
 }
 export function createCombat(contacts=trainingContacts){
   return {time:0,own:createDamageShip('sdf-frigate',true),contacts:Object.fromEntries(contacts.map(c=>[c.id,createDamageShip(c.shipType)])),
-    shots:[],nextShot:1,firing:null,hostiles:[],docked:false,service:null,log:['Weapons safed · select a weapon and aim system before firing.']};
+    shots:[],nextShot:1,firing:null,hostiles:[],alliedOrders:{},docked:false,service:null,log:['Weapons safed · select a weapon and aim system before firing.']};
 }
 export function changeEncounter(combat,contacts){
   combat.contacts=Object.fromEntries(contacts.map(c=>[c.id,createDamageShip(c.shipType)]));
-  combat.engagement=null;combat.shots=[];combat.firing=null;combat.hostiles=[];combat.docked=false;combat.service=null;
+  combat.engagement=null;combat.shots=[];combat.firing=null;combat.hostiles=[];combat.alliedOrders={};combat.docked=false;combat.service=null;
   combat.own.jobs=combat.own.jobs.filter(j=>!j.station);
 }
 export function condition(system){const ratio=system.hp/system.max;return ratio>.7?1:ratio>=.4?.7:ratio>0?.35:0;}
@@ -233,6 +233,37 @@ export function orderEngagement(combat,sector,objective,targetIds){
   combat.engagement={objective,targetIds:[...new Set(targetIds)],overrides:[]};
   planEngagement(combat,sector);
   return {ok:true,message:`Automatic ${objective} order active · manual weapon commands override individual mounts.`};
+}
+export function orderAlliedSupport(combat,sector,id,mode,targetIds){
+  const contact=sector.contacts.find(c=>c.id===id),ship=combat.contacts[id];
+  const refuse=message=>({accepted:false,message});
+  if(contact?.type!=='friendly'||!ship?.classId.startsWith('sdf-'))return refuse('Only friendly SDF ships can receive these commands.');
+  if(combat.hostiles.includes(id)||ship.surrendered)return refuse('Request refused. We are not accepting your combat orders.');
+  if(mode==='stand-down'){delete combat.alliedOrders[id];return {accepted:true,message:'Acknowledged. Standing down from your support order. Weapons already in flight cannot be recalled.'};}
+  if(!['attack-targets','battle-assistance'].includes(mode))return refuse('Unrecognized support order.');
+  if(!alive(ship)||ship.systems.hull.hp/ship.systems.hull.max<=.4||ship.fire||ship.breach)return refuse('Unable to comply. We must prioritize our own damage control.');
+  if(ship.systems.bridge.hp<=0||shipPerformance(ship).power<=0||shipPerformance(ship).sensors<=0)return refuse('Unable to comply. Our bridge, power, or fire control is offline.');
+  const targets=[...new Set(targetIds)].filter(targetId=>targetId!==id&&sector.contacts.some(c=>c.id===targetId&&c.type==='enemy')&&alive(combat.contacts[targetId])&&!combat.contacts[targetId].surrendered);
+  if(!targets.length)return refuse(mode==='attack-targets'?'Unable to comply. Send a live, identified hostile target lock; we will not attack friendly, neutral, or unidentified ships.':'No confirmed hostile threat is available for battle assistance.');
+  const canEngage=targets.some(targetId=>ship.mounts.some(m=>m.weapon!=='ciws-30'&&!canFire(combat,sector,id,m.id,targetId,m.weapon==='mp-missiles'?'engines':'hull',{ignoreCooldown:true})));
+  if(!canEngage)return refuse('Unable to comply. The requested targets are beyond our working weapons range, or our weapons and ammunition are unavailable.');
+  combat.alliedOrders[id]={mode,targetIds:targets};
+  return {accepted:true,message:`Acknowledged. ${mode==='attack-targets'?'Engaging your transmitted targets in priority order':'Providing fire support against the confirmed battle threats'}. We will fire within weapons range and maintain our present course.`};
+}
+function alliedSupport(combat,sector,rng){
+  for(const [id,order] of Object.entries(combat.alliedOrders)){
+    const ship=combat.contacts[id];
+    if(!alive(ship)||ship.surrendered||combat.hostiles.includes(id)||ship.systems.hull.hp/ship.systems.hull.max<=.4||ship.fire||ship.breach||ship.systems.bridge.hp<=0||shipPerformance(ship).power<=0){delete combat.alliedOrders[id];continue;}
+    order.targetIds=order.targetIds.filter(targetId=>alive(combat.contacts[targetId])&&!combat.contacts[targetId].surrendered);
+    if(!order.targetIds.length){delete combat.alliedOrders[id];continue;}
+    for(const mount of ship.mounts){
+      if(mount.weapon==='ciws-30')continue;
+      for(const targetId of order.targetIds){
+        const component=mount.weapon==='mp-missiles'?'engines':'hull';
+        if(!canFire(combat,sector,id,mount.id,targetId,component)){fireWeapon(combat,sector,id,mount.id,targetId,component,rng);break;}
+      }
+    }
+  }
 }
 function engagementAims(combat,id,objective){
   const ship=combat.contacts[id];
@@ -397,12 +428,16 @@ export function stepCombat(combat,sector,seconds,rng=Math.random){
     if(!error)fireWeapon(combat,sector,'own',f.mountId,f.targetId,f.component,rng);
     else if(error!=='Weapon is reloading.'){ceaseFiring(combat,[f.mountId]);log(combat,`${f.mountId} fire order stopped: ${error}`);}
   }
-  for(const id of combat.hostiles){
-    const ship=vessel(combat,id),source=position(sector,id);if(!alive(ship)||!source||!alive(combat.own))continue;
-    const mount=ship.mounts.find(m=>m.weapon!=='ciws-30'&&!canFire(combat,sector,id,m.id,'own',m.weapon==='mp-missiles'?'engines':'hull'));
-    if(mount)fireWeapon(combat,sector,id,mount.id,'own',mount.weapon==='mp-missiles'?'engines':mount.weapon==='as-missiles'?'hull':['weapons','engines','hull'][Math.floor(rng()*3)],rng);
+  alliedSupport(combat,sector,rng);
+  const opponents=new Set([...combat.hostiles,...Object.values(combat.alliedOrders).flatMap(order=>order.targetIds)]);
+  for(const id of opponents){
+    const ship=vessel(combat,id),source=position(sector,id);if(!alive(ship)||!source)continue;
+    const targetId=combat.hostiles.includes(id)&&alive(combat.own)?'own':Object.keys(combat.alliedOrders).find(allyId=>combat.alliedOrders[allyId].targetIds.includes(id)&&alive(combat.contacts[allyId]));
+    if(!targetId)continue;
+    const mount=ship.mounts.find(m=>m.weapon!=='ciws-30'&&!canFire(combat,sector,id,m.id,targetId,m.weapon==='mp-missiles'?'engines':'hull'));
+    if(mount)fireWeapon(combat,sector,id,mount.id,targetId,mount.weapon==='mp-missiles'?'engines':mount.weapon==='as-missiles'?'hull':['weapons','engines','hull'][Math.floor(rng()*3)],rng);
   }
-  autoCIWS(combat,sector,'own',rng);for(const id of combat.hostiles)autoCIWS(combat,sector,id,rng);
+  autoCIWS(combat,sector,'own',rng);for(const id of new Set([...opponents,...Object.keys(combat.alliedOrders)]))autoCIWS(combat,sector,id,rng);
   resolveShots(combat,sector,seconds);
   for(const ship of Object.values(combat.contacts))emergencyStep(ship,seconds);
   advanceMaintenance(combat,seconds);
