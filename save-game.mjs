@@ -1,6 +1,6 @@
 import { EDGE_AU } from './navigation.mjs';
 import { restoreBridgeState } from './bridge-model.mjs';
-import { createSector } from './sector-model.mjs';
+import { createSector, LOCAL_SIMULATION_RATES } from './sector-model.mjs';
 import { trainingContacts, observeContact, restoreTargetPriorities } from './tactical-model.mjs';
 import { createCombat,stationSupport } from './combat-model.mjs';
 import { restoreCombat } from './combat-save.mjs';
@@ -43,7 +43,7 @@ function localSector(value,location,pause){
   const result=createSector([],location);
   result.time=number(value.time,'local time',0);
   const running=boolean(value.running,'local simulation state');result.running=pause?false:running;
-  result.rate=choice(value.rate,[1,10,60],'local simulation speed');
+  result.rate=choice(value.rate,LOCAL_SIMULATION_RATES,'local simulation speed');
   result.own={...vector(value.own,'local ship position'),...vector(value.own,'local ship velocity',speeds,7200)};
   requireValue(Math.hypot(...speeds.map(k=>result.own[k]))<=7200.001,'Ship velocity exceeds the Vector Drive limit.');
   result.facing=vector(value.facing,'bow direction',axes,1);

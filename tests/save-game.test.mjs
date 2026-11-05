@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createSave, parseSave, MAX_SAVE_BYTES } from '../save-game.mjs';
 import { createSector, observeSector, issueManeuver, setManualHelm, addPatrolWaypoint, startPatrol, stepSector } from '../sector-model.mjs';
 import { restoreBridgeState } from '../bridge-model.mjs';
-import { createCombat,orderAlliedSupport,requestSupportShip,stepCombat } from '../combat-model.mjs';
+import { createCombat,orderAlliedSupport,requestSupportShip,stepCombat,orderEngagement } from '../combat-model.mjs';
 
 function game(){
   const sector=createSector();observeSector(sector);
@@ -20,6 +20,27 @@ test('JSON save preserves strategic progress, bridge settings, selection, logs, 
   assert.deepEqual(saved.navigation,original.navigation);assert.deepEqual(saved.bridge.settings,original.bridge.settings);
   assert.deepEqual(saved.selection,original.selection);assert.deepEqual(saved.logs,original.logs);
   assert.deepEqual(saved.bridge.tactical,original.bridge.tactical);assert.deepEqual(original,before);
+});
+
+test('half and three-quarter local speeds survive saves while unsupported rates are rejected',()=>{
+  for(const rate of [.5,.75]){
+    const original=game();original.bridge.sector.rate=rate;original.bridge.sector.running=true;
+    const loaded=roundTrip(original);
+    assert.equal(loaded.bridge.sector.rate,rate);
+    assert.equal(loaded.bridge.sector.running,false);
+  }
+  for(const rate of [0,.25,.6,-.5,'0.5']){
+    const saved=createSave(game());saved.bridge.sector.rate=rate;
+    assert.throws(()=>parseSave(JSON.stringify(saved)),/local simulation speed/);
+  }
+});
+
+test('Engage orders and their priority list survive a portable save',()=>{
+  const original=game();original.bridge.combat=createCombat(original.bridge.sector.contacts);
+  assert.equal(orderEngagement(original.bridge.combat,original.bridge.sector,'engage',['E-04','E-06']).ok,true);
+  const loaded=roundTrip(original);
+  assert.deepEqual(loaded.bridge.combat.engagement,original.bridge.combat.engagement);
+  assert.deepEqual(loaded.bridge.combat.firing,original.bridge.combat.firing);
 });
 
 test('hard-turn bow and suspended target tracking survive a JSON save',()=>{

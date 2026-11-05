@@ -1,5 +1,6 @@
 import { armamentTypes } from './tactical-model.mjs';
 import {playerShipName} from './ship-names.mjs';
+import { LOCAL_SIMULATION_RATES } from './sector-model.mjs';
 import { weapons,weaponAimOptions,aimPointState,nextAimPoint,canFire,condition,stationSupport,radarEmitting,jammerEmitting,supportStatus,missileVolleySizes,cannonBurstSizes,trackingSolution,burnThroughError,radarBurnThrough } from './combat-model.mjs';
 const el=(tag,cls,text)=>{const n=document.createElement(tag);n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 const button=(text,fn)=>{const n=el('button','bridge-action',text);n.type='button';n.onclick=fn;return n;};
@@ -30,6 +31,9 @@ export function mountWeaponsConsole({flight}){
   let target=null,lockedTargets=[],combatState=null;
   const own=()=>flight.combat.own;
   const rows=new Map(),list=el('fieldset','weapon-mount-list');list.append(el('legend','','WEAPONS · SELECT ONE OR MORE'));
+  const mountColumns=el('div','weapon-mount-columns'),leftMounts=el('section','weapon-mount-column'),rightMounts=el('section','weapon-mount-column');
+  leftMounts.setAttribute('aria-label','Autocannons and MP missiles');rightMounts.setAttribute('aria-label','AS missiles and CIWS');
+  mountColumns.append(leftMounts,rightMounts);list.append(mountColumns);
   function syncOptions(input,choices){
     if(input.options.length===choices.length&&choices.every(([value,name],i)=>input.options[i].value===value&&input.options[i].textContent===name))return;
     const previous=input.value;input.replaceChildren(...choices.map(([value,name])=>Object.assign(el('option','',name),{value})));
@@ -43,7 +47,7 @@ export function mountWeaponsConsole({flight}){
     const summary=el('summary','','Targeting');details.append(summary);
     const assigned=select(`Target · ${name}`,[],()=>refresh()),component=select(`Aim at system · ${name}`,weaponAimOptions(m.weapon),()=>refresh()),threat=select(`AA missile target · ${name}`,[],()=>refresh());
     assigned.wrap.firstElementChild.textContent='Target';component.wrap.firstElementChild.textContent='Aim at system';threat.wrap.firstElementChild.textContent='AA missile target';
-    const protection=el('p','combat-note aim-protection-note'),info=el('p','combat-note');details.append(assigned.wrap,component.wrap,protection,threat.wrap,info);row.append(label,status,details);list.append(row);
+    const protection=el('p','combat-note aim-protection-note'),info=el('p','combat-note');details.append(assigned.wrap,component.wrap,protection,threat.wrap,info);row.append(label,status,details);(['as-missiles','ciws-30'].includes(m.weapon)?rightMounts:leftMounts).append(row);
     const singleActions=el('div','combat-actions combat-fire-actions weapon-single-actions');
     const singleFire=weaponActionIcon(false,name,()=>fireMount(rows.get(m.id))),singleContinuous=weaponActionIcon(true,name,()=>fireMount(rows.get(m.id),true));
     singleActions.append(singleFire,singleContinuous);const mountHeading=el('div','weapon-mount-heading');mountHeading.append(label,singleActions);row.prepend(mountHeading);
@@ -74,27 +78,29 @@ export function mountWeaponsConsole({flight}){
   const ewControls=el('div','combat-actions');ewControls.append(jammer,burn);
   const fire=actionIcon('Fire',()=>flight.fire(orders()),fireIconPath);
   const continuous=actionIcon('Start Firing',()=>flight.startFire(orders()),repeatIconPath);
-  const ceaseAll=actionIcon('Cease All Fire',ceaseAllWeapons,'M8 3h13v13M3 8h13v13H3zM6 11l7 7M13 11l-7 7');
+  const ceaseAll=actionIcon('Cease Fire',ceaseAllWeapons,'M8 3h13v13M3 8h13v13H3zM6 11l7 7M13 11l-7 7');
+  const selectAll=actionIcon('Select all',()=>{for(const row of rows.values())row.check.checked=true;refresh();},'M8 3h13v13M3 8h13v13H3zM6 14l3 3 4-5');
   const clock=button('',()=>flight.toggle());
-  const speed=select('Combat / local simulation speed',[[1,'1×'],[10,'10×'],[60,'60×']],value=>flight.setRate(Number(value)));
-  const actions=el('div','combat-actions combat-fire-actions weapon-command-actions');actions.append(fire,continuous,ceaseAll);
+  const speed=select('Combat / local simulation speed',LOCAL_SIMULATION_RATES.map(value=>[value,`${value}×`]),value=>flight.setRate(Number(value)));
+  const actions=el('div','combat-actions combat-fire-actions weapon-command-actions');actions.append(fire,continuous,ceaseAll,selectAll);
   const commandBar=el('div','weapon-command-bar');commandBar.append(readiness,actions,clock);
-  const selection=el('div','weapon-selection-actions');selection.append(button('Select all',()=>{for(const row of rows.values())row.check.checked=true;refresh();}),button('Clear selection',ceaseAllWeapons));
   const emitters=el('div','combat-actions');emitters.append(radar,ciws);
   const events=el('ol','combat-events');events.setAttribute('aria-label','Combat events');
   const targetDetails=el('section','target-combat-details');targetDetails.setAttribute('aria-label','Target combat status');targetDetails.append(targetStatus,targetSystems);
-  const settings=el('details','combat-settings');settings.append(el('summary','','Combat settings'),emitters,speed.wrap,events);
+  const defense=el('section','weapons-control');defense.setAttribute('aria-label','Electronic warfare and defenses');
+  defense.append(el('h4','','ELECTRONIC WARFARE / DEFENSE'),emitters,ewControls,ewStatus);
+  const settings=el('details','combat-settings');settings.open=true;settings.append(el('summary','','Combat settings'),speed.wrap,events);
   const objectives=el('div','combat-actions');
   const objectiveStatus=el('p','combat-note');objectiveStatus.setAttribute('role','status');
-  const engage=objective=>{flight.engageTargets(objective,lockedTargets.map(contact=>contact.id));refresh();};
-  objectives.append(button('Disable ships',()=>engage('disable')),button('Destroy ships',()=>engage('destroy')));
+  const engage=()=>{flight.engageTargets('engage',lockedTargets.map(contact=>contact.id));refresh();};
+  objectives.append(button('Engage ship(s)',engage));
   const volleyChoices=missileVolleySizes.map(size=>[size,String(size)]),burstChoices=cannonBurstSizes.map(size=>[size,String(size)]);
   const volley=select('Missile volley size',volleyChoices,value=>flight.setMissileVolley(Number(value)));
   const burst=select('Cannon burst size',burstChoices,value=>flight.setCannonBurst(Number(value)));
   burst.input.title='Total autocannon shells per mount, fired one at a time. Tactical repeats after a short pause.';
   const salvoSettings=el('div','weapon-salvo-settings');salvoSettings.append(volley.wrap,burst.wrap);
   const volleyNote=el('p','combat-note','Missiles per launcher · cannon shells per mount, one at a time. Fire stops at the count; Tactical pauses and repeats.');
-  root.append(ownStatus,objectives,objectiveStatus,salvoSettings,ewControls,ewStatus,volleyNote,commandBar,selection,list);
+  root.append(ownStatus,objectives,objectiveStatus,salvoSettings,volleyNote,commandBar,list);
   const quick=el('section','radar-fire-popup');quick.popover='auto';quick.setAttribute('role','dialog');quick.setAttribute('aria-labelledby','quick-fire-title');
   const quickHeader=el('header','quick-fire-heading'),quickTitle=el('h3','');quickTitle.id='quick-fire-title';
   const closeQuick=button('×',()=>closeQuickFire());closeQuick.setAttribute('aria-label','Close quick fire control');quickHeader.append(quickTitle,closeQuick);
@@ -116,7 +122,7 @@ export function mountWeaponsConsole({flight}){
   const quickBurst=select('Quick cannon burst size',burstChoices,value=>flight.setCannonBurst(Number(value)));
   const quickSalvoSettings=el('div','weapon-salvo-settings');quickSalvoSettings.append(quickVolley.wrap,quickBurst.wrap);
   const quickBurn=button('Radar burn-through',()=>flight.burnThrough());quickBurn.setAttribute('aria-label','Quick radar burn-through');quickBurn.title=burn.title;
-  const quickFooter=el('footer','quick-fire-footer');quickFooter.append(quickStatus,quickCeaseAll);const quickObjectives=el('div','combat-actions');quickObjectives.append(button('Disable ships',()=>engage('disable')),button('Destroy ships',()=>engage('destroy')),quickBurn);quick.append(quickHeader,quickObjectives,quickSalvoSettings,quickList,quickFooter);document.body.append(quick);
+  const quickFooter=el('footer','quick-fire-footer');quickFooter.append(quickStatus,quickCeaseAll);const quickObjectives=el('div','combat-actions');quickObjectives.append(button('Engage ship(s)',engage),quickBurn);quick.append(quickHeader,quickObjectives,quickSalvoSettings,quickList,quickFooter);document.body.append(quick);
   quick.oncontextmenu=event=>event.preventDefault();
   function closeQuickFire(){if(quick.matches(':popover-open'))quick.hidePopover();quickTargetId=null;quickAnchor=null;}
   function positionQuickFire(){
@@ -151,7 +157,7 @@ export function mountWeaponsConsole({flight}){
     }
     volley.input.value=quickVolley.input.value=String(c.missileVolleySize);
     burst.input.value=quickBurst.input.value=String(c.cannonBurstSize);
-    objectiveStatus.textContent=c.engagement?'Automatic '+c.engagement.objective+' · CIWS → radar jammer → objective · '+c.missileVolleySize+' missile'+(c.missileVolleySize===1?'':'s')+' per launch · '+c.cannonBurstSize+'-round cannon bursts with pauses · '+c.engagement.overrides.length+' manual overrides. Guns need to be in range.':'Choose an objective for locked targets in priority order, or select weapons manually.';
+    objectiveStatus.textContent=c.engagement?'Automatic engagement · CIWS → radar jammer → offensive weapons · '+c.missileVolleySize+' missile'+(c.missileVolleySize===1?'':'s')+' per launch · '+c.cannonBurstSize+'-round cannon bursts with pauses · '+c.engagement.overrides.length+' manual overrides. Fire stops on surrender or when a ship can no longer fight.':'Engage locked ships in priority order, or select weapons manually. Fire stops on surrender or when a ship can no longer fight.';
     for(const group of [objectives,quickObjectives])for(const button of group.children)button.disabled=!lockedTargets.length;
     let ready=0,queueable=0;
     for(const row of rows.values()){
@@ -221,14 +227,14 @@ export function mountWeaponsConsole({flight}){
       positionQuickFire();
     }
   }
-  return {root,settings,targetDetails,refresh,openQuickFire,closeQuickFire,isQuickFireOpen:()=>quick.matches(':popover-open')};
+  return {root,defense,settings,targetDetails,refresh,openQuickFire,closeQuickFire,isQuickFireOpen:()=>quick.matches(':popover-open')};
 }
 
 export function mountDamageConsole({root,flight}){
   root.className='damage-console';root.setAttribute('aria-label','Engineering damage control');
   const heading=el('header','damage-heading');heading.append(el('span','tactical-eyebrow','ENGINEERING / DAMAGE CONTROL'));
   const summary=el('p','combat-readout'),status=el('p','combat-note');status.setAttribute('role','status');
-  const clock=button('',()=>flight.toggle()),rate=select('Repair / local simulation speed',[[1,'1×'],[10,'10×'],[60,'60×']],value=>flight.setRate(Number(value)));
+  const clock=button('',()=>flight.toggle()),rate=select('Repair / local simulation speed',LOCAL_SIMULATION_RATES.map(value=>[value,`${value}×`]),value=>flight.setRate(Number(value)));
   const toolbar=el('div','combat-actions');toolbar.append(clock,rate.wrap,button('Cease all fire',()=>flight.ceaseFire()));
   const automatic=button('',()=>flight.automaticRepairs(!flight.combat.own.autoRepair));
   automatic.setAttribute('aria-label','Automatic repairs');toolbar.prepend(automatic);

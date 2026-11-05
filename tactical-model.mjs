@@ -33,7 +33,8 @@ export const shipFiveViews = {
   'sdf-frigate': 'images/sdf-frigate-five-view.png',
   'sdf-destroyer': 'images/sdf-destroyer-five-view.png',
   'sdf-cruiser': 'images/sdf-cruiser-five-view.png',
-  'sdf-heavy-cruiser': 'images/sdf-heavy-cruiser-five-view.png'
+  'sdf-heavy-cruiser': 'images/sdf-heavy-cruiser-five-view.png',
+  'spf-logistics-tender': 'images/spf-logistics-tender-five-view.png'
 };
 export const contactTypes = {
   unknown: { label: 'Unknown', color: '#f1cf62', shape: 'diamond' },
@@ -136,6 +137,16 @@ export const shipTypes = {
       'ciws-30':{quantity:4,port:2,starboard:2,location:'Port and starboard · 2 per side'}
     },
     countermeasures:['chaff','flares'],hangar:{bays:1,shuttles:4}
+  },
+  'spf-logistics-tender': {
+    label:'SPF LOGISTICS TENDER',faction:'SPF',role:'Repair / resupply tender',engines:'2 main engines · drive model and EPD rating not specified',
+    loadout:['autocannon-120','mp-missiles','ciws-30'],fitConfirmed:true,
+    fitting:{
+      'autocannon-120':{quantity:1,turrets:1,gunsPerTurret:1,configuration:'1 forward turret · 1 autocannon'},
+      'mp-missiles':{quantity:20,location:'Ventral / bottom · vertical launch tubes'},
+      'ciws-30':{quantity:2,port:1,starboard:1,location:'Port and starboard · 1 per side'}
+    },
+    hangar:{bays:1,repairShuttles:6,launchLanes:{aft:2,port:2,starboard:2}}
   }
 };
 for (const [id,ship] of Object.entries(shipTypes)) {
@@ -149,7 +160,8 @@ const shipSizes = {
   'une-cargo': 'Large', 'une-light-cargo': 'Small', privateer: 'Medium',
   'private-yacht': 'Small', 'une-transport': 'Medium', 'une-large-transport': 'Large',
   'pirate-frigate': 'Medium', 'pirate-corvette': 'Small', 'sdf-frigate': 'Medium',
-  'sdf-destroyer': 'Large', 'sdf-cruiser': 'Very large', 'sdf-heavy-cruiser': 'Heavy'
+  'sdf-destroyer': 'Large', 'sdf-cruiser': 'Very large', 'sdf-heavy-cruiser': 'Heavy',
+  'spf-logistics-tender': 'Large'
 };
 
 // Ship-relative training snapshot: positions in km, relative velocity components in km/h.

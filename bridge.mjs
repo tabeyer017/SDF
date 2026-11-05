@@ -1,6 +1,6 @@
 import { bridgeStations, bridgeAreas, bridgeAreaFor, canonicalBridgeStation, marineComplements, restoreBridgeState } from './bridge-model.mjs';
 import { mountTactical } from './tactical.mjs';
-import { createSector, createEncounterSector, observeSector, issueManeuver, setManualHelm, coast, brake, addPatrolWaypoint, startPatrol, stepSector } from './sector-model.mjs';
+import { createSector, createEncounterSector, observeSector, issueManeuver, setManualHelm, coast, brake, addPatrolWaypoint, startPatrol, stepSector, LOCAL_SIMULATION_RATES } from './sector-model.mjs';
 import { applyEncounterEvent } from './encounter-model.mjs';
 import { mountSectorConsole } from './sector-console.mjs';
 import { createCombat,changeEncounter,shipPerformance,orderEngagement,commandWeapons,ceaseFiring,queueRepair,scheduleRepairs,setAutomaticRepairs,cancelRepair,containEmergency,dock,requestService,stepCombat,advanceMaintenance,cancelSupportShip,missileVolleySizes,cannonBurstSizes,syncElectronicTracking,setJammerMode,requestRadarBurnThrough,refreshMissileGuidance } from './combat-model.mjs';
@@ -58,7 +58,7 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLo
     patrol:()=>operate(()=>!combat.docked&&combat.service?.provider!=='tender'&&syncPerformance().engines>0&&startPatrol(sector)),
     clearRoute:()=>operate(()=>{sector.route=[];if(sector.order?.mode==='patrol')coast(sector);sector.status='Patrol route cleared';return true;}),
     toggle:()=>operate(()=>{sector.running=!sector.running;sector.status=sector.running?'Local simulation running · current flight order resumed':'Local simulation paused · flight order retained';return true;}),
-    setRate:value=>{if([1,10,60].includes(value)){sector.rate=value;refresh();save();}},
+    setRate:value=>{if(LOCAL_SIMULATION_RATES.includes(value)){sector.rate=value;refresh();save();}},
     toggleEmitter:key=>{if(['radar','ciwsAuto'].includes(key)){combat.own[key]=!combat.own[key];if(key==='radar'&&!combat.own.radar)combat.own.burnThroughUntil=0;syncPerformance();refresh();save();}},
     cycleJammer:()=>{const modes=['auto','on','off'];setJammerMode(combat,sector,modes[(modes.indexOf(combat.own.jammerMode)+1)%modes.length]);syncPerformance();refresh();save();},
     burnThrough:()=>combatAction(()=>requestRadarBurnThrough(combat)),

@@ -69,7 +69,8 @@ export const damageClasses={
   'une-cargo':[1200,160,2,.1,2],'une-transport':[900,120,2,.1,2],'une-large-transport':[1800,250,3,.15,4],
   privateer:[850,120,2,.2,2],'pirate-corvette':[550,60,1,.18,2],'pirate-frigate':[900,100,2,.25,2],
   'sdf-frigate':[1000,200,2,.3,2],'sdf-destroyer':[1500,300,3,.35,2],
-  'sdf-cruiser':[2400,500,4,.4,2],'sdf-heavy-cruiser':[3600,750,5,.45,3]
+  'sdf-cruiser':[2400,500,4,.4,2],'sdf-heavy-cruiser':[3600,750,5,.45,3],
+  'spf-logistics-tender':[1200,400,4,.15,2]
 };
 export const systemNames={hull:'Hull / structure',bridge:'Bridge',reactor:'Fusion reactor',power:'Power distribution',epd:'EPD',sensors:'Sensors / fire control',communications:'Communications','life-support':'Life support',jammer:'Radar jammer'};
 const baseSystems={bridge:100,reactor:200,power:150,epd:160,sensors:80,communications:60,'life-support':140,jammer:60};
@@ -349,12 +350,14 @@ export function commandWeapons(combat,sector,orders,continuous=false,rng=Math.ra
   return {ok:count>0,results,message:`${count} weapon${count===1?'':'s'} ${continuous?'ordered to fire':'fired'}${skipped.length?` · ${skipped.length} skipped: ${skipped.map(result=>`${result.mountId}: ${result.message}`).join('; ')}`:''}.`};
 }
 export function orderEngagement(combat,sector,objective,targetIds){
-  if(!['disable','destroy'].includes(objective)||!targetIds.length)return {ok:false,message:'Lock targets and set priorities first.'};
+  // Older objective IDs remain valid for saved patrols.
+  if(!['engage','disable','destroy'].includes(objective)||!targetIds.length)return {ok:false,message:'Lock targets and set priorities first.'};
+  if(objective==='engage'&&!targetIds.some(id=>engagementAims(combat,id,objective).length))return {ok:false,message:'Selected ships have surrendered or have no remaining offensive capability.'};
   ceaseFiring(combat);
   combat.engagement={objective,targetIds:[...new Set(targetIds)],overrides:[]};
   updateElectronicWarfare(combat,sector);
   planEngagement(combat,sector);
-  return {ok:true,message:`Automatic ${objective} order active · manual weapon commands override individual mounts.`};
+  return {ok:true,message:objective==='engage'?'Engaging ships in priority order · stop on surrender or loss of offensive capability.':`Automatic ${objective} order active · manual weapon commands override individual mounts.`};
 }
 export function orderAlliedSupport(combat,sector,id,mode,targetIds){
   const contact=sector.contacts.find(c=>c.id===id),ship=combat.contacts[id];
@@ -390,6 +393,7 @@ function alliedSupport(combat,sector,rng){
 function engagementAims(combat,id,objective){
   const ship=combat.contacts[id];
   if(!ship||ship.surrendered)return [];
+  if(objective==='engage')return offensiveReadiness(ship).power>0?['weapons','engines','hull'].filter(aim=>aimPointState(ship,aim).available):[];
   if(objective==='disable')return ship.systems.hull.hp<=0?[]:['engines','weapons'].filter(aim=>aimPointState(ship,aim).available);
   return ['hull','reactor','power','engines','weapons','sensors','jammer','epd','bridge','communications','life-support'].filter(aim=>aimPointState(ship,aim).available);
 }
@@ -480,6 +484,13 @@ function suppressionAims(ship,weapon){
 }
 function planEngagement(combat,sector){
   const order=combat.engagement;if(!order)return;
+  if(order.objective==='engage'){
+    for(const id of [...order.targetIds])if(!engagementAims(combat,id,'engage').length){
+      standDownAgainst(combat,id);
+      log(combat,`${id}: engagement ended · surrendered or no remaining offensive capability.`);
+    }
+    if(!combat.engagement)return;
+  }
   const manual=(combat.firing||[]).filter(f=>order.overrides.includes(f.mountId));
   const automatic=[];
   for(const mount of combat.own.mounts){
@@ -742,6 +753,8 @@ export function stepCombat(combat,sector,seconds,rng=Math.random){
   advanceSupportShip(combat,sector,seconds);
   advanceMaintenance(combat,seconds);
   updateEnemyResolve(combat,sector);
+  // End orders and unfinished bursts as soon as this step's impacts remove a threat.
+  if(combat.engagement?.objective==='engage')planEngagement(combat,sector);
   syncElectronicTracking(combat,sector);
   updateRetreatReports(combat,sector);
 }

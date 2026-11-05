@@ -2,6 +2,7 @@ import { trainingContacts, observeContact, contactDistance, contactClosureRate }
 import { generateEncounter } from './encounter-model.mjs';
 
 export const SENSOR_RANGE = 200;
+export const LOCAL_SIMULATION_RATES = [.5,.75,1,10,60];
 export const VECTOR_LIMIT = 7200; // Provisional Vector Drive performance, KPH.
 export const VECTOR_ACCELERATION = 120; // KPH gained per simulated second.
 export const HARD_TURN_DEGREES = 40;

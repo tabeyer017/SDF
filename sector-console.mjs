@@ -1,6 +1,6 @@
 import { contactTypes } from './tactical-model.mjs';
 import {playerShipName} from './ship-names.mjs';
-import { maneuverNames, maneuverTelemetry, predictedPath, sectorHazards, SENSOR_RANGE, isHardTurn } from './sector-model.mjs';
+import { maneuverNames, maneuverTelemetry, predictedPath, sectorHazards, SENSOR_RANGE, isHardTurn, LOCAL_SIMULATION_RATES } from './sector-model.mjs';
 import { flightControlState } from './bridge-model.mjs';
 import { sectorBodies, planetaryOverview } from './sector-bodies.mjs';
 
@@ -49,7 +49,7 @@ export function mountSectorConsole({root,flight,openSystem,strategic}) {
   const caption=el('p','sector-map-caption','Click chart to append a waypoint · fixed sector axes · Z can be set below');mapArea.append(chart,caption);
   const side=el('aside','sector-controls');side.setAttribute('aria-label','Local flight controls');
   const status=el('p','sector-status');status.setAttribute('role','status');const readout=el('p','sector-readout'),safety=el('p','sector-safety');
-  const clock=el('div','sector-clock');const pause=button('Run local simulation',()=>{flight.toggle();refresh();});const rate=el('select','');rate.setAttribute('aria-label','Local simulation speed');for(const value of [1,10,60])rate.append(Object.assign(el('option','',`${value}× local time`),{value}));rate.onchange=()=>flight.setRate(Number(rate.value));clock.append(pause,rate);
+  const clock=el('div','sector-clock');const pause=button('Run local simulation',()=>{flight.toggle();refresh();});const rate=el('select','');rate.setAttribute('aria-label','Local simulation speed');for(const value of LOCAL_SIMULATION_RATES)rate.append(Object.assign(el('option','',`${value}× local time`),{value}));rate.onchange=()=>flight.setRate(Number(rate.value));clock.append(pause,rate);
   const nav=el('section','sector-navigation');nav.append(el('h3','','ROUTE PLANNING'),el('p','sector-help','Click the chart to add stops, then fly the route. Autopilot handles thrust and braking and stops if the known debris field blocks the course.'));
   const waypointForm=el('form','sector-waypoint-form');const x=field(waypointForm,'Waypoint X · km',0,-100000,100000,.1),y=field(waypointForm,'Waypoint Y · km',100,-100000,100000,.1),z=field(waypointForm,'Waypoint Z · km',0,-100000,100000,.1);
   const add=el('button','bridge-action','Add waypoint');add.type='submit';waypointForm.append(add);waypointForm.onsubmit=e=>{e.preventDefault();flight.add({x:Number(x.value),y:Number(y.value),z:Number(z.value)});refresh();};

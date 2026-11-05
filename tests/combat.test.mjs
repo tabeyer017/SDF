@@ -9,8 +9,8 @@ import { observeSector,issueManeuver } from '../sector-model.mjs';
 const setup=()=>({sector:createSector(),combat:createCombat()});
 function step(c,s,seconds,rng=()=>0){for(let t=0;t<seconds-1e-8;t+=.05)stepCombat(c,s,Math.min(.05,seconds-t),rng);}
 
-test('all twelve classes have individual systems, engines, mounts, finite parts and ammunition',()=>{
-  assert.equal(Object.keys(damageClasses).length,12);
+test('all library classes have individual systems, engines, mounts, finite parts and ammunition',()=>{
+  assert.deepEqual(Object.keys(damageClasses).sort(),Object.keys(shipTypes).sort());
   for(const [id,catalog] of Object.entries(shipTypes)){
     const ship=createDamageShip(id);assert.ok(ship.systems.hull.hp>0);assert.ok(ship.spares>0);
     assert.equal(Object.keys(ship.systems).filter(k=>k.startsWith('engine-')).length,damageClasses[id][4]);
@@ -18,6 +18,17 @@ test('all twelve classes have individual systems, engines, mounts, finite parts 
   }
   const heavy=createDamageShip('sdf-heavy-cruiser');assert.equal(heavy.mounts.filter(m=>m.weapon==='rail-gun').length,1);
   assert.equal(heavy.mounts.find(m=>m.weapon==='rail-gun').barrels,2);
+});
+
+test('logistics tender has the specified weapons, ammunition, engines and repair-shuttle launch layout',()=>{
+  const classId='spf-logistics-tender',catalog=shipTypes[classId],ship=createDamageShip(classId);
+  assert.equal(catalog.fitConfirmed,true);
+  assert.equal(ship.mounts.filter(m=>m.weapon==='ciws-30').length,2);
+  assert.equal(ship.mounts.filter(m=>m.weapon==='autocannon-120').length,1);
+  assert.equal(ship.ammo['mp-missiles'],20);
+  assert.match(catalog.fitting['mp-missiles'].location,/Ventral.*vertical launch/);
+  assert.equal(Object.keys(ship.systems).filter(id=>id.startsWith('engine-')).length,2);
+  assert.deepEqual(catalog.hangar,{bays:1,repairShuttles:6,launchLanes:{aft:2,port:2,starboard:2}});
 });
 
 test('rail-gun impacts retain full damage and ballistic velocity at close and long distance',()=>{

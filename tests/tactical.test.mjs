@@ -3,7 +3,50 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { radarRanges, rangeRings, projectContact, contactsInRange, projectVelocity, contactDistance, contactSpeed, contactClosureRate, armamentTypes, countermeasureTypes, shipTypes, shipFiveViews, trainingContacts, selectTargets, prioritizeTargets, restoreTargetPriorities, MAX_TARGET_PRIORITY, observeContact, IFF_RANGE_KM, IFF_IDENTIFICATION_CHANCE } from '../tactical-model.mjs';
 import { restoreBridgeState } from '../bridge-model.mjs';
-import { expandRadarRounds } from '../tactical.mjs';
+import { expandRadarRounds, radarDamageSummary, shipDamageSummary } from '../tactical.mjs';
+import { createDamageShip } from '../combat-model.mjs';
+
+test('our ship hover uses current integrity and updates after damage and repair',()=>{
+  const ship=createDamageShip('sdf-frigate',true);
+  ship.systems.hull.hp=800;ship.systems.sensors.hp=0;ship.systems['engine-1'].hp=0;
+  for(const mount of ship.mounts)ship.systems[mount.id].hp=ship.systems[mount.id].max/2;
+  assert.deepEqual(shipDamageSummary(ship),[
+    {label:'Hull',percent:80,status:'healthy'},
+    {label:'Weapons',percent:50,status:'damaged'},
+    {label:'Sensors',percent:0,status:'critical'},
+    {label:'Engines',percent:50,status:'damaged'}
+  ]);
+  for(const system of Object.values(ship.systems))system.hp=system.max;
+  assert.ok(shipDamageSummary(ship).every(row=>row.percent===100&&row.status==='healthy'));
+  assert.deepEqual(shipDamageSummary(undefined),[]);
+});
+
+test('enemy hover aggregates weapon and engine integrity by maximum points',()=>{
+  const ship=createDamageShip('sdf-frigate'),contact={type:'enemy',identified:true};
+  ship.systems.hull.hp=200;ship.systems.sensors.hp=32;
+  ship.systems['mp-missiles-1'].hp=0;
+  ship.systems['engine-1'].hp=0;ship.systems['engine-2'].max=240;ship.systems['engine-2'].hp=240;
+  assert.deepEqual(radarDamageSummary(contact,ship),[
+    {label:'Hull',percent:20,status:'critical'},
+    {label:'Weapons',percent:78,status:'healthy'},
+    {label:'Sensors',percent:40,status:'damaged'},
+    {label:'Engines',percent:67,status:'damaged'}
+  ]);
+});
+
+test('enemy hover uses the existing green, yellow and red condition thresholds',()=>{
+  const ship=createDamageShip('sdf-frigate'),contact={type:'enemy',identified:true};
+  for(const [percent,status] of [[100,'healthy'],[71,'healthy'],[70,'damaged'],[40,'damaged'],[39,'critical'],[0,'critical']]){
+    ship.systems.hull.hp=ship.systems.hull.max*percent/100;
+    assert.deepEqual(radarDamageSummary(contact,ship)[0],{label:'Hull',percent,status});
+  }
+});
+
+test('hover integrity is withheld for unidentified, stale and non-enemy tracks',()=>{
+  const ship=createDamageShip('pirate-frigate');
+  for(const contact of [{type:'unknown',identified:false},{type:'enemy',identified:false},{type:'enemy',identified:true,stale:true},{type:'friendly',identified:true},{type:'neutral',identified:true}])assert.deepEqual(radarDamageSummary(contact,ship),[]);
+  assert.deepEqual(radarDamageSummary({type:'enemy',identified:true},undefined),[]);
+});
 
 test('radar displays one dot per cannon round and leaves missiles individual',()=>{
   const shot={sourceId:'own',targetId:'E-04',weapon:'autocannon-120',component:'hull',damage:12,x:0,y:0,z:0,vx:0,vy:3600,vz:0};
@@ -98,8 +141,8 @@ test('closure uses the full relative 3D velocity and withholds a value at coinci
   assert.equal(contactClosureRate(observeContact(unknown)), contactClosureRate(unknown));
 });
 
-test('all twelve game ships have a sample within maximum range and provisional fits', () => {
-  assert.deepEqual(Object.values(shipTypes).map(ship => ship.label), ['UNE - CARGO SHIP', 'UNE - LIGHT CARGO SHIP', 'PRIVATEER', 'PRIVATE YACHT', 'UNE - TRANSPORT', 'UNE - LARGE TRANSPORT', 'PIRATE - FRIGATE', 'PIRATE - CORVETTE', 'SDF - FRIGATE', 'SDF - DESTROYER', 'SDF - CRUISER', 'SDF - HEAVY CRUISER']);
+test('the ship library includes the tender while the twelve-contact training roster is retained', () => {
+  assert.deepEqual(Object.values(shipTypes).map(ship => ship.label), ['UNE - CARGO SHIP', 'UNE - LIGHT CARGO SHIP', 'PRIVATEER', 'PRIVATE YACHT', 'UNE - TRANSPORT', 'UNE - LARGE TRANSPORT', 'PIRATE - FRIGATE', 'PIRATE - CORVETTE', 'SDF - FRIGATE', 'SDF - DESTROYER', 'SDF - CRUISER', 'SDF - HEAVY CRUISER', 'SPF LOGISTICS TENDER']);
   assert.equal(new Set(trainingContacts.map(contact => contact.shipType)).size, 12);
   assert.equal(new Set(trainingContacts.map(contact => contact.id)).size, 12);
   assert.equal(contactsInRange(trainingContacts, 200).length, 12);

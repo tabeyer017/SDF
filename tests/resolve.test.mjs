@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createCombat,updateEnemyResolve,stepCombat,syncElectronicTracking,fireWeapon,canFire,jammerEmitting,changeEncounter} from '../combat-model.mjs';
+import {createCombat,updateEnemyResolve,stepCombat,syncElectronicTracking,fireWeapon,canFire,jammerEmitting,changeEncounter,orderEngagement,surrenderShip,commandWeapons} from '../combat-model.mjs';
 import {createSector,stepSector,observeSector} from '../sector-model.mjs';
 import {createCommunications,pollCommunications,restoreCommunications} from '../communications-model.mjs';
 import {restoreCombat} from '../combat-save.mjs';
@@ -17,6 +17,79 @@ function setup(){
 }
 function enginesOff(ship){for(const [id,system] of Object.entries(ship.systems))if(id.startsWith('engine-'))system.hp=0;}
 function advance(game,seconds){game.sector.running=true;for(let i=0;i<seconds;i++){stepSector(game.sector,1);stepCombat(game.combat,game.sector,1,()=>1);}game.sector.running=false;}
+
+test('Engage suppresses defenses then targets offensive weapons and survives a save',()=>{
+  const {combat,sector,enemy,contact}=setup();contact.y=10;
+  assert.equal(orderEngagement(combat,sector,'engage',['E-04']).ok,true);
+  assert.ok(combat.firing.every(f=>f.component==='ciws'));
+  assert.deepEqual(restoreCombat(JSON.parse(JSON.stringify(combat)),sector.contacts).engagement,combat.engagement);
+  for(const mount of enemy.mounts.filter(m=>m.weapon==='ciws-30'))enemy.systems[mount.id].hp=0;
+  enemy.jammerMode='on';enemy.jammer=true;
+  stepCombat(combat,sector,.01,()=>1);
+  assert.ok(combat.firing.length);assert.ok(combat.firing.every(f=>f.component==='jammer'));
+  enemy.systems.jammer.hp=0;
+  stepCombat(combat,sector,.01,()=>1);
+  assert.ok(combat.firing.length);assert.ok(combat.firing.every(f=>f.component==='weapons'));
+});
+
+test('Engage ends without further fire when offensive mounts, ammunition, main power or hull are lost',()=>{
+  for(const loss of ['mounts','ammunition','power','hull']){
+    const {combat,sector,enemy,contact}=setup();contact.y=10;
+    orderEngagement(combat,sector,'engage',['E-04']);const ammo={...combat.own.ammo};
+    if(loss==='mounts')for(const mount of enemy.mounts)if(mount.weapon!=='ciws-30')enemy.systems[mount.id].hp=0;
+    if(loss==='ammunition')for(const mount of enemy.mounts)if(mount.weapon!=='ciws-30')enemy.ammo[mount.weapon]=0;
+    if(loss==='power')enemy.systems.power.hp=0;
+    if(loss==='hull')enemy.systems.hull.hp=0;
+    stepCombat(combat,sector,.01,()=>1);
+    assert.equal(combat.engagement,null,loss);assert.equal(combat.firing,null,loss);
+    assert.deepEqual(combat.own.ammo,ammo,loss);
+    assert.ok(!combat.own.mounts.some(m=>m.burst),loss);
+  }
+  const {combat,sector,enemy}=setup();enginesOff(enemy);
+  assert.equal(orderEngagement(combat,sector,'engage',['E-04']).ok,true);
+  stepCombat(combat,sector,.01,()=>1);assert.equal(enemy.surrendered,false);assert.ok(combat.engagement);
+});
+
+test('an impact that disables the last offensive mount ends Engage during the same simulation step',()=>{
+  const {combat,sector,enemy,contact}=setup();contact.y=1;
+  for(const mount of enemy.mounts)enemy.systems[mount.id].hp=0;
+  enemy.systems['autocannon-120-1'].hp=1;enemy.systems.jammer.hp=0;
+  orderEngagement(combat,sector,'engage',['E-04']);
+  fireWeapon(combat,sector,'own','autocannon-120-1','E-04','weapons',()=>0,1,5);
+  stepCombat(combat,sector,1,()=>0);
+  assert.equal(enemy.systems['autocannon-120-1'].hp,0);
+  assert.ok(enemy.systems.hull.hp>0);
+  assert.equal(combat.engagement,null);assert.equal(combat.firing,null);
+  assert.ok(!combat.own.mounts.some(m=>m.burst));
+});
+
+test('Engage clears neutralized-target bursts and overrides while continuing against other threats',()=>{
+  const {combat,sector,enemy,contact}=setup();contact.y=10;
+  Object.assign(sector.contacts.find(c=>c.id==='E-06'),{x:0,y:12,z:0});
+  orderEngagement(combat,sector,'engage',['E-04','E-06']);
+  fireWeapon(combat,sector,'own','autocannon-120-1','E-04','ciws',()=>0,1,5);
+  const shot=combat.shots[0];
+  commandWeapons(combat,sector,[{mountId:'autocannon-120-2',targetId:'E-04',component:'hull'}],true);
+  for(const mount of enemy.mounts)if(mount.weapon!=='ciws-30')enemy.systems[mount.id].hp=0;
+  stepCombat(combat,sector,.01,()=>1);
+  assert.deepEqual(combat.engagement.targetIds,['E-06']);
+  assert.ok(combat.firing.length);assert.ok(combat.firing.every(f=>f.targetId==='E-06'));
+  assert.ok(!combat.own.mounts.some(m=>m.burst?.targetId==='E-04'));
+  assert.ok(combat.shots.includes(shot),'already-fired projectiles remain in flight');
+});
+
+test('surrender immediately stops Engage fire on that ship and preserves other engagements',()=>{
+  const {combat,sector,contact}=setup();contact.y=10;
+  Object.assign(sector.contacts.find(c=>c.id==='E-06'),{x:0,y:12,z:0});
+  orderEngagement(combat,sector,'engage',['E-04','E-06']);
+  fireWeapon(combat,sector,'own','autocannon-120-1','E-04','ciws',()=>0,1,5);
+  const shot=combat.shots[0];surrenderShip(combat,'E-04','We surrender');
+  assert.equal(combat.contacts['E-04'].surrendered,true);
+  assert.deepEqual(combat.engagement.targetIds,['E-06']);
+  assert.ok(!(combat.firing??[]).some(f=>f.targetId==='E-04'));
+  assert.ok(!combat.own.mounts.some(m=>m.burst?.targetId==='E-04'));
+  assert.ok(combat.shots.includes(shot));
+});
 
 test('pirates disengage earlier than disciplined SDF opponents, with stable decisions and no panic in bystanders',()=>{
   for(let repeat=0;repeat<2;repeat++){

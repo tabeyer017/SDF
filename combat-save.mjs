@@ -153,7 +153,7 @@ export function restoreCombat(saved,contacts){
     });
   }
   if(saved.engagement!=null){
-    const order=saved.engagement;check(object(order)&&['disable','destroy'].includes(order.objective));
+    const order=saved.engagement;check(object(order)&&['engage','disable','destroy'].includes(order.objective));
     const targetIds=array(order.targetIds,contacts.length).map(id=>{check(id!=='own'&&validId(id));return id;});
     const overrides=array(order.overrides,result.own.mounts.length).map(id=>{check(result.own.mounts.some(m=>m.id===id));return id;});
     check(targetIds.length>0&&new Set(targetIds).size===targetIds.length&&new Set(overrides).size===overrides.length);
