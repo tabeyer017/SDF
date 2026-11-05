@@ -11,13 +11,13 @@ export function recentInterceptions(combat){
   return (interceptionFlashes.get(combat)||[]).filter(event=>event.expires>performance.now());
 }
 export const weapons = {
-  'autocannon-120':{range:30,rpm:20,damage:12,speed:1,penetration:.25,guidance:'Ship radar + laser ranging / targeting'},
-  'autocannon-75':{range:20,rpm:40,damage:5,speed:1,penetration:.1,guidance:'Ship radar + laser ranging / targeting'},
-  'ciws-30':{range:20,rpm:3000,damage:.1,speed:1,penetration:0,guidance:'Independent computer, tracking radar and tracking IR per mount'},
+  'autocannon-120':{range:30,rpm:20,damage:12,speed:1,penetration:.25,feed:'Continuous ammunition feed · no reload pause',guidance:'Ship radar + laser ranging / targeting'},
+  'autocannon-75':{range:20,rpm:40,damage:5,speed:1,penetration:.1,feed:'Continuous ammunition feed · no reload pause',guidance:'Ship radar + laser ranging / targeting'},
+  'ciws-30':{range:20,rpm:3000,damage:.1,speed:1,penetration:0,feed:'Belt-fed drum · continuous feed',guidance:'Independent computer, tracking radar and tracking IR per mount'},
   'rail-gun':{range:150,rpm:6,damage:180,speed:10,penetration:.8,guidance:'Ship radar + laser ranging / targeting'},
-  'as-missiles':{range:200,rpm:4,damage:160,speed:1,penetration:.5,missile:true,guidance:'Onboard radar + IR'},
-  'mp-missiles':{range:80,rpm:7.5,damage:60,speed:1,penetration:.25,missile:true,guidance:'Onboard radar + IR'},
-  'gp-missiles':{range:120,rpm:6,damage:90,speed:1,penetration:.35,missile:true,guidance:'Onboard radar + IR'}
+  'as-missiles':{range:200,rpm:4,damage:160,speed:1,penetration:.5,missile:true,feed:'Ready missile inventory · no reload pause',guidance:'Onboard radar + IR'},
+  'mp-missiles':{range:80,rpm:7.5,damage:60,speed:1,penetration:.25,missile:true,feed:'Ready missile inventory · no reload pause',guidance:'Onboard radar + IR'},
+  'gp-missiles':{range:120,rpm:6,damage:90,speed:1,penetration:.35,missile:true,feed:'Ready missile inventory · no reload pause',guidance:'Onboard radar + IR'}
 };
 export const missileRoles={
   'anti-ship':'Anti-ship',precision:'Subsystem strike',aa:'AA · shuttles / fighters / missiles',
@@ -99,15 +99,26 @@ export function createDamageShip(classId,player=false){
     radar:true,jammer:classId.startsWith('pirate-'),ciwsAuto:true,surrendered:false,jobs:[],autoRepair:player,repairHolds:[],fire:false,breach:false,air:1800,underFireUntil:0};
 }
 export function createCombat(contacts=trainingContacts){
-  return {time:0,own:createDamageShip('sdf-frigate',true),contacts:Object.fromEntries(contacts.map(c=>[c.id,createDamageShip(c.shipType)])),
-    shots:[],nextShot:1,firing:null,hostiles:[],alliedOrders:{},docked:false,service:null,log:['Weapons safed · select a weapon and aim system before firing.']};
+  return {time:0,ciwsFeedVersion:1,own:createDamageShip('sdf-frigate',true),contacts:Object.fromEntries(contacts.map(c=>[c.id,createDamageShip(c.shipType)])),
+    shots:[],nextShot:1,firing:null,hostiles:[],alliedOrders:{},docked:false,service:null,support:null,log:['Weapons safed · select a weapon and aim system before firing.']};
 }
 export function changeEncounter(combat,contacts){
   combat.contacts=Object.fromEntries(contacts.map(c=>[c.id,createDamageShip(c.shipType)]));
-  combat.engagement=null;combat.shots=[];combat.firing=null;combat.hostiles=[];combat.alliedOrders={};combat.docked=false;combat.service=null;
+  combat.engagement=null;combat.shots=[];combat.firing=null;combat.hostiles=[];combat.alliedOrders={};combat.docked=false;combat.service=null;combat.support=null;
   combat.own.jobs=combat.own.jobs.filter(j=>!j.station);
 }
 export function condition(system){const ratio=system.hp/system.max;return ratio>.7?1:ratio>=.4?.7:ratio>0?.35:0;}
+export function ciwsFiringTime(ship,mount,rounds=75){
+  const roundsPerSecond=weapons['ciws-30'].rpm/60*mount.barrels*condition(ship.systems[mount.id]);
+  return roundsPerSecond?rounds/roundsPerSecond:0;
+}
+const ciwsCycling='CIWS firing · belt feed cycling.';
+const weaponCycling='Weapon firing cycle.',missileCycling='Missile launch sequence cycling.';
+function engageCIWS(combat,ship,mount,targetId,sourceId){
+  const rounds=Math.min(75,ship.ammo[mount.weapon]),duration=ciwsFiringTime(ship,mount,rounds);
+  ship.ammo[mount.weapon]-=rounds;mount.readyAt=combat.time+duration;mount.ciwsTarget=targetId;mount.ciwsRounds=rounds;
+  log(combat,`${sourceId}: ${mount.id} firing belt-fed CIWS · ${rounds} rounds · ${duration.toFixed(2)} seconds.`);
+}
 export function shipPerformance(ship){
   if(!alive(ship))return {engines:0,sensors:0,power:0,epd:false};
   const power=condition(ship.systems.reactor)*condition(ship.systems.power);
@@ -157,11 +168,11 @@ export function canFire(combat,sector,sourceId,mountId,targetId,component='hull'
   if(mount.weapon==='as-missiles'&&targetId?.startsWith('shot:'))return 'AS missiles target ships and ship systems only.';
   if(!weaponAimOptions(mount.weapon).some(([id])=>id===component))return 'Select a valid aim system for this weapon.';
   if(ship.systems[mountId].hp<=0||shipPerformance(ship).power<=0)return 'Mount or main power is offline.';
-  if(!ignoreCooldown&&mount.readyAt>combat.time+1e-8)return 'Weapon is reloading.';
-  if(ship.ammo[mount.weapon]<mount.barrels)return 'Ammunition depleted.';
+  if(sourceId==='own'&&combat.service?.provider==='tender'&&mount.weapon!=='ciws-30')return 'Repair tender connected · cancel tender service before firing.';
+  if(ship.ammo[mount.weapon]<=0)return 'Ammunition depleted · replenish at a station or request a resupply / repair ship.';
+  if(!ignoreCooldown&&mount.readyAt>combat.time+1e-8)return mount.weapon==='ciws-30'?ciwsCycling:spec.missile?missileCycling:weaponCycling;
   if(!spec.missile&&mount.weapon!=='ciws-30'&&(!ship.radar||shipPerformance(ship).sensors<=0))return 'Turret fire requires ship radar and laser fire control.';
   const threat=targetId?.startsWith('shot:')?combat.shots.find(s=>s.id===targetId):null;
-  if(threat&&mount.weapon==='ciws-30'&&ship.ammo[mount.weapon]<75)return 'CIWS requires 75 rounds per missile engagement.';
   const target=threat||position(sector,targetId),targetShip=threat?null:vessel(combat,targetId);
   if(!target || (threat?threat.sourceId===sourceId||!weapons[threat.weapon].missile:!targetable(targetShip)))return 'No valid live target.';
   if(!threat){
@@ -183,8 +194,7 @@ export function fireWeapon(combat,sector,sourceId,mountId,targetId,component='hu
   const plan=intercept(source,{...target,vx:target.vx??0,vy:target.vy??0,vz:target.vz??0},spec.speed);
   if(!plan)return {ok:false,message:'No intercept solution.'};
   if(mount.weapon==='ciws-30'&&targetId.startsWith('shot:')){
-    ship.ammo[mount.weapon]-=75;mount.readyAt=combat.time+10+5*rng();mount.ciwsTarget=targetId;
-    log(combat,`${sourceId}: ${mount.id} engaging missile · 75 rounds · 10–15 seconds.`);
+    engageCIWS(combat,ship,mount,targetId,sourceId);
     return {ok:true,message:'CIWS engaging missile.'};
   }
   const rounds=Math.min(mount.weapon==='ciws-30'?10*mount.barrels:mount.barrels,ship.ammo[mount.weapon]);
@@ -337,7 +347,10 @@ function repairStep(combat,seconds){
     if(combat.service.remaining<=0){
       ship.spares=combat.service.full?ship.maxSpares:Math.max(ship.spares,Math.floor(ship.maxSpares/2));
       for(const weapon of Object.keys(ship.ammo))if(combat.service.full||!weapons[weapon].missile)ship.ammo[weapon]=ship.maxAmmo[weapon];
-      ship.fire=false;ship.breach=false;ship.air=1800;combat.service=null;log(combat,'Station service complete · repairs and replenishment finished.');
+      const tender=combat.service.provider==='tender';
+      ship.fire=false;ship.breach=false;ship.air=1800;combat.service=null;
+      if(tender&&combat.support)combat.support.phase='complete';
+      log(combat,`${tender?'Repair tender':'Station'} service complete · repairs and ammunition replenishment finished.`);
     }
   }
 }
@@ -357,8 +370,59 @@ export function stationSupport(location){
   if(/^(Alpha|Beta|Gamma|Delta|Epsilon|Zeta|Eta|Theta|Iota|Kappa|Lambda|Mu|Nu|Xi|Omicron|Omega) station$/.test(location))return {name:location,full:false};
   return null;
 }
+export function supportStatus(combat,sector){
+  const support=combat.support;if(!support)return 'No resupply / repair ship requested.';
+  if(support.phase==='en-route')return `Repair tender en route · ${Math.max(0,distance(support,sector.own)-2).toFixed(0)} seconds to rendezvous at present position.`;
+  if(support.phase==='waiting')return 'Repair tender standing by · hold below 10 KPH and clear hostile threats before service.';
+  if(support.phase==='servicing')return 'Repair tender connected · repairs in progress; ammunition transfers after repairs finish.';
+  return 'Repair tender service complete · ammunition and spare parts replenished.';
+}
+export function requestSupportShip(combat,sector){
+  if(!alive(combat.own))return {ok:false,message:'A disabled hull cannot be recovered by this tender. Load a save or restart patrol.'};
+  if(combat.support&&combat.support.phase!=='complete')return {ok:false,message:supportStatus(combat,sector)};
+  if(combat.docked||combat.service)return {ok:false,message:'Use station service while docked, or finish the current service first.'};
+  combat.support={phase:'en-route',location:sector.location,x:sector.own.x+180,y:sector.own.y,z:sector.own.z,vx:0,vy:0,vz:0};
+  sector.running=true;log(combat,'Resupply / repair tender dispatched to this sector.');
+  return {ok:true,message:'Resupply / repair tender dispatched. Estimated rendezvous: 3 simulated minutes at your present position. Hold position and clear threats for repairs and ammunition transfer.'};
+}
+export function cancelSupportShip(combat){
+  if(!combat.support)return false;
+  const completed=combat.support.phase==='complete';
+  if(combat.service?.provider==='tender'){combat.service=null;combat.own.jobs=combat.own.jobs.filter(job=>!job.station);}
+  combat.support=null;log(combat,completed?'Repair tender dismissed.':'Repair tender request cancelled. No ammunition transferred.');return true;
+}
+function serviceThreats(combat,sector){
+  const engaged=new Set([...combat.hostiles,...Object.values(combat.alliedOrders).flatMap(order=>order.targetIds)]);
+  return combat.shots.some(shot=>shot.targetId==='own')||[...engaged].some(id=>alive(combat.contacts[id])&&!combat.contacts[id].surrendered&&position(sector,id)&&distance(sector.own,position(sector,id))<=200);
+}
+function advanceSupportShip(combat,sector,seconds){
+  const support=combat.support;if(!support||support.phase==='complete')return;
+  if(!alive(combat.own)){cancelSupportShip(combat);return;}
+  const speed=Math.hypot(sector.own.vx,sector.own.vy,sector.own.vz),gap=distance(support,sector.own);
+  if(support.phase==='en-route'){
+    const travel=Math.min(Math.max(0,gap-2),seconds);
+    for(const [index,axis] of ['x','y','z'].entries()){
+      const direction=gap?(sector.own[axis]-support[axis])/gap:0;
+      support[['vx','vy','vz'][index]]=gap>2?direction*3600:0;support[axis]+=direction*travel;
+    }
+    if(gap-travel<=2.001){support.phase='waiting';support.vx=support.vy=support.vz=0;log(combat,'Repair tender arrived · awaiting safe rendezvous.');}
+    return;
+  }
+  const safe=speed<=10&&gap<=5&&!combat.docked&&!serviceThreats(combat,sector);
+  if(support.phase==='servicing'){
+    if(!safe){combat.service=null;combat.own.jobs=combat.own.jobs.filter(job=>!job.station);support.phase='waiting';log(combat,'Repair tender service suspended · clear threats and hold position.');}
+    return;
+  }
+  if(support.phase==='waiting'&&gap>5){support.phase='en-route';return;}
+  if(!safe||combat.service)return;
+  combat.service={provider:'tender',full:true,remaining:60};support.phase='servicing';
+  combat.own.jobs=[];combat.own.fire=false;combat.own.breach=false;combat.own.air=1800;
+  for(const [systemId,system] of Object.entries(combat.own.systems))if(system.hp<system.max)combat.own.jobs.push({systemId,progress:0,station:true});
+  combat.firing=null;combat.engagement=null;sector.order=null;sector.manual.thrust=0;sector.own.vx=sector.own.vy=sector.own.vz=0;
+  log(combat,'Repair tender connected · repairing ship before ammunition transfer.');
+}
 export function dock(combat,sector){
-  if(!alive(combat.own)||!stationSupport(sector.location)||Math.hypot(sector.own.x,sector.own.y,sector.own.z)>5||Math.hypot(sector.own.vx,sector.own.vy,sector.own.vz)>10||combat.shots.some(s=>s.targetId==='own')||combat.hostiles.some(id=>alive(combat.contacts[id])&&position(sector,id)&&distance(sector.own,position(sector,id))<=200))return false;
+  if(!alive(combat.own)||combat.service?.provider==='tender'||!stationSupport(sector.location)||Math.hypot(sector.own.x,sector.own.y,sector.own.z)>5||Math.hypot(sector.own.vx,sector.own.vy,sector.own.vz)>10||serviceThreats(combat,sector))return false;
   combat.engagement=null;combat.docked=true;combat.firing=null;sector.order=null;sector.manual.thrust=0;sector.own.vx=sector.own.vy=sector.own.vz=0;sector.running=false;return true;
 }
 export function requestService(combat,sector){
@@ -396,19 +460,17 @@ function autoCIWS(combat,sector,id,rng){
   for(const mount of ship.mounts.filter(m=>m.weapon==='ciws-30')){
     if(mount.ciwsTarget){
       const threat=combat.shots.find(s=>s.id===mount.ciwsTarget);
-      if(!threat||ship.systems[mount.id].hp<=0||shipPerformance(ship).power<=0||distance(source,threat)>weapons['ciws-30'].range){delete mount.ciwsTarget;continue;}
+      if(!threat||ship.systems[mount.id].hp<=0||shipPerformance(ship).power<=0||distance(source,threat)>weapons['ciws-30'].range){delete mount.ciwsTarget;delete mount.ciwsRounds;continue;}
       if(combat.time+1e-8<mount.readyAt)continue;
-      delete mount.ciwsTarget;
-      if(rng()<.85*condition(ship.systems[mount.id])){flashInterception(combat,id);combat.shots=combat.shots.filter(s=>s!==threat);log(combat,`${id}: ${mount.id} intercepted an incoming missile.`);}
+      const rounds=mount.ciwsRounds??75;delete mount.ciwsTarget;delete mount.ciwsRounds;
+      if(rng()<.85*condition(ship.systems[mount.id])*rounds/75){flashInterception(combat,id);combat.shots=combat.shots.filter(s=>s!==threat);log(combat,`${id}: ${mount.id} intercepted an incoming missile.`);}
       else log(combat,`${id}: ${mount.id} interception failed.`);
-      continue;
     }
     if(!ship.ciwsAuto)continue;
     const assigned=new Set(ship.mounts.map(m=>m.ciwsTarget).filter(Boolean));
     const threat=combat.shots.filter(s=>s.targetId===id&&weapons[s.weapon].missile&&distance(source,s)<=weapons['ciws-30'].range&&!assigned.has(s.id)).sort((a,b)=>distance(source,a)-distance(source,b))[0];
-    if(!threat||ship.ammo[mount.weapon]<75||canFire(combat,sector,id,mount.id,threat.id))continue;
-    ship.ammo[mount.weapon]-=75;mount.readyAt=combat.time+10+5*rng();mount.ciwsTarget=threat.id;
-    log(combat,`${id}: ${mount.id} engaging missile · 75 rounds · 10–15 seconds.`);
+    if(!threat||canFire(combat,sector,id,mount.id,threat.id))continue;
+    engageCIWS(combat,ship,mount,threat.id,id);
   }
 }
 export function stepCombat(combat,sector,seconds,rng=Math.random){
@@ -426,7 +488,7 @@ export function stepCombat(combat,sector,seconds,rng=Math.random){
     }
     const error=canFire(combat,sector,'own',f.mountId,f.targetId,f.component);
     if(!error)fireWeapon(combat,sector,'own',f.mountId,f.targetId,f.component,rng);
-    else if(error!=='Weapon is reloading.'){ceaseFiring(combat,[f.mountId]);log(combat,`${f.mountId} fire order stopped: ${error}`);}
+    else if(![weaponCycling,missileCycling,ciwsCycling].includes(error)){ceaseFiring(combat,[f.mountId]);log(combat,`${f.mountId} fire order stopped: ${error}`);}
   }
   alliedSupport(combat,sector,rng);
   const opponents=new Set([...combat.hostiles,...Object.values(combat.alliedOrders).flatMap(order=>order.targetIds)]);
@@ -440,5 +502,6 @@ export function stepCombat(combat,sector,seconds,rng=Math.random){
   autoCIWS(combat,sector,'own',rng);for(const id of new Set([...opponents,...Object.keys(combat.alliedOrders)]))autoCIWS(combat,sector,id,rng);
   resolveShots(combat,sector,seconds);
   for(const ship of Object.values(combat.contacts))emergencyStep(ship,seconds);
+  advanceSupportShip(combat,sector,seconds);
   advanceMaintenance(combat,seconds);
 }

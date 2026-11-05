@@ -1,6 +1,6 @@
 import { settlementDefinitions } from './settlements.mjs';
 import { miningStations } from './mining.mjs';
-import { shipPerformance, ceaseFiring, orderAlliedSupport } from './combat-model.mjs';
+import { shipPerformance, ceaseFiring, orderAlliedSupport, requestSupportShip, supportStatus } from './combat-model.mjs';
 
 export const MAX_MESSAGES=200;
 export const communicationChannels=[
@@ -10,6 +10,7 @@ export const communicationChannels=[
   ...miningStations.map(s=>({id:s.id,name:s.name,kind:'station',description:s.companyName}))
 ];
 const requestLabels={hail:'Open channel',status:'Request status',report:'Send patrol / situation report',assistance:'Request assistance',offer:'Offer assistance',orders:'Request orders',docking:'Request docking instructions',repairs:'Request repairs',resupply:'Request resupply',escort:'Request escort',threat:'Report hostile contact',surrender:'Demand surrender',cease:'Request cease-fire',acknowledge:'Acknowledge',accept:'Accept assistance',decline:'Decline assistance',message:'Other message'};
+requestLabels.support='Request resupply / repair ship';
 export const friendlyCommands=[{id:'attack-targets',label:'Attack my targets'},{id:'battle-assistance',label:'I need assistance in this battle'},{id:'stand-down',label:'Cease fire / stand down'},{id:'status',label:'Report your status'}];
 for(const command of friendlyCommands)if(command.id!=='status')requestLabels[command.id]=command.label;
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
@@ -55,8 +56,8 @@ export function communicationsRecipients(state,context){
 export function communicationRequests(recipient){
   if(!recipient)return [];
   const ids=['hail','status','report','assistance'];
-  if(recipient.kind==='hq')ids.push('orders','escort','threat');
-  if(recipient.kind==='station')ids.push('offer','docking','repairs','resupply','escort','threat');
+  if(recipient.kind==='hq')ids.push('orders','escort','threat','support');
+  if(recipient.kind==='station')ids.push('offer','docking','repairs','resupply','escort','threat','support');
   if(recipient.kind==='ship'){ids.push('offer','escort','threat','cease');if(recipient.hostile)ids.push('surrender');}
   if(recipient.friendly)ids.push('attack-targets','battle-assistance','stand-down');
   ids.push('acknowledge','accept','decline','message');
@@ -83,7 +84,7 @@ function respond(recipient,request,context){
   const station=recipient.kind==='station',hq=recipient.kind==='hq',hostile=recipient.hostile&&!ship?.surrendered;
   switch(request){
     case 'hail':return ship?.surrendered?'We have surrendered. Our weapons remain secured.':hostile?'Channel open. State your business, Wayfarer.':`Wayfarer, ${recipient.name} receiving. Go ahead.`;
-    case 'status':return ship?`Hull integrity ${percent(ship.systems.hull)}%. ${ship.surrendered?'We have surrendered.':ship.fire||ship.breach?'Damage-control assistance requested.':combat.alliedOrders[recipient.contactId]?`Providing fire support against ${combat.alliedOrders[recipient.contactId].targetIds.length} transmitted targets.`:'Crew standing by.'}`:hq?'Patrol watch active. Report hostile activity and assistance requests on this channel.':`Traffic control online at ${recipient.name}. ${recipient.id.startsWith('mine-')?'Basic repairs, limited spare parts, and gun ammunition available.':'Station repairs and replenishment available.'}`;
+    case 'status':return ship?`Hull integrity ${percent(ship.systems.hull)}%. ${ship.surrendered?'We have surrendered.':ship.fire||ship.breach?'Damage-control assistance requested.':combat.alliedOrders[recipient.contactId]?`Providing fire support against ${combat.alliedOrders[recipient.contactId].targetIds.length} transmitted targets.`:'Crew standing by.'}`:hq?`Patrol watch active. ${supportStatus(combat,sector)} Report hostile activity and assistance requests on this channel.`:`Traffic control online at ${recipient.name}. ${recipient.id.startsWith('mine-')?'Basic repairs, limited spare parts, and gun ammunition available.':'Station repairs and replenishment available.'}`;
     case 'report':return 'Situation report received and logged. Maintain the watch and report any material change.';
     case 'orders':return 'Continue your patrol, investigate unidentified traffic, offer aid to distressed vessels, and report hostile activity. Use Navigation to plot your course.';
     case 'assistance':return hostile?'Your request for assistance is refused.':hq?'Distress report received. No reinforcement unit is currently assigned. Proceed to a repair station if able; retain this channel for further reports.':station?`We can provide dockside assistance at ${recipient.name}. Travel here, then contact Engineering for docking and service. No rescue craft is available for dispatch.`:'We can provide damage-control advice over comms. No rescue or repair team is available for transfer; seek station services if able.';
@@ -113,6 +114,10 @@ export function sendCommunication(state,context,recipientId,request,detail=''){
   const subject=requestLabels[request],hull=percent(context.combat.own.systems.hull);
   const body=`${subject}. Wayfarer at ${context.sector.location}; hull ${hull}%.${detail.trim()?` ${detail.trim()}`:''}`;
   let support;
+  if(request==='support'){
+    const result=context.inTransit?{ok:false,message:'Disengage EPD before requesting a local support rendezvous.'}:requestSupportShip(context.combat,context.sector);
+    support={accepted:result.ok,message:result.message};
+  }
   if(['attack-targets','battle-assistance','stand-down'].includes(request)){
     const visibleEnemies=context.contacts.filter(c=>!c.stale&&c.type==='enemy'&&Math.hypot(c.x,c.y,c.z)<=context.range).map(c=>c.id);
     const threats=[...context.combat.hostiles,...context.combat.shots.filter(shot=>shot.targetId==='own').map(shot=>shot.sourceId)];

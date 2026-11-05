@@ -5,6 +5,7 @@ import { trainingContacts, observeContact, restoreTargetPriorities } from './tac
 import { createCombat,stationSupport } from './combat-model.mjs';
 import { restoreCombat } from './combat-save.mjs';
 import { restoreCommunications } from './communications-model.mjs';
+import { generateEncounter, ENCOUNTER_VERSION, MAX_ENCOUNTER_CONTACTS } from './encounter-model.mjs';
 
 export const SAVE_STORAGE_KEY = 'sdf-save-v2';
 export const LEGACY_SAVE_STORAGE_KEY = 'sdf-save-v1';
@@ -50,11 +51,17 @@ function localSector(value,location,pause){
   result.faceTarget=boolean(value.faceTarget,'bow tracking');
   requireValue(record(value.manual),'Missing manual Helm settings.');
   result.manual={thrust:number(value.manual.thrust,'thrust',-100,100),bearing:number(value.manual.bearing,'thrust bearing',0,360),elevation:number(value.manual.elevation,'thrust elevation',-90,90)};
-  const contacts=list(value.contacts,trainingContacts.length,'sector contacts');
-  requireValue(contacts.length===trainingContacts.length,'The save has an incomplete training sector.');
+  let expected=trainingContacts;
+  if(value.encounter!==undefined){
+    requireValue(record(value.encounter)&&value.encounter.version===ENCOUNTER_VERSION,'Unsupported sector encounter.');
+    const seed=number(value.encounter.seed,'encounter seed',0,0xFFFFFFFF);requireValue(Number.isInteger(seed),'Invalid encounter seed.');
+    const {contacts,...encounter}=generateEncounter(location,seed);expected=contacts;result.encounter=encounter;
+  }
+  const contacts=list(value.contacts,MAX_ENCOUNTER_CONTACTS,'sector contacts');
+  requireValue(contacts.length===expected.length,'The save has an incomplete sector encounter.');
   const ids=new Set();
   result.contacts=contacts.map(c=>{
-    requireValue(record(c),'Invalid contact.');const original=trainingContacts.find(t=>t.id===c.id);
+    requireValue(record(c),'Invalid contact.');const original=expected.find(t=>t.id===c.id);
     requireValue(original && !ids.has(c.id),'Unknown or duplicate sector contact.');ids.add(c.id);
     return {...original,...vector(c,'contact position'),...vector(c,'contact velocity',speeds,1000000)};
   });
@@ -93,7 +100,8 @@ function validateSave(value,pause){
   const sector=localSector(value.bridge.sector,sectorLocation,pause);
   const combat=value.version===1?createCombat(sector.contacts):restoreCombat(value.bridge.combat,sector.contacts);
   requireValue(!combat.docked||(!nav.active&&!!stationSupport(nav.location)&&Math.hypot(sector.own.x,sector.own.y,sector.own.z)<=5&&Math.hypot(sector.own.vx,sector.own.vy,sector.own.vz)<=10),'Invalid docked state.');
-  requireValue(!nav.active||(!combat.firing&&!combat.shots.length&&!combat.docked&&!Object.keys(combat.alliedOrders).length),'Combat cannot run during EPD transit.');
+  requireValue(!combat.support||combat.support.location===sector.location,'Support rendezvous is in another sector.');
+  requireValue(!nav.active||(!combat.firing&&!combat.shots.length&&!combat.docked&&!combat.support&&!Object.keys(combat.alliedOrders).length),'Combat cannot run during EPD transit.');
   requireValue(!nav.active||(!sector.running && !sector.order),'EPD transit cannot run alongside local flight orders.');
   const tactical=value.bridge.tactical;
   requireValue(record(tactical),'Missing tactical state.');

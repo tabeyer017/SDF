@@ -190,6 +190,7 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 .radar-own-ship .radar-own-hit { fill: transparent; stroke: none; }
 .radar-own-ship circle { fill: #0b2025; stroke: #a8e4ea; stroke-width: .7; }
 .radar-own-ship path { fill: #a8e4ea; stroke: #a8e4ea; stroke-width: 1; }
+.tactical-encounter { margin: 0; padding: 7px 10px; border-bottom: 1px solid #2b3e4b; color: #adc6c9; font: 10px/1.5 var(--body); }
 .radar-legend { display: flex; justify-content: center; gap: 23px; padding: 10px 12px; color: #b4c2cc; font: 9px var(--mono); }
 .radar-legend > span { display: flex; align-items: center; gap: 6px; }
 .radar-legend svg { width: 16px; height: 16px; }
@@ -277,7 +278,7 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 .bridge-console[data-station="tactical"] > .tactical-console { grid-template-rows: auto auto minmax(0,1fr) auto; }
 .tactical-layout-tabs { display: none; }
 .tactical-workspace { display: grid; grid-template-columns: clamp(200px,17vw,240px) minmax(0,1fr) clamp(250px,21vw,300px); min-width: 0; min-height: 0; border-top: 1px solid #23353d; }
-.tactical-radar-area { display: grid; grid-template-rows: minmax(0,1fr) auto; min-width: 0; min-height: 0; padding-top: 14px; }
+.tactical-radar-area { display: grid; grid-template-rows: auto minmax(0,1fr) auto; min-width: 0; min-height: 0; padding-top: 14px; }
 .tactical-radar-area .radar-screens { margin: 0 16px; gap: 12px; }
 .tactical-radar-area .radar-caption { flex-direction: row; flex-wrap: wrap; align-items: center; padding: 9px 10px; }
 .tactical-radar-area .radar-legend { gap: 16px; font-size: 8px; }

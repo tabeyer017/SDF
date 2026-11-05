@@ -1,7 +1,7 @@
 import { radarRanges, contactTypes, armamentTypes, countermeasureTypes, armamentLabel, shipTypes, shuttleTypes, crewDoctrine, trainingContacts, contactDistance, contactSpeed, contactClosureRate, contactsInRange, rangeRings, projectContact, projectVelocity, selectTargets, prioritizeTargets, restoreTargetPriorities, MAX_TARGET_PRIORITY, observeContact, IFF_RANGE_KM, IFF_IDENTIFICATION_CHANCE } from './tactical-model.mjs';
 import { mountManeuverControls, flightReadout } from './sector-console.mjs';
 import { mountWeaponsConsole } from './combat-console.mjs';
-import { weapons, recentInterceptions } from './combat-model.mjs';
+import { weapons, recentInterceptions, supportStatus } from './combat-model.mjs';
 import { relativeContact, isHardTurn } from './sector-model.mjs';
 import { friendlyCommands } from './communications-model.mjs';
 
@@ -133,7 +133,13 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
   const picker = el('select', ''); picker.setAttribute('aria-label', 'Lock radar track'); picker.onchange = () => { if (picker.value) lock(picker.value); }; label.append(picker);
   const hint = el('span', 'radar-interaction-hint', 'Click to lock & set priority · Ctrl + click: add / remove · 1 = highest'); selection.append(label, hint);
   toolbar.insertBefore(selection, sensorStatus);
-  radarArea.append(screens, legend);
+  const encounterReport=el('p','tactical-encounter');encounterReport.setAttribute('role','status');
+  radarArea.append(encounterReport, screens, legend);
+  function refreshEncounterReport(){
+    const sector=flight?.sector,event=sector?.encounter;
+    const text=event?`${sector.location} · ${event.title} · ${event.summary}`:`${sector?.location||'Earth'} · Training encounter`;
+    if(encounterReport.textContent!==text)encounterReport.textContent=text;
+  }
 
   const targetPanel = el('aside', 'tactical-target-panel'); targetPanel.id = 'tactical-target-panel'; targetPanel.setAttribute('aria-label', 'Locked target ship details');
   const combatPanel = el('aside', 'tactical-combat-panel'); combatPanel.id = 'tactical-combat-panel'; combatPanel.setAttribute('aria-label', 'Combat controls');
@@ -287,7 +293,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
   const catalogClose=el('button','ship-reference-close','×');catalogClose.type='button';catalogClose.autofocus=true;catalogClose.setAttribute('aria-label','Close armament catalog');catalogClose.onclick=()=>catalogDialog.close();catalogHeader.append(catalogTitle,catalogClose);
   const catalogList=el('ul','armament-catalog-list');
   for(const [id,weapon] of Object.entries(armamentTypes)){
-    const item=el('li','');item.dataset.armament=id;const spec=weapons[id];item.append(el('strong','',weapon.name),el('span','',`${weapon.category} · ${spec.range} km · ${spec.rpm} rounds/min/barrel · ${spec.damage} damage/round`),el('small','',spec.guidance));catalogList.append(item);
+    const item=el('li','');item.dataset.armament=id;const spec=weapons[id];item.append(el('strong','',weapon.name),el('span','',`${weapon.category} · ${spec.range} km · ${spec.rpm} rounds/min/barrel · ${spec.damage} damage/round`),el('small','',`${spec.feed?spec.feed+' · ':''}${spec.guidance}`));catalogList.append(item);
   }
   function loadoutList(ship){
     const list=el('ul','ship-armament-list');
@@ -391,7 +397,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     status.textContent = contact ? `${lockedIds.length} TARGET${lockedIds.length === 1 ? '' : 'S'} LOCKED · PRIORITY ${priorities[contact.id]}${contact.stale?' · SENSOR LOST / LAST KNOWN':inRange ? '' : ' · OUT OF RANGE'}` : 'FIRE CONTROL / STANDBY';
     const name = el('h3', '', contact ? contact.name : 'No target locked'); name.tabIndex = -1;
     if (!contact) {
-      targetPanel.replaceChildren(status, name, el('p', 'target-empty', 'Click a radar contact and choose its priority. 1 is highest. Ctrl + left-click adds or removes targets. Ship details appear here.'), el('div', 'target-empty-reticle', '⌖'), el('p', 'target-fit-note', '12 ship types in the training catalog. Radar detects contacts within 200 km.'),catalogLink());
+      targetPanel.replaceChildren(status, name, el('p', 'target-empty', 'Click a radar contact and choose its priority. 1 is highest. Ctrl + left-click adds or removes targets. Ship details appear here.'), el('div', 'target-empty-reticle', '⌖'), el('p', 'target-fit-note', flight?.sector.encounter?`${contacts.length} local ship contacts. Radar detects traffic within sensor coverage; use a wider radar range to inspect the sector.`:'12 ship types in the training catalog. Radar detects contacts within 200 km.'),catalogLink());
       if(weaponControls)combatPanel.append(weaponControls.settings);return;
     }
     const lockedList = el('div', 'target-lock-list'); lockedList.setAttribute('role', 'group'); lockedList.setAttribute('aria-label', 'Locked targets');
@@ -465,6 +471,11 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
       marker.append(missile?svg('path',{d:'M5 0L-3-1.5V1.5Z',fill:color,stroke:color,'stroke-width':.35}):svg('circle',{r:1.8,fill:color}));
       markers.push(marker);
     }
+    const tender=flight?.combat.support;
+    if(tender&&contactDistance(relativeContact(flight.sector,tender))<=range){
+      const relative=relativeContact(flight.sector,tender),point=projectContact(relative,view,range),marker=svg('g',{class:'radar-support-tender',transform:`translate(${point.x} ${point.y})`,'aria-label':`Resupply / repair tender · ${tender.phase}`});
+      marker.append(svg('title',{},supportStatus(flight.combat,flight.sector)),svg('circle',{r:5,fill:contactTypes.friendly.color}),svg('path',{d:'M-3 0H3M0-3V3',stroke:'#091a21','stroke-width':1.3}),svg('text',{x:9,y:-7,fill:contactTypes.friendly.color,'font-size':8},'TENDER'));markers.push(marker);
+    }
     if(flight)for(const event of recentInterceptions(flight.combat)){
       const own=event.shipId==='own',ship=own?flight.sector.own:flight.sector.contacts.find(c=>c.id===event.shipId);
       if(!ship)continue;
@@ -481,6 +492,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
 
   function render() {
     hideTooltip();
+    refreshEncounterReport();
     const visible = contactsInRange(contacts.filter(c=>!c.stale), range);
     const contact = contacts.find(item => item.id === activeId);
     rangeButtons.forEach((button, index) => button.setAttribute('aria-pressed', String(radarRanges[index] === range)));
@@ -537,6 +549,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
   let signature='';
   function refresh(){
     if(flight)contacts=flight.contacts();
+    refreshEncounterReport();
     if(weaponControls)weaponControls.refresh(contacts.find(c=>c.id===activeId)||null,lockedContacts());
     // Retain locked tracks as stale sensor records without exposing unseen motion.
     if(flight)for(const id of lockedIds)if(!contacts.some(c=>c.id===id)&&flight.sector.memory[id])contacts.push({...flight.sector.memory[id].observed,stale:true});

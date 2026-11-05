@@ -30,6 +30,27 @@ test('messages receive contextual replies, unread counts, read state, and durabl
   delete game.bridge.communications;assert.deepEqual(parseSave(JSON.stringify(createSave(game))).bridge.communications,createCommunications());
 });
 
+test('HQ and stations dispatch a resupply / repair ship without instantly restoring ammunition',()=>{
+  for(const channel of ['hq','moon-station']){
+    const {state,context}=setup();context.combat.own.ammo['as-missiles']=0;
+    assert.ok(communicationRequests(communicationsRecipients(state,context).find(r=>r.id===channel)).some(r=>r.id==='support'));
+    const result=sendCommunication(state,context,channel,'support');assert.equal(result.accepted,true);
+    assert.equal(context.combat.support.phase,'en-route');assert.equal(context.sector.running,true);
+    assert.equal(context.combat.own.ammo['as-missiles'],0);assert.match(result.response,/tender dispatched/);
+    assert.match(state.messages.at(-1).body,/rendezvous/);
+    assert.equal(sendCommunication(state,context,channel,'support').accepted,false);
+  }
+});
+
+test('support dispatch requires communications and a local rendezvous outside EPD transit',()=>{
+  const {state,context}=setup();context.inTransit=true;
+  assert.equal(sendCommunication(state,context,'hq','support').accepted,false);assert.equal(context.combat.support,null);
+  context.inTransit=false;context.combat.own.systems.communications.hp=0;
+  assert.equal(sendCommunication(state,context,'hq','support').ok,false);assert.equal(context.combat.support,null);
+  context.combat.own.systems.communications.hp=60;
+  assert.equal(sendCommunication(state,context,'ship:0:F-03','support').ok,false);
+});
+
 test('communications failures and invalid requests do not transmit messages',()=>{
   const {state,context}=setup(),length=state.messages.length;
   assert.equal(sendCommunication(state,context,'hq','surrender').ok,false);

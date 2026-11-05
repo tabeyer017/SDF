@@ -1,4 +1,5 @@
 import { trainingContacts, observeContact, contactDistance, contactClosureRate } from './tactical-model.mjs';
+import { generateEncounter } from './encounter-model.mjs';
 
 export const SENSOR_RANGE = 200;
 export const VECTOR_LIMIT = 7200; // Provisional Vector Drive performance, KPH.
@@ -19,6 +20,12 @@ const validPoint = p => p && keys.every(k=>Number.isFinite(p[k]) && Math.abs(p[k
 
 export function createSector(contacts=trainingContacts, location='Earth') {
   return { location, time:0, running:false, rate:1, own:{x:0,y:0,z:0,vx:0,vy:0,vz:0}, facing:{x:0,y:1,z:0}, contacts:contacts.map(c=>({...c})), memory:{}, order:null, route:[], manual:{thrust:0,bearing:0,elevation:0}, status:'Vector Drive ready · local simulation paused', safety:'Clear', faceTarget:true };
+}
+
+export function createEncounterSector(location,seed){
+  const {contacts,...encounter}=generateEncounter(location,seed),sector=createSector(contacts,location);
+  sector.encounter=encounter;sector.status=`${encounter.title} · ${contacts.length} contacts · local simulation paused`;
+  return sector;
 }
 
 // Sector coordinates stay fixed. Tactical coordinates follow the ship's bow.

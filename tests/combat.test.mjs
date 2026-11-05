@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createCombat,createDamageShip,damageClasses,weapons,weaponAimOptions,aimPointState,nextAimPoint,applyDamage,shipPerformance,fireWeapon,canFire,orderEngagement,startFiring,commandWeapons,ceaseFiring,stepCombat,queueRepair,scheduleRepairs,setAutomaticRepairs,cancelRepair,advanceMaintenance,containEmergency,dock,requestService,changeEncounter } from '../combat-model.mjs';
+import { createCombat,createDamageShip,damageClasses,weapons,weaponAimOptions,aimPointState,nextAimPoint,applyDamage,shipPerformance,fireWeapon,canFire,orderEngagement,startFiring,commandWeapons,ceaseFiring,stepCombat,queueRepair,scheduleRepairs,setAutomaticRepairs,cancelRepair,advanceMaintenance,containEmergency,dock,requestService,changeEncounter,requestSupportShip,cancelSupportShip,supportStatus } from '../combat-model.mjs';
 import { createSector,stepSector } from '../sector-model.mjs';
 import { restoreCombat } from '../combat-save.mjs';
 import { shipTypes,trainingContacts } from '../tactical-model.mjs';
@@ -102,7 +102,7 @@ test('mount cooldown and ammunition apply per barrel, and misses create no persi
   const {sector,combat}=setup();combat.own=createDamageShip('sdf-heavy-cruiser',true);const ammo=combat.own.ammo['rail-gun'];
   assert.equal(fireWeapon(combat,sector,'own','rail-gun-1','U-01','hull',()=>1).ok,true);
   assert.equal(combat.own.ammo['rail-gun'],ammo-2);assert.equal(combat.shots.length,0);
-  assert.match(canFire(combat,sector,'own','rail-gun-1','U-01'),/reloading/);
+  assert.match(canFire(combat,sector,'own','rail-gun-1','U-01'),/firing cycle/);
   combat.time=10;assert.equal(canFire(combat,sector,'own','rail-gun-1','U-01'),null);
 });
 
@@ -123,7 +123,7 @@ test('a selected salvo fires each mount once at its assigned target and skips un
   assert.equal(combat.firing,null);
 });
 
-test('continuous mount orders retain independent targets, reloads, and selective cease fire',()=>{
+test('continuous mount orders retain independent targets, firing cadence, and selective cease fire',()=>{
   const {sector,combat}=setup();Object.assign(sector.contacts[0],{x:0,y:20,z:0,vx:0,vy:0,vz:0});
   const orders=[{mountId:'autocannon-120-1',targetId:'U-01',component:'weapons'},
     {mountId:'mp-missiles-1',targetId:'E-04',component:'engines'}];
@@ -140,6 +140,77 @@ test('continuous mount orders retain independent targets, reloads, and selective
   ceaseFiring(combat,['autocannon-120-1']);assert.deepEqual(combat.firing,[orders[1]]);
   combat.own.systems['mp-missiles-1'].hp=0;stepCombat(combat,sector,.01,()=>1);assert.equal(combat.firing,null);
   startFiring(combat,sector,'autocannon-120-1','U-01','hull');ceaseFiring(combat);assert.equal(combat.firing,null);
+});
+
+test('missiles and autocannons cycle at their firing rates without reloading or restoring exhausted ammunition',()=>{
+  for(const [weapon,mountId,aim] of [['as-missiles','as-missiles-1','hull'],['mp-missiles','mp-missiles-1','engines'],['autocannon-120','autocannon-120-1','hull']]){
+    const {combat,sector}=setup();combat.own.ammo[weapon]=2;
+    assert.equal(fireWeapon(combat,sector,'own',mountId,'U-01',aim,()=>1).ok,true);
+    const cycling=canFire(combat,sector,'own',mountId,'U-01',aim);assert.ok(!cycling.includes('reload'));assert.match(cycling,/cycl/);
+    combat.time+=60/weapons[weapon].rpm;
+    assert.equal(fireWeapon(combat,sector,'own',mountId,'U-01',aim,()=>1).ok,true);assert.equal(combat.own.ammo[weapon],0);
+    assert.match(canFire(combat,sector,'own',mountId,'U-01',aim),/station or request a resupply/);
+    advanceMaintenance(combat,10000);changeEncounter(combat,sector.contacts);assert.equal(combat.own.ammo[weapon],0);
+  }
+});
+
+test('an autocannon can fire its final round even when its turret normally fires two barrels',()=>{
+  const {combat,sector}=setup();combat.own=createDamageShip('sdf-destroyer',true);combat.own.ammo['autocannon-120']=1;
+  assert.equal(fireWeapon(combat,sector,'own','autocannon-120-1','U-01','hull',()=>1).ok,true);
+  assert.equal(combat.own.ammo['autocannon-120'],0);
+});
+
+test('station arrival and docking do not replenish ammunition until station service completes',()=>{
+  const {combat,sector}=setup();sector.location='Moon station';combat.own.ammo['as-missiles']=0;
+  advanceMaintenance(combat,600);assert.equal(combat.own.ammo['as-missiles'],0);
+  assert.equal(dock(combat,sector),true);advanceMaintenance(combat,600);assert.equal(combat.own.ammo['as-missiles'],0);
+  assert.equal(requestService(combat,sector),true);advanceMaintenance(combat,59);assert.equal(combat.own.ammo['as-missiles'],0);
+  advanceMaintenance(combat,1);assert.equal(combat.own.ammo['as-missiles'],combat.own.maxAmmo['as-missiles']);
+});
+
+test('a repair tender reaches a stranded ship, replaces destroyed engines, and replenishes ammunition after service',()=>{
+  const {combat,sector}=setup();sector.location='deep space';combat.own.spares=0;
+  combat.own.systems['engine-1'].hp=combat.own.systems['engine-2'].hp=0;
+  for(const weapon in combat.own.ammo)combat.own.ammo[weapon]=0;
+  assert.equal(requestSupportShip(combat,sector).ok,true);assert.equal(combat.support.phase,'en-route');
+  assert.equal(combat.own.ammo['as-missiles'],0);step(combat,sector,200);
+  assert.equal(combat.support.phase,'servicing');assert.equal(combat.service.provider,'tender');assert.equal(combat.own.ammo['as-missiles'],0);
+  assert.match(canFire(combat,sector,'own','as-missiles-1','U-01','hull'),/tender connected/);
+  step(combat,sector,200);assert.equal(combat.support.phase,'complete');assert.equal(combat.service,null);
+  assert.equal(combat.own.systems['engine-1'].hp,combat.own.systems['engine-1'].max);
+  assert.equal(combat.own.systems['engine-2'].hp,combat.own.systems['engine-2'].max);
+  assert.deepEqual(combat.own.ammo,combat.own.maxAmmo);assert.equal(combat.own.spares,combat.own.maxSpares);
+});
+
+test('a tender waits for threats to clear and for the ship to hold before transferring ammunition',()=>{
+  const {combat,sector}=setup();combat.own.ammo['as-missiles']=0;combat.hostiles=['E-04'];
+  for(const weapon in combat.contacts['E-04'].ammo)combat.contacts['E-04'].ammo[weapon]=0;
+  requestSupportShip(combat,sector);step(combat,sector,190);
+  assert.equal(combat.support.phase,'waiting');assert.equal(combat.service,null);assert.equal(combat.own.ammo['as-missiles'],0);
+  combat.hostiles=[];sector.own.vx=100;step(combat,sector,1);assert.equal(combat.support.phase,'waiting');
+  sector.own.vx=0;step(combat,sector,61);assert.equal(combat.support.phase,'complete');
+  assert.equal(combat.own.ammo['as-missiles'],combat.own.maxAmmo['as-missiles']);
+});
+
+test('tender requests are not duplicated and cancellation never transfers ammunition',()=>{
+  const {combat,sector}=setup();combat.own.ammo['as-missiles']=0;requestSupportShip(combat,sector);
+  step(combat,sector,10);const before=structuredClone(combat.support);
+  assert.equal(requestSupportShip(combat,sector).ok,false);assert.deepEqual(combat.support,before);
+  step(combat,sector,170);assert.equal(combat.service.provider,'tender');
+  assert.equal(cancelSupportShip(combat),true);assert.equal(combat.support,null);assert.equal(combat.service,null);
+  assert.ok(combat.own.jobs.every(job=>!job.station));advanceMaintenance(combat,1000);assert.equal(combat.own.ammo['as-missiles'],0);
+  assert.match(supportStatus(combat,sector),/No resupply/);
+});
+
+test('tender approach and service survive combat saves and reject inconsistent provider state',()=>{
+  const {combat,sector}=setup();combat.own.ammo['as-missiles']=0;requestSupportShip(combat,sector);step(combat,sector,20);
+  let restored=restoreCombat(JSON.parse(JSON.stringify(combat)),sector.contacts);assert.deepEqual(restored.support,combat.support);
+  step(combat,sector,160);restored=restoreCombat(JSON.parse(JSON.stringify(combat)),sector.contacts);
+  assert.deepEqual(restored.support,combat.support);assert.deepEqual(restored.service,combat.service);
+  for(const change of [c=>c.support.phase='invalid',c=>c.support.x=Infinity,c=>c.service=null,c=>c.service.full=false,c=>c.docked=true]){
+    const bad=structuredClone(combat);change(bad);assert.throws(()=>restoreCombat(bad,sector.contacts),/combat data/);
+  }
+  const old=createCombat();delete old.support;assert.equal(restoreCombat(old,sector.contacts).support,null);
 });
 
 test('multiple firing assignments survive JSON and old single-order saves migrate safely',()=>{
@@ -274,17 +345,65 @@ test('CIWS cycles persist through saves and a close salvo overwhelms two mounts'
   fireWeapon(combat,sector,'E-04','gp-missiles-1','own','hull',()=>0);
   combat.hostiles=[];
   const template=combat.shots[0];
-  for(let i=0;i<2;i++)combat.shots.push({...template,id:`shot:${combat.nextShot++}`});
+  for(let i=0;i<12;i++)combat.shots.push({...template,id:`shot:${combat.nextShot++}`});
   const ammo=combat.own.ammo['ciws-30'],hull=combat.own.systems.hull.hp;
   stepCombat(combat,sector,.05,()=>0);
   const mounts=combat.own.mounts.filter(m=>m.weapon==='ciws-30');
   assert.equal(new Set(mounts.map(m=>m.ciwsTarget)).size,2);
   assert.equal(combat.own.ammo['ciws-30'],ammo-150);
-  assert.ok(mounts.every(m=>m.readyAt-combat.time>=10&&m.readyAt-combat.time<=15));
+  assert.ok(mounts.every(m=>Math.abs(m.readyAt-combat.time-1.5)<1e-10));
   const restored=restoreCombat(JSON.parse(JSON.stringify(combat)),sector.contacts);
   assert.deepEqual(restored.own.mounts,combat.own.mounts);
   step(restored,sector,8,()=>0);
   assert.ok(restored.own.systems.hull.hp<hull);
+});
+
+test('belt-fed CIWS sustains its 3000 rpm cadence without stopping continuous fire for a reload',()=>{
+  const {sector,combat}=setup();Object.assign(sector.contacts[3],{x:0,y:10,z:0,vx:0,vy:0,vz:0});
+  combat.own.ciwsAuto=false;const ammo=combat.own.ammo['ciws-30'];
+  assert.equal(startFiring(combat,sector,'ciws-30-1','E-04','hull').ok,true);
+  stepCombat(combat,sector,.05,()=>0);
+  assert.match(canFire(combat,sector,'own','ciws-30-1','E-04','hull'),/belt feed cycling/);
+  step(combat,sector,.95,()=>0);
+  assert.equal(combat.own.ammo['ciws-30'],ammo-50);
+  assert.equal(combat.firing[0].mountId,'ciws-30-1');
+  assert.ok(combat.log.every(line=>!line.includes('reloading')));
+});
+
+test('automatic CIWS starts the next missile immediately after firing its 75-round belt-fed engagement',()=>{
+  const {sector,combat}=setup();Object.assign(sector.contacts[3],{x:0,y:15,z:0,vx:0,vy:0,vz:0});
+  fireWeapon(combat,sector,'E-04','gp-missiles-1','own','hull',()=>0);combat.hostiles=[];
+  const first=combat.shots[0].id,second=`shot:${combat.nextShot++}`;combat.shots.push({...combat.shots[0],id:second});
+  combat.own.systems['ciws-30-2'].hp=0;const ammo=combat.own.ammo['ciws-30'],mount=combat.own.mounts.find(m=>m.id==='ciws-30-1');
+  stepCombat(combat,sector,.05,()=>0);assert.equal(mount.ciwsTarget,first);
+  step(combat,sector,1.5,()=>0);
+  assert.ok(!combat.shots.some(shot=>shot.id===first));assert.equal(mount.ciwsTarget,second);
+  assert.equal(combat.own.ammo['ciws-30'],ammo-150);assert.ok(Math.abs(mount.readyAt-combat.time-1.5)<1e-9);
+});
+
+test('CIWS uses the final rounds in its drum and preserves a partial firing cycle in saves',()=>{
+  const {sector,combat}=setup();Object.assign(sector.contacts[3],{x:0,y:15,z:0,vx:0,vy:0,vz:0});
+  fireWeapon(combat,sector,'E-04','gp-missiles-1','own','hull',()=>0);combat.hostiles=[];
+  combat.own.ammo['ciws-30']=20;combat.own.systems['ciws-30-2'].hp=0;
+  stepCombat(combat,sector,.05,()=>0);
+  const mount=combat.own.mounts.find(m=>m.id==='ciws-30-1');
+  assert.equal(combat.own.ammo['ciws-30'],0);assert.equal(mount.ciwsRounds,20);assert.ok(Math.abs(mount.readyAt-combat.time-.4)<1e-10);
+  const restored=restoreCombat(JSON.parse(JSON.stringify(combat)),sector.contacts);
+  assert.deepEqual(restored.own.mounts,combat.own.mounts);
+  step(restored,sector,.4,()=>0);assert.equal(restored.shots.length,0);assert.equal(restored.own.ammo['ciws-30'],0);
+});
+
+test('old CIWS engagement delays migrate to firing time without refilling ammunition',()=>{
+  const {sector,combat}=setup();Object.assign(sector.contacts[3],{x:0,y:15,z:0,vx:0,vy:0,vz:0});
+  fireWeapon(combat,sector,'E-04','gp-missiles-1','own','hull',()=>0);combat.hostiles=[];
+  stepCombat(combat,sector,.05,()=>0);const saved=JSON.parse(JSON.stringify(combat));delete saved.ciwsFeedVersion;
+  for(const mount of saved.own.mounts)if(mount.ciwsTarget){mount.readyAt=saved.time+14;delete mount.ciwsRounds;}
+  const restored=restoreCombat(saved,sector.contacts),mount=restored.own.mounts.find(m=>m.ciwsTarget);
+  assert.equal(restored.ciwsFeedVersion,1);assert.ok(Math.abs(mount.readyAt-restored.time-1.5)<1e-10);
+  assert.equal(restored.own.ammo['ciws-30'],combat.own.ammo['ciws-30']);
+  for(const edit of [s=>s.ciwsFeedVersion=2,s=>s.own.mounts.find(m=>m.ciwsTarget).ciwsRounds=76]){
+    const bad=JSON.parse(JSON.stringify(combat));edit(bad);assert.throws(()=>restoreCombat(bad,sector.contacts),/combat data/);
+  }
 });
 
 test('GP automatically intercepts incoming missiles; MP cannot launch against them',()=>{

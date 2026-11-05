@@ -1,5 +1,5 @@
 import { armamentTypes } from './tactical-model.mjs';
-import { weapons,weaponAimOptions,aimPointState,nextAimPoint,canFire,condition,stationSupport,radarEmitting,jammerEmitting } from './combat-model.mjs';
+import { weapons,weaponAimOptions,aimPointState,nextAimPoint,canFire,condition,stationSupport,radarEmitting,jammerEmitting,supportStatus } from './combat-model.mjs';
 const el=(tag,cls,text)=>{const n=document.createElement(tag);n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 const button=(text,fn)=>{const n=el('button','bridge-action',text);n.type='button';n.onclick=fn;return n;};
 const fireIconPath='M9 18V8c0-3 3-6 3-6s3 3 3 6v10M8 18h8v4H8zM9 8h6M9 15h6';
@@ -163,7 +163,7 @@ export function mountWeaponsConsole({flight}){
       row.status.textContent=`${spec.range} km · ${s.ammo[m.weapon]} remaining · ${flight.inTransit()?'EPD transit':error||'Ready'}${active?` · FIRING ${activeTarget} / ${active.component}`:''}`;
       const aimName=component.input.selectedOptions[0]?.textContent;
       row.summary.textContent=`Targeting · ${component.input.value==='incoming'?threat.input.value||'no incoming missile':shipTarget(row)?.trackLabel||'no target'} · ${aimName}`;
-      row.info.textContent=`${spec.rpm} rounds/min per barrel · ${spec.damage} damage/round · ${spec.guidance}`;
+      row.info.textContent=`${spec.rpm} rounds/min per barrel · ${spec.damage} damage/round · ${spec.feed?spec.feed+' · ':''}${spec.guidance}`;
     }
     ownStatus.textContent=`WAYFARER · Hull ${hp(s.systems.hull)} · ${incoming.length} incoming missiles`;
     const enemy=target&&!target.stale?c.contacts[target.id]:null;
@@ -222,14 +222,15 @@ export function mountDamageConsole({root,flight}){
   const containFire=button('Isolate fire / shut down affected compartments',()=>flight.contain('fire'));
   const containBreach=button('Seal bulkheads / isolate pressure loss',()=>flight.contain('breach'));
   const docking=button('',()=>flight.dock()),service=button('Request station repairs and replenishment',()=>flight.service()),station=el('p','combat-note');
-  const events=el('ol','combat-events');aside.append(el('h3','','REPAIR TEAMS'),queue,el('p','combat-note','Engineering queues repairs automatically. Cancel holds a system; queue it manually or switch Auto off/on to release holds. Manual control keeps manual orders. Repairs use spare parts and pause with simulation time. Half speed under fire. Field limits: hull 60%, equipment 75%. Destroyed systems need station replacement.'),containFire,containBreach,el('h3','','STATION SERVICE'),station,docking,service,events);
+  const tenderStatus=el('p','combat-note'),requestTender=button('Request resupply / repair ship',()=>flight.requestSupport()),cancelTender=button('Cancel tender rendezvous / service',()=>flight.cancelSupport());tenderStatus.setAttribute('role','status');
+  const events=el('ol','combat-events');aside.append(el('h3','','REPAIR TEAMS'),queue,el('p','combat-note','Engineering queues repairs automatically. Cancel holds a system; queue it manually or switch Auto off/on to release holds. Manual control keeps manual orders. Repairs use spare parts and pause with simulation time. Half speed under fire. Field limits: hull 60%, equipment 75%. Destroyed systems need a full-service station or repair tender.'),containFire,containBreach,el('h3','','STATION SERVICE'),station,docking,service,el('h3','','RESUPPLY / REPAIR SHIP'),tenderStatus,requestTender,cancelTender,events);
   equipment.append(systems,weaponSystems);workspace.append(equipment,aside);root.append(heading,summary,status,toolbar,workspace);
   function refresh(){
     const c=flight.combat,s=c.own;
     summary.textContent=`Hull ${integrityPercent(s.systems.hull)}% · Spares ${s.spares} / ${s.maxSpares} · ${s.teams} repair teams · ${c.docked?'DOCKED':'FREE FLIGHT'}`;
     summary.title=`Hull / structure · ${hp(s.systems.hull)} · ${state(s.systems.hull)}`;
     automatic.textContent=`Automatic repairs: ${s.autoRepair?'ON':'OFF · manual control'}`;automatic.setAttribute('aria-pressed',String(s.autoRepair));
-    status.textContent=s.systems.hull.hp===0?'SHIP LOST · load a save or restart patrol.':`${s.fire?'FIRE · ':''}${s.breach?'PRESSURE LOSS · ':''}${s.breach||s.systems['life-support'].hp===0?`Emergency air ${Math.ceil(s.air)} s · `:''}${c.service?'Station service in progress':!s.spares?'Spare parts exhausted · onboard repairs stopped':`${s.jobs.length} repair jobs queued`}`;
+    status.textContent=s.systems.hull.hp===0?'SHIP LOST · load a save or restart patrol.':`${s.fire?'FIRE · ':''}${s.breach?'PRESSURE LOSS · ':''}${s.breach||s.systems['life-support'].hp===0?`Emergency air ${Math.ceil(s.air)} s · `:''}${c.service?c.service.provider==='tender'?'Repair tender service in progress':'Station service in progress':!s.spares?'Spare parts exhausted · onboard repairs stopped':`${s.jobs.length} repair jobs queued`}`;
     clock.textContent=flight.sector.running?'Pause local simulation':'Run local simulation';clock.disabled=flight.inTransit();rate.input.value=String(flight.sector.rate);
     for(const [id,r] of rows){const system=s.systems[id],cap=id==='hull'?.6:.75;
       const percent=integrityPercent(system),tooltip=`${system.name} · ${hp(system)} · ${state(system)}`;
@@ -239,13 +240,15 @@ export function mountDamageConsole({root,flight}){
       r.repair.textContent=s.repairHolds.includes(id)?'Repair manually · held':'Queue repair';
       r.repair.disabled=s.systems.hull.hp<=0||!!c.service||system.hp<=0||system.hp>=system.max*cap||s.spares<1||s.jobs.some(j=>j.systemId===id);
     }
-    queue.replaceChildren(...s.jobs.map((j,i)=>{const li=el('li','',`${i<s.teams?'Working':'Queued'} · ${j.station?'Station':j.automatic?'Auto':'Manual'} · ${s.systems[j.systemId].name}`);if(!j.station)li.append(button('Cancel',()=>flight.cancelRepair(j.systemId)));return li;}));
+    queue.replaceChildren(...s.jobs.map((j,i)=>{const li=el('li','',`${i<s.teams?'Working':'Queued'} · ${j.station?c.service?.provider==='tender'?'Tender':'Station':j.automatic?'Auto':'Manual'} · ${s.systems[j.systemId].name}`);if(!j.station)li.append(button('Cancel',()=>flight.cancelRepair(j.systemId)));return li;}));
     if(!s.jobs.length)queue.append(el('li','','No repair orders.'));
     containFire.disabled=!s.fire;containBreach.disabled=!s.breach;
     const support=stationSupport(flight.sector.location);
     station.textContent=support?`${support.name} · ${support.full?'Full repairs, replacement, spares and ammunition':'Basic field repairs, half-capacity spares and gun ammunition'}. Dock within 5 km of the arrival point below 10 KPH; incoming missiles prevent docking.`:'No repair station in this sector. Travel to an established station or the Mars colony.';
-    docking.textContent=c.docked?'Undock':'Request docking';docking.disabled=flight.inTransit()||!support||s.systems.hull.hp===0;
-    service.disabled=!c.docked||!!c.service;events.replaceChildren(...c.log.slice(0,5).map(message=>el('li','',message)));
+    docking.textContent=c.docked?'Undock':'Request docking';docking.disabled=flight.inTransit()||!support||s.systems.hull.hp===0||c.service?.provider==='tender';
+    service.disabled=!c.docked||!!c.service;tenderStatus.textContent=supportStatus(c,flight.sector);
+    const unavailable=flight.supportLink?.();requestTender.disabled=flight.inTransit()||!!unavailable||c.docked||!!c.service||!!c.support&&c.support.phase!=='complete';requestTender.title=unavailable||'';
+    cancelTender.disabled=!c.support;events.replaceChildren(...c.log.slice(0,5).map(message=>el('li','',message)));
   }
   return {refresh};
 }

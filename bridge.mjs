@@ -1,8 +1,9 @@
 import { bridgeStations, bridgeAreas, bridgeAreaFor, canonicalBridgeStation, marineComplements, restoreBridgeState } from './bridge-model.mjs';
 import { mountTactical } from './tactical.mjs';
-import { createSector, observeSector, issueManeuver, setManualHelm, coast, brake, addPatrolWaypoint, startPatrol, stepSector } from './sector-model.mjs';
+import { createSector, createEncounterSector, observeSector, issueManeuver, setManualHelm, coast, brake, addPatrolWaypoint, startPatrol, stepSector } from './sector-model.mjs';
+import { applyEncounterEvent } from './encounter-model.mjs';
 import { mountSectorConsole } from './sector-console.mjs';
-import { createCombat,changeEncounter,shipPerformance,orderEngagement,commandWeapons,ceaseFiring,queueRepair,scheduleRepairs,setAutomaticRepairs,cancelRepair,containEmergency,dock,requestService,stepCombat,advanceMaintenance } from './combat-model.mjs';
+import { createCombat,changeEncounter,shipPerformance,orderEngagement,commandWeapons,ceaseFiring,queueRepair,scheduleRepairs,setAutomaticRepairs,cancelRepair,containEmergency,dock,requestService,stepCombat,advanceMaintenance,cancelSupportShip } from './combat-model.mjs';
 import { mountDamageConsole } from './combat-console.mjs';
 import { createCommunications,restoreCommunications,pollCommunications,unreadCommunications,communicationsRecipients,communicationLink,sendCommunication } from './communications-model.mjs';
 import { mountCommunications } from './communications-console.mjs';
@@ -27,8 +28,9 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLo
   let notice='All stations report ready for the patrol watch.',lastReview=null;
   const compact=matchMedia('(max-width: 650px)');
   const save=()=>onSave();
-  let sector=savedGame?.sector?structuredClone(savedGame.sector):createSector(undefined,snapshot().location),localElapsed=0;
+  let sector=savedGame?.sector?structuredClone(savedGame.sector):snapshot().location==='Earth'?createSector():createEncounterSector(snapshot().location),localElapsed=0;
   let combat=savedGame?.combat?structuredClone(savedGame.combat):createCombat(sector.contacts);
+  if(!savedGame?.combat)applyEncounterEvent(sector,combat);
   scheduleRepairs(combat);
   let communications=restoreCommunications(savedGame?.communications);
   function syncPerformance(){const p=shipPerformance(combat.own);sector.sensorRange=(combat.own.radar?200:60)*p.sensors;sector.enginePerformance=combat.docked?0:p.engines;return p;}
@@ -44,12 +46,15 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLo
       const result=sendCommunication(communications,context,recipient.id,request);
       report(result.response||result.message);updateCommsBadge();save();return result;
     },
-    command:(mode,id,range)=>operate(()=>!combat.docked&&syncPerformance().engines>0&&issueManeuver(sector,mode,id,range)),
-    manual:values=>operate(()=>!combat.docked&&syncPerformance().engines>0&&setManualHelm(sector,values)),
+    supportLink:()=>communicationLink(communicationsContext(),{available:true}),
+    requestSupport:()=>{const result=sendCommunication(communications,communicationsContext(),'hq','support');report(result.response||result.message);updateCommsBadge();save();return result;},
+    cancelSupport:()=>{if(cancelSupportShip(combat)){report('Resupply / repair tender request cancelled.');save();}},
+    command:(mode,id,range)=>operate(()=>!combat.docked&&combat.service?.provider!=='tender'&&syncPerformance().engines>0&&issueManeuver(sector,mode,id,range)),
+    manual:values=>operate(()=>!combat.docked&&combat.service?.provider!=='tender'&&syncPerformance().engines>0&&setManualHelm(sector,values)),
     coast:()=>operate(()=>{coast(sector);return true;}),
-    brake:()=>operate(()=>{if(combat.docked||syncPerformance().engines===0)return false;brake(sector);return true;}),
+    brake:()=>operate(()=>{if(combat.docked||combat.service?.provider==='tender'||syncPerformance().engines===0)return false;brake(sector);return true;}),
     add:point=>operate(()=>{const added=addPatrolWaypoint(sector,point);if(added)sector.status='Patrol waypoint added · ready to fly';return added;}),
-    patrol:()=>operate(()=>!combat.docked&&syncPerformance().engines>0&&startPatrol(sector)),
+    patrol:()=>operate(()=>!combat.docked&&combat.service?.provider!=='tender'&&syncPerformance().engines>0&&startPatrol(sector)),
     clearRoute:()=>operate(()=>{sector.route=[];if(sector.order?.mode==='patrol')coast(sector);sector.status='Patrol route cleared';return true;}),
     toggle:()=>operate(()=>{sector.running=!sector.running;sector.status=sector.running?'Local simulation running · current flight order resumed':'Local simulation paused · flight order retained';return true;}),
     setRate:value=>{if([1,10,60].includes(value)){sector.rate=value;refresh();save();}},
@@ -216,10 +221,10 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLo
       tactical.restoreState(saved.tactical,state.radarRange);notice='JSON save restored · flight paused.';
       renderControls();refresh();
     },
-    localStatus:()=>({running:sector.running,mode:sector.order?.mode||'coast',time:sector.time,canEPD:shipPerformance(combat.own).epd&&!combat.docked,hull:combat.own.systems.hull.hp/combat.own.systems.hull.max,spares:combat.own.spares,core:combat.own.systems.reactor.hp>0}),
+    localStatus:()=>({running:sector.running,mode:sector.order?.mode||'coast',time:sector.time,canEPD:shipPerformance(combat.own).epd&&!combat.docked&&combat.service?.provider!=='tender',hull:combat.own.systems.hull.hp/combat.own.systems.hull.max,spares:combat.own.spares,core:combat.own.systems.reactor.hp>0}),
     pauseLocal(){sector.running=false;sector.status='Local simulation paused · flight order retained';refresh();},
-    suspendLocal(){sector.running=false;coast(sector);combat.firing=null;combat.shots=[];combat.alliedOrders={};sector.status='EPD transit · local flight suspended';refresh();},
-    arrive(location){sector=createSector(undefined,location);changeEncounter(combat,sector.contacts);communications.encounter++;syncPerformance();tactical.reset();notice=`Arrived at ${location}. Damage and supplies retained.`;refresh();},
+    suspendLocal(){cancelSupportShip(combat);sector.running=false;coast(sector);combat.firing=null;combat.shots=[];combat.alliedOrders={};sector.status='EPD transit · local flight suspended';refresh();},
+    arrive(location){sector=createEncounterSector(location);changeEncounter(combat,sector.contacts);applyEncounterEvent(sector,combat);communications.encounter++;localElapsed=0;syncPerformance();tactical.reset();notice=`Arrived at ${location}. ${sector.encounter.summary} Damage and supplies retained.`;log(`Sensor watch at ${location}: ${sector.encounter.summary}`);refresh();},
     resetPatrol(){Object.assign(state,restoreBridgeState());combat=createCombat();sector=createSector(undefined,'Earth');communications=createCommunications();localElapsed=0;lastReview=null;notice='New patrol initialized. All stations ready.';syncPerformance();tactical.reset();renderControls();refresh();},
     advanceTransit(seconds){combat.time+=seconds;advanceMaintenance(combat,seconds);return combat.own.systems.hull.hp>0;},
     tick(seconds){

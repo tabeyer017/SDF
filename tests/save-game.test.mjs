@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createSave, parseSave, MAX_SAVE_BYTES } from '../save-game.mjs';
 import { createSector, observeSector, issueManeuver, setManualHelm, addPatrolWaypoint, startPatrol, stepSector } from '../sector-model.mjs';
 import { restoreBridgeState } from '../bridge-model.mjs';
-import { createCombat,orderAlliedSupport } from '../combat-model.mjs';
+import { createCombat,orderAlliedSupport,requestSupportShip,stepCombat } from '../combat-model.mjs';
 
 function game(){
   const sector=createSector();observeSector(sector);
@@ -38,6 +38,19 @@ test('JSON saves retain allied support and reject support orders during EPD tran
   assert.equal(loaded.bridge.sector.running,false);
   original.navigation.route=[original.selection];original.navigation.active=true;
   assert.throws(()=>createSave(original),/Combat cannot run during EPD transit/);
+});
+
+test('portable saves retain a resupply tender and its service progress without resetting ammunition',()=>{
+  const original=game(),sector=original.bridge.sector;original.bridge.combat=createCombat(sector.contacts);
+  original.bridge.combat.own.ammo['as-missiles']=0;requestSupportShip(original.bridge.combat,sector);
+  let loaded=roundTrip(original);assert.deepEqual(loaded.bridge.combat.support,original.bridge.combat.support);
+  for(let t=0;t<180;t++)stepCombat(original.bridge.combat,sector,1,()=>0);
+  loaded=roundTrip(original);assert.equal(loaded.bridge.combat.service.provider,'tender');
+  assert.equal(loaded.bridge.combat.own.ammo['as-missiles'],0);assert.equal(loaded.bridge.sector.running,false);
+  const mismatched=createSave(original);mismatched.bridge.combat.support.location='Mars';
+  assert.throws(()=>parseSave(JSON.stringify(mismatched)),/another sector/);
+  const transit=createSave(original);transit.navigation.active=true;transit.navigation.route=[transit.selection];
+  assert.throws(()=>parseSave(JSON.stringify(transit)),/EPD transit/);
 });
 
 test('target priorities survive saves, while old saves assign distinct priorities without changing locks',()=>{

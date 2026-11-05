@@ -1,4 +1,4 @@
-import { createCombat,createDamageShip,weapons,missileOptions } from './combat-model.mjs';
+import { createCombat,createDamageShip,weapons,missileOptions,ciwsFiringTime } from './combat-model.mjs';
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 function check(ok){if(!ok)throw new Error('Invalid damage / combat data in save file.');}
 function num(v,min=0,max=1e12){check(Number.isFinite(v)&&v>=min&&v<=max);return v;}
@@ -47,7 +47,7 @@ function ship(saved,classId,player){
   for(const [id,s] of Object.entries(result.systems)){check(object(saved.systems[id]));s.hp=num(saved.systems[id].hp,0,s.max);}
   for(const weapon of Object.keys(result.ammo))result.ammo[weapon]=integer(saved.ammo[weapon],0,result.maxAmmo[weapon]);
   const mounts=array(saved.mounts,result.mounts.length);check(mounts.length===result.mounts.length);
-  for(const mount of result.mounts){const source=mounts.find(m=>object(m)&&m.id===mount.id);check(!!source);mount.readyAt=num(source.readyAt);if(source.ciwsTarget!==undefined){check(mount.weapon==='ciws-30'&&typeof source.ciwsTarget==='string'&&/^shot:\d+$/.test(source.ciwsTarget));mount.ciwsTarget=source.ciwsTarget;}}
+  for(const mount of result.mounts){const source=mounts.find(m=>object(m)&&m.id===mount.id);check(!!source);mount.readyAt=num(source.readyAt);if(source.ciwsTarget!==undefined){check(mount.weapon==='ciws-30'&&typeof source.ciwsTarget==='string'&&/^shot:\d+$/.test(source.ciwsTarget));mount.ciwsTarget=source.ciwsTarget;}if(source.ciwsRounds!==undefined){check(!!mount.ciwsTarget);mount.ciwsRounds=integer(source.ciwsRounds,1,75);}}
   for(const weapon of Object.keys(result.roles)){const role=saved.roles[weapon];check(role===null&&weapon!=='as-missiles'||missileOptions[weapon].includes(role));result.roles[weapon]=role;}
   result.spares=integer(saved.spares,0,result.maxSpares);result.radar=bool(saved.radar);result.jammer=bool(saved.jammer);result.ciwsAuto=bool(saved.ciwsAuto);
   result.surrendered=saved.surrendered===undefined?false:bool(saved.surrendered);
@@ -70,6 +70,10 @@ export function restoreCombat(saved,contacts){
   result.time=num(saved.time);result.nextShot=integer(saved.nextShot,1);
   result.own=ship(saved.own,'sdf-frigate',true);
   for(const contact of contacts)result.contacts[contact.id]=ship(saved.contacts[contact.id],contact.shipType,false);
+  check(saved.ciwsFeedVersion===undefined||saved.ciwsFeedVersion===1);
+  if(saved.ciwsFeedVersion===undefined)for(const vessel of [result.own,...Object.values(result.contacts)])for(const mount of vessel.mounts){
+    if(mount.ciwsTarget)mount.readyAt=Math.min(mount.readyAt,result.time+ciwsFiringTime(vessel,mount,mount.ciwsRounds??75));
+  }
   const validId=id=>id==='own'||Object.hasOwn(result.contacts,id);
   const shotId=id=>typeof id==='string'&&/^shot:\d+$/.test(id)&&Number(id.slice(5))<result.nextShot;
   const targetId=id=>validId(id)||shotId(id);
@@ -114,7 +118,21 @@ export function restoreCombat(saved,contacts){
     result.engagement={objective:order.objective,targetIds,overrides};
   }
   result.docked=bool(saved.docked);
-  if(saved.service!==null){check(object(saved.service)&&result.docked);result.service={full:bool(saved.service.full),remaining:num(saved.service.remaining,0,60)};}
+  if(saved.support!=null){
+    const support=saved.support;check(object(support)&&['en-route','waiting','servicing','complete'].includes(support.phase));
+    result.support={phase:support.phase,location:text(support.location,120)};
+    for(const axis of ['x','y','z'])result.support[axis]=num(support[axis],-1e12,1e12);
+    for(const axis of ['vx','vy','vz'])result.support[axis]=num(support[axis],-7200,7200);
+    check(Math.hypot(result.support.vx,result.support.vy,result.support.vz)<=7200.001);
+  }
+  if(saved.service!==null){
+    check(object(saved.service));const tender=saved.service.provider==='tender';
+    check(saved.service.provider===undefined||tender);
+    check(tender?result.support?.phase==='servicing'&&!result.docked:result.docked);
+    result.service={full:bool(saved.service.full),remaining:num(saved.service.remaining,0,60)};
+    if(tender){check(result.service.full);result.service.provider='tender';}
+  }
+  check(result.support?.phase!=='servicing'||result.service?.provider==='tender');
   check(!result.own.jobs.some(j=>j.station)||!!result.service);
   result.log=array(saved.log,8).map(line=>text(line));return result;
 }
