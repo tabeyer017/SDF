@@ -1,5 +1,7 @@
+import {pirateShipNames,shipNameOptions} from './ship-names.mjs';
+
 export const radarRanges = [10, 30, 60, 100, 140, 200];
-export const IFF_RANGE_KM = 60;
+export const IFF_RANGE_KM = 100;
 export const IFF_IDENTIFICATION_CHANCE = .9;
 export const crewDoctrine={
   maxAndroidFraction:.3,
@@ -155,16 +157,16 @@ const shipSizes = {
 export const trainingContacts = [
   { id: 'U-01', type: 'neutral', shipType: 'privateer', name: 'Black Kestrel', registry: 'IND-0714', iffRoll: .96, x: 7, y: 6, z: 0, vx: 1200, vy: 900, vz: 0 },
   { id: 'N-02', type: 'neutral', shipType: 'une-cargo', name: 'Meridian Hauler', registry: 'UNE-2408', x: -12, y: 9, z: 8, vx: -480, vy: 640, vz: 120 },
-  { id: 'F-03', type: 'friendly', shipType: 'sdf-frigate', name: 'SDF Resolute', registry: 'SDF-031', x: 24, y: 18, z: -12, vx: 1500, vy: -800, vz: 360 },
-  { id: 'E-04', type: 'enemy', shipType: 'pirate-frigate', name: 'Red Talon', registry: 'PIR-009', x: -36, y: -22, z: 20, vx: 1100, vy: 1600, vz: -420 },
+  { id: 'F-03', type: 'friendly', shipType: 'sdf-frigate', name: shipNameOptions('sdf-frigate')[1], registry: 'SDF-031', x: 24, y: 18, z: -12, vx: 1500, vy: -800, vz: 360 },
+  { id: 'E-04', type: 'enemy', shipType: 'pirate-frigate', name: pirateShipNames[0], registry: 'PIR-009', x: -36, y: -22, z: 20, vx: 1100, vy: 1600, vz: -420 },
   { id: 'U-05', type: 'neutral', shipType: 'private-yacht', name: 'Silver Horizon', registry: 'CIV-6802', x: 62, y: -50, z: -35, vx: -720, vy: -960, vz: 150 },
-  { id: 'E-06', type: 'enemy', shipType: 'pirate-corvette', name: 'Razor Wraith', registry: 'PIR-024', x: -116, y: 70, z: 62, vx: 2100, vy: -1700, vz: -550 },
+  { id: 'E-06', type: 'enemy', shipType: 'pirate-corvette', name: pirateShipNames[1], registry: 'PIR-024', x: -116, y: 70, z: 62, vx: 2100, vy: -1700, vz: -550 },
   { id: 'N-07', type: 'neutral', shipType: 'une-light-cargo', name: 'Copper Finch', registry: 'UNE-5118', x: 17, y: -41, z: -24, vx: 600, vy: 800, vz: 80 },
   { id: 'N-08', type: 'neutral', shipType: 'une-transport', name: 'New Dawn', registry: 'UNE-1842', x: -54, y: 39, z: -46, vx: 840, vy: 630, vz: -140 },
   { id: 'N-09', type: 'neutral', shipType: 'une-large-transport', name: 'Pioneer Assembly', registry: 'UNE-1020', x: 92, y: 44, z: 38, vx: -360, vy: 480, vz: 90 },
-  { id: 'F-10', type: 'friendly', shipType: 'sdf-destroyer', name: 'SDF Vigilant', registry: 'SDF-052', x: 43, y: -8, z: 14, vx: -1400, vy: 1900, vz: -300 },
-  { id: 'F-11', type: 'friendly', shipType: 'sdf-cruiser', name: 'SDF Endeavour', registry: 'SDF-083', x: -67, y: -66, z: 55, vx: 1000, vy: 750, vz: 200 },
-  { id: 'F-12', type: 'friendly', shipType: 'sdf-heavy-cruiser', name: 'SDF Bastion', registry: 'SDF-101', x: 118, y: -95, z: -75, vx: -900, vy: 1200, vz: 240 }
+  { id: 'F-10', type: 'friendly', shipType: 'sdf-destroyer', name: 'SDF Tokyo', registry: 'SDF-052', x: 43, y: -8, z: 14, vx: -1400, vy: 1900, vz: -300 },
+  { id: 'F-11', type: 'friendly', shipType: 'sdf-cruiser', name: 'SDF Ontario', registry: 'SDF-083', x: -67, y: -66, z: 55, vx: 1000, vy: 750, vz: 200 },
+  { id: 'F-12', type: 'friendly', shipType: 'sdf-heavy-cruiser', name: 'SDF Nairobi', registry: 'SDF-101', x: 118, y: -95, z: -75, vx: -900, vy: 1200, vz: 240 }
 ];
 
 export const contactDistance = contact => Math.hypot(contact.x, contact.y, contact.z);
@@ -203,7 +205,7 @@ export function observeContact(contact) {
       label: 'UNKNOWN SHIP TYPE', size: 'Unknown', faction: 'Unknown', role: 'Unknown',
       armaments: 'Unknown', engines: 'Unknown', countermeasures:'Unknown', hangar:'Unknown'
     },
-    iffStatus: identified ? 'Identity verified' : withinIFFRange ? 'No verified IFF return' : 'Beyond 60 km IFF range'
+    iffStatus: identified ? 'Identity verified' : withinIFFRange ? 'No verified IFF return' : `Beyond ${IFF_RANGE_KM} km IFF range`
   };
 }
 export const contactsInRange = (contacts, range) => contacts.filter(contact => contactDistance(contact) <= range);

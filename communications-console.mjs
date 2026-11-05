@@ -1,4 +1,5 @@
 import { communicationsRecipients,communicationRequests,communicationLink,sendCommunication,markChannelRead,unreadCommunications } from './communications-model.mjs';
+import {playerShipName} from './ship-names.mjs';
 const el=(tag,cls,text)=>{const node=document.createElement(tag);node.className=cls;if(text!==undefined)node.textContent=text;return node;};
 const button=(text,fn)=>{const node=el('button','bridge-action',text);node.type='button';node.onclick=fn;return node;};
 function field(label,input){const wrap=el('label','bridge-setting');wrap.append(el('span','',label),input);input.setAttribute('aria-label',label);return wrap;}
@@ -47,10 +48,11 @@ export function mountCommunications({root,getState,getContext,onChange,onNavigat
     if(key!==optionsKey){const value=request.value;request.replaceChildren(...choices.map(c=>Object.assign(el('option','',c.label),{value:c.id})));if(choices.some(c=>c.id===value))request.value=value;optionsKey=key;}
     request.disabled=!!error;detail.disabled=!!error;send.disabled=!!error;
     preview.textContent=`Includes your location (${context.sector.location}) and hull integrity (${Math.round(context.combat.own.systems.hull.hp/context.combat.own.systems.hull.max*100)}%).`;
-    const messages=state.messages.filter(m=>m.channelId===selected.id),newThreadKey=`${selected.id}:${messages.map(m=>m.id).join(',')}`;
+    const ownName=playerShipName(context.combat).toUpperCase();
+    const messages=state.messages.filter(m=>m.channelId===selected.id),newThreadKey=`${ownName}:${selected.id}:${messages.map(m=>m.id).join(',')}`;
     if(newThreadKey!==threadKey){
       thread.replaceChildren(...messages.map(message=>{
-        const row=el('li',`comms-message is-${message.direction}`),meta=el('p','comms-message-meta',`${message.direction==='sent'?'WAYFARER → '+message.channelName:message.channelName+' → WAYFARER'} · ${date(message.time)} · ${message.location}`);
+        const row=el('li',`comms-message is-${message.direction}`),meta=el('p','comms-message-meta',`${message.direction==='sent'?ownName+' → '+message.channelName:message.channelName+' → '+ownName} · ${date(message.time)} · ${message.location}`);
         row.append(meta,el('h3','',message.subject),el('p','comms-message-body',message.body));return row;
       }));
       if(!messages.length)thread.append(el('li','comms-empty','No messages on this channel. Open a channel or choose a request to begin.'));

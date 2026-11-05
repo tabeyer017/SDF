@@ -1,6 +1,8 @@
 import { miningStations } from './mining.mjs';
+import {shipNameOptions,pirateShipNames,legacyFrigateNames} from './ship-names.mjs';
 
-export const ENCOUNTER_VERSION = 1;
+export const ENCOUNTER_VERSION = 4;
+export const ENCOUNTER_VERSIONS = [1,2,3,4];
 export const MAX_ENCOUNTER_CONTACTS = 12;
 const civilians=['une-cargo','une-light-cargo','une-transport','une-large-transport','private-yacht','privateer'];
 const sdf=['sdf-frigate','sdf-destroyer','sdf-cruiser','sdf-heavy-cruiser'];
@@ -29,7 +31,8 @@ function randomStream(location,seed){
 }
 
 // The seed and destination reproduce identities; saved positions and damage may evolve.
-export function generateEncounter(location,seed=Math.floor(Math.random()*4294967296)){
+export function generateEncounter(location,seed=Math.floor(Math.random()*4294967296),version=ENCOUNTER_VERSION){
+  if(!ENCOUNTER_VERSIONS.includes(version))throw new Error('Unsupported encounter version.');
   if(typeof location!=='string'||!location.length||location.length>120||!Number.isInteger(seed)||seed<0||seed>0xFFFFFFFF)throw new Error('Invalid encounter destination or seed.');
   const random=randomStream(location,seed),pick=items=>items[Math.floor(random()*items.length)],count=(min,max)=>min+Math.floor(random()*(max-min+1));
   const region=encounterRegion(location),scenarios={inner:['traffic','traffic','convoy','patrol','distress','raiders'],belt:['traffic','convoy','distress','distress','raiders','raiders','patrol'],outer:['quiet','traffic','patrol','distress','raiders'],boundary:['quiet','patrol','patrol','distress','raiders'],deep:['quiet','quiet','distress','raiders','patrol']};
@@ -38,7 +41,10 @@ export function generateEncounter(location,seed=Math.floor(Math.random()*4294967
     const index=contacts.length+1,id=`${type==='friendly'?'F':type==='enemy'?'E':'N'}-${tag}-${String(index).padStart(2,'0')}`;
     const radius=index===1?count(18,42):count(45,190),azimuth=random()*Math.PI*2,z=(random()-.5)*radius*.7,plane=Math.sqrt(radius*radius-z*z);
     const suffix=count(10,99),prefix=type==='friendly'?'SDF ':'';
-    contacts.push({id,type,shipType,name:`${prefix}${pick(names[type])} ${suffix}`,registry:`${type==='friendly'?'SDF':type==='enemy'?'PIR':'CIV'}-${tag}-${index}`,iffRoll:random(),x:Math.cos(azimuth)*plane,y:Math.sin(azimuth)*plane,z,vx:count(-1600,1600),vy:count(-1600,1600),vz:count(-400,400)});
+    const choices=version>=3&&type==='enemy'?pirateShipNames:version>=2&&type==='friendly'?(version<4&&shipType==='sdf-frigate'?legacyFrigateNames:shipNameOptions(shipType)):null;
+    let name=choices?pick(choices):`${prefix}${pick(names[type])} ${suffix}`;
+    if(choices&&contacts.some(contact=>contact.name===name))name=choices.find(candidate=>!contacts.some(contact=>contact.name===candidate))??name;
+    contacts.push({id,type,shipType,name,registry:`${type==='friendly'?'SDF':type==='enemy'?'PIR':'CIV'}-${tag}-${index}`,iffRoll:random(),x:Math.cos(azimuth)*plane,y:Math.sin(azimuth)*plane,z,vx:count(-1600,1600),vy:count(-1600,1600),vz:count(-400,400)});
   }
   const addMany=(type,classes,min,max)=>{const total=count(min,max);for(let i=0;i<total;i++)add(type,pick(classes));};
   if(event==='traffic'){addMany('neutral',civilians,2,5);addMany('friendly',sdf,0,2);}
@@ -48,7 +54,7 @@ export function generateEncounter(location,seed=Math.floor(Math.random()*4294967
   if(event==='raiders'){addMany('enemy',pirates,1,3);addMany('neutral',civilians,1,3);addMany('friendly',sdf,0,1);}
   if(event==='quiet')addMany('neutral',civilians,0,2);
   const [title,summary]=reports[event];
-  return {version:ENCOUNTER_VERSION,seed,region,event,title,summary,contacts,distressId:event==='distress'?contacts[0].id:null,hostileIds:event==='raiders'?contacts.filter(contact=>contact.type==='enemy').map(contact=>contact.id):[]};
+  return {version,seed,region,event,title,summary,contacts,distressId:event==='distress'?contacts[0].id:null,hostileIds:event==='raiders'?contacts.filter(contact=>contact.type==='enemy').map(contact=>contact.id):[]};
 }
 
 // Apply an event once on arrival; loading a save restores its existing damage instead.

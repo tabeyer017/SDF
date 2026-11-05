@@ -1,7 +1,12 @@
+import {shipNameOptions,shipNamingConventions} from './ship-names.mjs';
+
 export function mountStartMenu({hasPatrol,summary,onPause,onEnter,onNewMission}) {
   const $=id=>document.getElementById(id),screen=$('start-screen');
   const gameRegions=[document.querySelector('body > .topbar'),document.querySelector('body > main')];
   let open=true;
+  const shipName=$('mission-ship-name');
+  for(const name of shipNameOptions('sdf-frigate'))shipName.append(Object.assign(document.createElement('option'),{value:name,textContent:name}));
+  $('mission-name-convention').textContent=`UNE frigate naming: ${shipNamingConventions['sdf-frigate'].category}.`;
   function update(){
     $('continue-mission').hidden=!hasPatrol();
     $('continue-summary').textContent=summary();
@@ -23,7 +28,7 @@ export function mountStartMenu({hasPatrol,summary,onPause,onEnter,onNewMission})
   document.querySelector('.brand').onclick=event=>{event.preventDefault();show();};
   $('continue-mission').onclick=enter;
   $('new-mission').onclick=newMission;
-  $('launch-mission').onclick=()=>{onNewMission();$('new-mission-dialog').close();enter();};
+  $('launch-mission').onclick=()=>{onNewMission(shipName.value);$('new-mission-dialog').close();enter();};
   $('backup-before-mission').onclick=()=>{$('download-save').click();$('mission-backup-status').textContent=$('save-status').textContent;};
   $('new-campaign').onclick=()=>$('campaign-dialog').showModal();
   $('campaign-to-mission').onclick=()=>{$('campaign-dialog').close();newMission();};

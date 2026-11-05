@@ -1,5 +1,6 @@
 import { armamentTypes } from './tactical-model.mjs';
-import { weapons,weaponAimOptions,aimPointState,nextAimPoint,canFire,condition,stationSupport,radarEmitting,jammerEmitting,supportStatus } from './combat-model.mjs';
+import {playerShipName} from './ship-names.mjs';
+import { weapons,weaponAimOptions,aimPointState,nextAimPoint,canFire,condition,stationSupport,radarEmitting,jammerEmitting,supportStatus,missileVolleySizes,cannonBurstSizes,trackingSolution,burnThroughError,radarBurnThrough } from './combat-model.mjs';
 const el=(tag,cls,text)=>{const n=document.createElement(tag);n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 const button=(text,fn)=>{const n=el('button','bridge-action',text);n.type='button';n.onclick=fn;return n;};
 const fireIconPath='M9 18V8c0-3 3-6 3-6s3 3 3 6v10M8 18h8v4H8zM9 8h6M9 15h6';
@@ -14,7 +15,7 @@ function actionIcon(label,fn,pathData,accessibleLabel=label){
   icon.append(path);action.append(icon);return action;
 }
 function weaponActionIcon(repeat,name,fn,quick=false){
-  const label=repeat?'Start Firing':'Fire Once / Burst';
+  const label=repeat?'Start Firing':'Fire';
   return actionIcon(label,fn,repeat?repeatIconPath:fireIconPath,`${quick?'Quick ':''}${label} · ${name}`);
 }
 function select(label,choices,fn){const wrap=el('label','bridge-setting');wrap.append(el('span','',label));const input=el('select','');input.setAttribute('aria-label',label);for(const [value,name] of choices)input.append(Object.assign(el('option','',name),{value}));input.onchange=()=>fn(input.value);wrap.append(input);return {wrap,input};}
@@ -66,8 +67,12 @@ export function mountWeaponsConsole({flight}){
   const readiness=el('p','combat-note weapon-readiness'),ownStatus=el('p','combat-readout'),targetStatus=el('p','combat-readout');
   readiness.setAttribute('role','status');
   const targetSystems=el('details','target-damage');targetSystems.append(el('summary','','Target system integrity'));const targetSystemList=el('ul','target-integrity-list');targetSystems.append(targetSystemList);
-  const radar=button('',()=>flight.toggleEmitter('radar')),jammer=button('',()=>flight.toggleEmitter('jammer')),ciws=button('',()=>flight.toggleEmitter('ciwsAuto'));
-  const fire=actionIcon('Fire Once / Burst',()=>flight.fire(orders()),fireIconPath);
+  const radar=button('',()=>flight.toggleEmitter('radar')),jammer=button('',()=>flight.cycleJammer()),ciws=button('',()=>flight.toggleEmitter('ciwsAuto'));
+  jammer.title='Cycle jammer use: automatic in combat → always on → silent. Emitting reveals your presence.';
+  const burn=button('Radar burn-through',()=>flight.burnThrough()),ewStatus=el('p','combat-note');ewStatus.setAttribute('role','status');
+  burn.title=`${radarBurnThrough.duration} s tracking pulse · ${radarBurnThrough.cooldown} s between uses · requires active radar`;
+  const ewControls=el('div','combat-actions');ewControls.append(jammer,burn);
+  const fire=actionIcon('Fire',()=>flight.fire(orders()),fireIconPath);
   const continuous=actionIcon('Start Firing',()=>flight.startFire(orders()),repeatIconPath);
   const ceaseAll=actionIcon('Cease All Fire',ceaseAllWeapons,'M8 3h13v13M3 8h13v13H3zM6 11l7 7M13 11l-7 7');
   const clock=button('',()=>flight.toggle());
@@ -75,7 +80,7 @@ export function mountWeaponsConsole({flight}){
   const actions=el('div','combat-actions combat-fire-actions weapon-command-actions');actions.append(fire,continuous,ceaseAll);
   const commandBar=el('div','weapon-command-bar');commandBar.append(readiness,actions,clock);
   const selection=el('div','weapon-selection-actions');selection.append(button('Select all',()=>{for(const row of rows.values())row.check.checked=true;refresh();}),button('Clear selection',ceaseAllWeapons));
-  const emitters=el('div','combat-actions');emitters.append(radar,jammer,ciws);
+  const emitters=el('div','combat-actions');emitters.append(radar,ciws);
   const events=el('ol','combat-events');events.setAttribute('aria-label','Combat events');
   const targetDetails=el('section','target-combat-details');targetDetails.setAttribute('aria-label','Target combat status');targetDetails.append(targetStatus,targetSystems);
   const settings=el('details','combat-settings');settings.append(el('summary','','Combat settings'),emitters,speed.wrap,events);
@@ -83,7 +88,13 @@ export function mountWeaponsConsole({flight}){
   const objectiveStatus=el('p','combat-note');objectiveStatus.setAttribute('role','status');
   const engage=objective=>{flight.engageTargets(objective,lockedTargets.map(contact=>contact.id));refresh();};
   objectives.append(button('Disable ships',()=>engage('disable')),button('Destroy ships',()=>engage('destroy')));
-  root.append(ownStatus,objectives,objectiveStatus,commandBar,selection,list);
+  const volleyChoices=missileVolleySizes.map(size=>[size,String(size)]),burstChoices=cannonBurstSizes.map(size=>[size,String(size)]);
+  const volley=select('Missile volley size',volleyChoices,value=>flight.setMissileVolley(Number(value)));
+  const burst=select('Cannon burst size',burstChoices,value=>flight.setCannonBurst(Number(value)));
+  burst.input.title='Total autocannon shells per mount, fired one at a time. Tactical repeats after a short pause.';
+  const salvoSettings=el('div','weapon-salvo-settings');salvoSettings.append(volley.wrap,burst.wrap);
+  const volleyNote=el('p','combat-note','Missiles per launcher · cannon shells per mount, one at a time. Fire stops at the count; Tactical pauses and repeats.');
+  root.append(ownStatus,objectives,objectiveStatus,salvoSettings,ewControls,ewStatus,volleyNote,commandBar,selection,list);
   const quick=el('section','radar-fire-popup');quick.popover='auto';quick.setAttribute('role','dialog');quick.setAttribute('aria-labelledby','quick-fire-title');
   const quickHeader=el('header','quick-fire-heading'),quickTitle=el('h3','');quickTitle.id='quick-fire-title';
   const closeQuick=button('×',()=>closeQuickFire());closeQuick.setAttribute('aria-label','Close quick fire control');quickHeader.append(quickTitle,closeQuick);
@@ -101,7 +112,11 @@ export function mountWeaponsConsole({flight}){
   }
   const quickStatus=el('p','combat-note weapon-readiness');quickStatus.setAttribute('role','status');
   const quickCeaseAll=button('Cease All Fire',ceaseAllWeapons);quickCeaseAll.title='Cease All Fire · uncheck all weapons';quickCeaseAll.setAttribute('aria-label','Quick Cease All Fire');
-  const quickFooter=el('footer','quick-fire-footer');quickFooter.append(quickStatus,quickCeaseAll);const quickObjectives=el('div','combat-actions');quickObjectives.append(button('Disable ships',()=>engage('disable')),button('Destroy ships',()=>engage('destroy')));quick.append(quickHeader,quickObjectives,quickList,quickFooter);document.body.append(quick);
+  const quickVolley=select('Quick missile volley size',volleyChoices,value=>flight.setMissileVolley(Number(value)));
+  const quickBurst=select('Quick cannon burst size',burstChoices,value=>flight.setCannonBurst(Number(value)));
+  const quickSalvoSettings=el('div','weapon-salvo-settings');quickSalvoSettings.append(quickVolley.wrap,quickBurst.wrap);
+  const quickBurn=button('Radar burn-through',()=>flight.burnThrough());quickBurn.setAttribute('aria-label','Quick radar burn-through');quickBurn.title=burn.title;
+  const quickFooter=el('footer','quick-fire-footer');quickFooter.append(quickStatus,quickCeaseAll);const quickObjectives=el('div','combat-actions');quickObjectives.append(button('Disable ships',()=>engage('disable')),button('Destroy ships',()=>engage('destroy')),quickBurn);quick.append(quickHeader,quickObjectives,quickSalvoSettings,quickList,quickFooter);document.body.append(quick);
   quick.oncontextmenu=event=>event.preventDefault();
   function closeQuickFire(){if(quick.matches(':popover-open'))quick.hidePopover();quickTargetId=null;quickAnchor=null;}
   function positionQuickFire(){
@@ -124,7 +139,7 @@ export function mountWeaponsConsole({flight}){
   function refresh(nextTarget=target,nextLocks=lockedTargets){
     target=nextTarget;lockedTargets=nextLocks;const c=flight.combat,s=own(),incoming=c.shots.filter(p=>p.targetId==='own'&&weapons[p.weapon].missile);
     if(combatState!==c){
-      combatState=c;const active=c.firing||[];let expanded=false;
+      combatState=c;const active=[...(c.firing??[]),...c.own.mounts.filter(m=>m.burst).map(m=>({mountId:m.id,...m.burst}))];let expanded=false;
       for(const [i,row] of [...rows.values()].entries()){
         const assignment=active.find(f=>f.mountId===row.m.id);row.check.checked=active.length?!!assignment:i===0;
         syncOptions(row.assigned.input,assignment?[[assignment.targetId,'Assigned target']]:[['','Active radar target']]);
@@ -134,7 +149,9 @@ export function mountWeaponsConsole({flight}){
         row.details.open=row.check.checked&&!expanded;if(row.details.open)expanded=true;
       }
     }
-    objectiveStatus.textContent=c.engagement?'Automatic '+c.engagement.objective+' · priority order · '+c.engagement.overrides.length+' manual overrides. Waiting weapons engage when in range.':'Choose an objective for locked targets in priority order, or select weapons manually.';
+    volley.input.value=quickVolley.input.value=String(c.missileVolleySize);
+    burst.input.value=quickBurst.input.value=String(c.cannonBurstSize);
+    objectiveStatus.textContent=c.engagement?'Automatic '+c.engagement.objective+' · CIWS → radar jammer → objective · '+c.missileVolleySize+' missile'+(c.missileVolleySize===1?'':'s')+' per launch · '+c.cannonBurstSize+'-round cannon bursts with pauses · '+c.engagement.overrides.length+' manual overrides. Guns need to be in range.':'Choose an objective for locked targets in priority order, or select weapons manually.';
     for(const group of [objectives,quickObjectives])for(const button of group.children)button.disabled=!lockedTargets.length;
     let ready=0,queueable=0;
     for(const row of rows.values()){
@@ -159,15 +176,17 @@ export function mountWeaponsConsole({flight}){
       const configured=order(row),error=canFire(c,flight.sector,'own',m.id,configured.targetId,configured.component),startError=canFire(c,flight.sector,'own',m.id,configured.targetId,configured.component,{ignoreCooldown:true});
       row.singleFire.disabled=flight.inTransit()||!!error;row.singleContinuous.disabled=flight.inTransit()||!!startError;
       if(row.check.checked&&!flight.inTransit()){if(!error)ready++;if(!startError)queueable++;}
-      const active=(c.firing||[]).find(f=>f.mountId===m.id),activeTarget=active&&(lockedTargets.find(contact=>contact.id===active.targetId)?.trackLabel||active.targetId);
-      row.status.textContent=`${spec.range} km · ${s.ammo[m.weapon]} remaining · ${flight.inTransit()?'EPD transit':error||'Ready'}${active?` · FIRING ${activeTarget} / ${active.component}`:''}`;
+      const pending=s.mounts.find(mount=>mount.id===m.id)?.burst;
+      const active=(c.firing||[]).find(f=>f.mountId===m.id)||pending,activeTarget=active&&(lockedTargets.find(contact=>contact.id===active.targetId)?.trackLabel||active.targetId);
+      row.status.textContent=`${spec.range} km · ${s.ammo[m.weapon]} remaining · ${flight.inTransit()?'EPD transit':error||'Ready'}${pending?` · BURST ${pending.total-pending.remaining}/${pending.total}`:''}${active?` · FIRING ${activeTarget} / ${active.component}`:''}`;
       const aimName=component.input.selectedOptions[0]?.textContent;
       row.summary.textContent=`Targeting · ${component.input.value==='incoming'?threat.input.value||'no incoming missile':shipTarget(row)?.trackLabel||'no target'} · ${aimName}`;
-      row.info.textContent=`${spec.rpm} rounds/min per barrel · ${spec.damage} damage/round · ${spec.feed?spec.feed+' · ':''}${spec.guidance}`;
+      row.info.textContent=`${spec.rpm} rounds/min per barrel · ${spec.damage} damage/round · ${spec.missile?`${c.missileVolleySize}-missile volleys (or remaining stock) · `:m.weapon.startsWith('autocannon-')?`${c.cannonBurstSize} shells per mount · individual shots · Tactical adds a 2 s pause between bursts · `:''}${spec.feed?spec.feed+' · ':''}${spec.guidance}`;
     }
-    ownStatus.textContent=`WAYFARER · Hull ${hp(s.systems.hull)} · ${incoming.length} incoming missiles`;
+    ownStatus.textContent=`${playerShipName(c).toUpperCase()} · Hull ${hp(s.systems.hull)} · ${incoming.length} incoming missiles`;
     const enemy=target&&!target.stale?c.contacts[target.id]:null;
-    targetStatus.textContent=enemy?`${enemy.surrendered?'SURRENDERED · ':''}${target.identified?`Target hull ${hp(enemy.systems.hull)} · `:''}Radar ${radarEmitting(enemy)?'emitting':'silent'} · Jammer ${jammerEmitting(enemy)?'emitting':'silent'}`:'Select a live radar track to engage a ship.';
+    const track=enemy?trackingSolution(c,flight.sector,'own',target.id):null;
+    targetStatus.textContent=enemy?`${enemy.surrendered?'SURRENDERED · ':enemy.combatResponse?.mode==='retreating'?'DISENGAGING · ':''}${target.identified?`Target hull ${hp(enemy.systems.hull)} · `:''}Radar ${radarEmitting(enemy)?'emitting':'silent'} · Jammer ${jammerEmitting(enemy)?'emitting':'silent'} · ${track.status} · ${Math.round(track.quality*100)}% track quality${enemy.combatResponse&&target.identified?` · ${enemy.combatResponse.reason}`:''}`:'Select a live radar track to engage a ship.';
     targetSystems.hidden=!enemy||!target.identified;
     targetSystemList.replaceChildren(...(enemy&&target.identified?Object.values(enemy.systems).map(system=>{
       const status=integrityStatus(system),percent=integrityPercent(system);
@@ -176,11 +195,15 @@ export function mountWeaponsConsole({flight}){
       value.setAttribute('aria-label',`${percent}% integrity remaining · ${state(system)}`);
       row.append(el('span','target-integrity-name',system.name),value);return row;
     }):[]));
-    readiness.textContent=`${selectedRows().length} selected · ${ready} ready · ${(c.firing||[]).length} firing`;
-    fire.disabled=ready===0;continuous.disabled=queueable===0;ceaseAll.disabled=!c.firing&&selectedRows().length===0;
+    const firingCount=new Set([...(c.firing??[]).map(f=>f.mountId),...s.mounts.filter(m=>m.burst).map(m=>m.id)]).size;
+    readiness.textContent=`${selectedRows().length} selected · ${ready} ready · ${firingCount} firing`;
+    fire.disabled=ready===0;continuous.disabled=queueable===0;ceaseAll.disabled=firingCount===0&&selectedRows().length===0;
     clock.textContent=flight.sector.running?'Pause local simulation':'Run local simulation';clock.disabled=flight.inTransit();speed.input.value=String(flight.sector.rate);
-    radar.textContent=`Ship radar: ${s.radar?'ON':'SILENT'}`;jammer.textContent=`Radar jammer: ${s.jammer?'ON':'OFF'}`;ciws.textContent=`Independent CIWS: ${s.ciwsAuto?'AUTO':'OFF'}`;
+    radar.textContent=`Ship radar: ${s.radar?'ON':'SILENT'}`;jammer.textContent=`Jammer: ${s.jammerMode==='auto'?'AUTO · ':''}${jammerEmitting(s)?'EMITTING':'SILENT'}`;ciws.textContent=`Independent CIWS: ${s.ciwsAuto?'AUTO':'OFF'}`;
     radar.disabled=s.systems.sensors.hp<=0;jammer.disabled=s.systems.jammer.hp<=0;
+    const burnError=burnThroughError(c),burnLeft=Math.ceil((s.burnThroughUntil??0)-c.time),cooling=Math.ceil((s.burnThroughReadyAt??0)-c.time);
+    burn.disabled=quickBurn.disabled=flight.inTransit()||!!burnError;
+    ewStatus.textContent=`${burnLeft>0&&radarEmitting(s)?`BURN-THROUGH · ${burnLeft} s tracking pulse`:cooling>0?`Burn-through cooling · ${cooling} s`:'Burn-through ready · 15 s pulse / 180 s cooldown'}${jammerEmitting(s)?' · Jammer emission reveals your presence.':''}`;
     events.replaceChildren(...c.log.slice(0,5).map(message=>el('li','',message)));
     if(quickTargetId){
       const contact=lockedTargets.find(contact=>contact.id===quickTargetId);

@@ -5,7 +5,7 @@ import { trainingContacts, observeContact, restoreTargetPriorities } from './tac
 import { createCombat,stationSupport } from './combat-model.mjs';
 import { restoreCombat } from './combat-save.mjs';
 import { restoreCommunications } from './communications-model.mjs';
-import { generateEncounter, ENCOUNTER_VERSION, MAX_ENCOUNTER_CONTACTS } from './encounter-model.mjs';
+import { generateEncounter, ENCOUNTER_VERSIONS, MAX_ENCOUNTER_CONTACTS } from './encounter-model.mjs';
 
 export const SAVE_STORAGE_KEY = 'sdf-save-v2';
 export const LEGACY_SAVE_STORAGE_KEY = 'sdf-save-v1';
@@ -53,9 +53,9 @@ function localSector(value,location,pause){
   result.manual={thrust:number(value.manual.thrust,'thrust',-100,100),bearing:number(value.manual.bearing,'thrust bearing',0,360),elevation:number(value.manual.elevation,'thrust elevation',-90,90)};
   let expected=trainingContacts;
   if(value.encounter!==undefined){
-    requireValue(record(value.encounter)&&value.encounter.version===ENCOUNTER_VERSION,'Unsupported sector encounter.');
+    requireValue(record(value.encounter)&&ENCOUNTER_VERSIONS.includes(value.encounter.version),'Unsupported sector encounter.');
     const seed=number(value.encounter.seed,'encounter seed',0,0xFFFFFFFF);requireValue(Number.isInteger(seed),'Invalid encounter seed.');
-    const {contacts,...encounter}=generateEncounter(location,seed);expected=contacts;result.encounter=encounter;
+    const {contacts,...encounter}=generateEncounter(location,seed,value.encounter.version);expected=contacts;result.encounter=encounter;
   }
   const contacts=list(value.contacts,MAX_ENCOUNTER_CONTACTS,'sector contacts');
   requireValue(contacts.length===expected.length,'The save has an incomplete sector encounter.');
@@ -102,6 +102,7 @@ function validateSave(value,pause){
   requireValue(!combat.docked||(!nav.active&&!!stationSupport(nav.location)&&Math.hypot(sector.own.x,sector.own.y,sector.own.z)<=5&&Math.hypot(sector.own.vx,sector.own.vy,sector.own.vz)<=10),'Invalid docked state.');
   requireValue(!combat.support||combat.support.location===sector.location,'Support rendezvous is in another sector.');
   requireValue(!nav.active||(!combat.firing&&!combat.shots.length&&!combat.docked&&!combat.support&&!Object.keys(combat.alliedOrders).length),'Combat cannot run during EPD transit.');
+  requireValue(!nav.active||!combat.own.mounts.some(m=>m.burst),'Cannon bursts cannot continue during EPD transit.');
   requireValue(!nav.active||(!sector.running && !sector.order),'EPD transit cannot run alongside local flight orders.');
   const tactical=value.bridge.tactical;
   requireValue(record(tactical),'Missing tactical state.');

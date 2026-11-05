@@ -1,4 +1,5 @@
 import { contactTypes } from './tactical-model.mjs';
+import {playerShipName} from './ship-names.mjs';
 import { maneuverNames, maneuverTelemetry, predictedPath, sectorHazards, SENSOR_RANGE, isHardTurn } from './sector-model.mjs';
 import { flightControlState } from './bridge-model.mjs';
 import { sectorBodies, planetaryOverview } from './sector-bodies.mjs';
@@ -129,7 +130,7 @@ export function mountSectorConsole({root,flight,openSystem,strategic}) {
       if(current){const future={...p};for(const key of ['x','y','z'])future[key]+=record.velocity[key]/60;layer.append(svg('path',{d:`M${px(p)} ${py(p)}L${px(future)} ${py(future)}`,stroke:color,'stroke-dasharray':'2 4',opacity:.6}));}
       trackList.append(el('li','',`${c.trackLabel} · ${current?'Live':`Last known ${age.toFixed(0)}s ago`} · Z ${p.z.toFixed(1)} km · ${c.ship.label}`));
     }
-    const ship=svg('g',{transform:`translate(${px(s.own)} ${py(s.own)})`});ship.append(svg('circle',{r:7,fill:'#091a21',stroke:'#b3eff0'}),svg('path',{d:`M0 0L${s.facing.x*18} ${-s.facing[axis]*18}`,stroke:'#b3eff0','stroke-width':2}),svg('text',{x:11,y:16,fill:'#b3eff0','font-size':9},'WAYFARER'));layer.append(ship);
+    const ship=svg('g',{transform:`translate(${px(s.own)} ${py(s.own)})`});ship.append(svg('circle',{r:7,fill:'#091a21',stroke:'#b3eff0'}),svg('path',{d:`M0 0L${s.facing.x*18} ${-s.facing[axis]*18}`,stroke:'#b3eff0','stroke-width':2}),svg('text',{x:11,y:16,fill:'#b3eff0','font-size':9},playerShipName(flight.combat).toUpperCase()));layer.append(ship);
     chart.append(svg('text',{x:-250,y:267,fill:'#9fbfc9','font-size':9},`CYAN: ${Math.round(s.sensorRange??SENSOR_RANGE)} KM SENSORS / PREDICTION · GOLD: PATROL · HOLLOW: LAST KNOWN`));
   }
   return {refresh};

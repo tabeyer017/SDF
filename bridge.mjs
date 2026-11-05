@@ -3,11 +3,12 @@ import { mountTactical } from './tactical.mjs';
 import { createSector, createEncounterSector, observeSector, issueManeuver, setManualHelm, coast, brake, addPatrolWaypoint, startPatrol, stepSector } from './sector-model.mjs';
 import { applyEncounterEvent } from './encounter-model.mjs';
 import { mountSectorConsole } from './sector-console.mjs';
-import { createCombat,changeEncounter,shipPerformance,orderEngagement,commandWeapons,ceaseFiring,queueRepair,scheduleRepairs,setAutomaticRepairs,cancelRepair,containEmergency,dock,requestService,stepCombat,advanceMaintenance,cancelSupportShip } from './combat-model.mjs';
+import { createCombat,changeEncounter,shipPerformance,orderEngagement,commandWeapons,ceaseFiring,queueRepair,scheduleRepairs,setAutomaticRepairs,cancelRepair,containEmergency,dock,requestService,stepCombat,advanceMaintenance,cancelSupportShip,missileVolleySizes,cannonBurstSizes,syncElectronicTracking,setJammerMode,requestRadarBurnThrough,refreshMissileGuidance } from './combat-model.mjs';
 import { mountDamageConsole } from './combat-console.mjs';
 import { createCommunications,restoreCommunications,pollCommunications,unreadCommunications,communicationsRecipients,communicationLink,sendCommunication } from './communications-model.mjs';
 import { mountCommunications } from './communications-console.mjs';
 import { shuttleTypes,crewDoctrine } from './tactical-model.mjs';
+import {shipNameOptions,shipNamingConventions,playerShipName,setPlayerShipName} from './ship-names.mjs';
 
 export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLocalChange=()=>{},onSave=()=>{},savedGame=null}) {
   const $=id=>document.getElementById(id),NS='http://www.w3.org/2000/svg';
@@ -33,7 +34,7 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLo
   if(!savedGame?.combat)applyEncounterEvent(sector,combat);
   scheduleRepairs(combat);
   let communications=restoreCommunications(savedGame?.communications);
-  function syncPerformance(){const p=shipPerformance(combat.own);sector.sensorRange=(combat.own.radar?200:60)*p.sensors;sector.enginePerformance=combat.docked?0:p.engines;return p;}
+  function syncPerformance(){const p=shipPerformance(combat.own);sector.sensorRange=(combat.own.radar?200:60)*p.sensors;sector.enginePerformance=combat.docked?0:p.engines;syncElectronicTracking(combat,sector);refreshMissileGuidance(combat,sector);return p;}
   syncPerformance();
   const flight={
     get sector(){return sector;},get combat(){return combat;},inTransit:()=>snapshot().active,
@@ -58,8 +59,12 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLo
     clearRoute:()=>operate(()=>{sector.route=[];if(sector.order?.mode==='patrol')coast(sector);sector.status='Patrol route cleared';return true;}),
     toggle:()=>operate(()=>{sector.running=!sector.running;sector.status=sector.running?'Local simulation running · current flight order resumed':'Local simulation paused · flight order retained';return true;}),
     setRate:value=>{if([1,10,60].includes(value)){sector.rate=value;refresh();save();}},
-    toggleEmitter:key=>{if(['radar','jammer','ciwsAuto'].includes(key)){combat.own[key]=!combat.own[key];syncPerformance();refresh();save();}},
+    toggleEmitter:key=>{if(['radar','ciwsAuto'].includes(key)){combat.own[key]=!combat.own[key];if(key==='radar'&&!combat.own.radar)combat.own.burnThroughUntil=0;syncPerformance();refresh();save();}},
+    cycleJammer:()=>{const modes=['auto','on','off'];setJammerMode(combat,sector,modes[(modes.indexOf(combat.own.jammerMode)+1)%modes.length]);syncPerformance();refresh();save();},
+    burnThrough:()=>combatAction(()=>requestRadarBurnThrough(combat)),
     engageTargets:(objective,ids)=>combatAction(()=>orderEngagement(combat,sector,objective,ids)),
+    setMissileVolley:size=>{if(missileVolleySizes.includes(size)){combat.missileVolleySize=size;refresh();save();}},
+    setCannonBurst:size=>{if(cannonBurstSizes.includes(size)){combat.cannonBurstSize=size;refresh();save();}},
     fire:orders=>combatAction(()=>commandWeapons(combat,sector,orders)),
     startFire:orders=>combatAction(()=>commandWeapons(combat,sector,orders,true)),
     ceaseFire:mountIds=>{ceaseFiring(combat,mountIds);refresh();save();},
@@ -104,7 +109,15 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLo
     const controls=$('bridge-actions');controls.replaceChildren();
     switch(state.selected){
       case 'command':
-        controls.append(choice('Command seat','seat',[['captain','Captain'],['first-officer','First officer']]),action(state.watch==='routine'?'Set heightened watch':'Return to routine watch',setWatch));break;
+        {
+          const label=document.createElement('label');label.className='bridge-setting';
+          const caption=document.createElement('span');caption.textContent='Ship name';
+          const names=document.createElement('select');names.setAttribute('aria-label','Ship name');
+          for(const name of shipNameOptions(combat.own.classId))names.append(Object.assign(document.createElement('option'),{value:name,textContent:name}));
+          names.value=playerShipName(combat);names.onchange=()=>{if(setPlayerShipName(combat,names.value)){report(`Ship named ${names.value}.`);save();}};
+          label.append(caption,names);const note=document.createElement('p');note.className='combat-note';note.textContent=`UNE naming: ${shipNamingConventions[combat.own.classId].category}.`;
+          controls.append(label,note,choice('Command seat','seat',[['captain','Captain'],['first-officer','First officer']]),action(state.watch==='routine'?'Set heightened watch':'Return to routine watch',setWatch));break;
+        }
       case 'navigation':controls.append(action('Open course planner ↗',openNavigation));break;
       case 'ops':controls.append(choice('Duty priority','ops',[['balanced','Balanced operations'],['sensors','Sensor coordination'],['engineering','Engineering readiness']]));break;
       case 'tactical':case 'security':controls.append(action(state.watch==='routine'?'Set heightened watch':'Return to routine watch',setWatch));break;
@@ -165,9 +178,11 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLo
     }
   }
   function refresh(){
+    for(const element of document.querySelectorAll('[data-player-ship-name]'))element.textContent=(element.dataset.shipCase==='upper'?playerShipName(combat).toUpperCase():playerShipName(combat))+(element.dataset.shipSuffix??'');
+    if(document.body.dataset.screen==='bridge')document.querySelector('.page-heading .eyebrow').textContent=`${playerShipName(combat).toUpperCase()} / MAIN BRIDGE`;
     const s=snapshot(),station=bridgeStations.find(item=>item.id===state.selected),area=bridgeAreaFor(state.selected);
     if(pollCommunications(communications,communicationsContext()))save();
-    const controlKey=[state.selected,state.watch,s.active,s.paused,s.routeCount,s.unsafe,combat.own.fire,combat.own.breach].join('|');
+    const controlKey=[state.selected,state.watch,s.active,s.paused,s.routeCount,s.unsafe,combat.own.fire,combat.own.breach,playerShipName(combat)].join('|');
     if(controlKey!==lastControlKey){lastControlKey=controlKey;renderControls();}
     $('bridge-console').dataset.station=station.id;
     $('bridge-console').dataset.area=area.id;refreshArea(area);placeSystemMap();
@@ -212,6 +227,7 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLo
   updateViewButton();refresh();
   return {
     refresh,selectStation:select,openBridge,
+    shipName:()=>playerShipName(combat),
     exportState:()=>({settings:{...state},sector:structuredClone(sector),tactical:tactical.exportState(),combat:structuredClone(combat),communications:structuredClone(communications)}),
     restoreState(saved){
       Object.assign(state,restoreBridgeState(saved.settings));sector=structuredClone(saved.sector);combat=structuredClone(saved.combat);syncPerformance();localElapsed=0;lastReview=null;
@@ -223,14 +239,14 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLo
     },
     localStatus:()=>({running:sector.running,mode:sector.order?.mode||'coast',time:sector.time,canEPD:shipPerformance(combat.own).epd&&!combat.docked&&combat.service?.provider!=='tender',hull:combat.own.systems.hull.hp/combat.own.systems.hull.max,spares:combat.own.spares,core:combat.own.systems.reactor.hp>0}),
     pauseLocal(){sector.running=false;sector.status='Local simulation paused · flight order retained';refresh();},
-    suspendLocal(){cancelSupportShip(combat);sector.running=false;coast(sector);combat.firing=null;combat.shots=[];combat.alliedOrders={};sector.status='EPD transit · local flight suspended';refresh();},
+    suspendLocal(){cancelSupportShip(combat);sector.running=false;coast(sector);ceaseFiring(combat);for(const ship of Object.values(combat.contacts))for(const mount of ship.mounts)delete mount.burst;combat.shots=[];combat.alliedOrders={};combat.own.burnThroughUntil=0;sector.status='EPD transit · local flight suspended';refresh();},
     arrive(location){sector=createEncounterSector(location);changeEncounter(combat,sector.contacts);applyEncounterEvent(sector,combat);communications.encounter++;localElapsed=0;syncPerformance();tactical.reset();notice=`Arrived at ${location}. ${sector.encounter.summary} Damage and supplies retained.`;log(`Sensor watch at ${location}: ${sector.encounter.summary}`);refresh();},
-    resetPatrol(){Object.assign(state,restoreBridgeState());combat=createCombat();sector=createSector(undefined,'Earth');communications=createCommunications();localElapsed=0;lastReview=null;notice='New patrol initialized. All stations ready.';syncPerformance();tactical.reset();renderControls();refresh();},
+    resetPatrol(name){Object.assign(state,restoreBridgeState());combat=createCombat();if(typeof name==='string')setPlayerShipName(combat,name);sector=createSector(undefined,'Earth');communications=createCommunications(playerShipName(combat));localElapsed=0;lastReview=null;notice='New patrol initialized. All stations ready.';syncPerformance();tactical.reset();renderControls();refresh();},
     advanceTransit(seconds){combat.time+=seconds;advanceMaintenance(combat,seconds);return combat.own.systems.hull.hp>0;},
     tick(seconds){
       if(snapshot().active || document.hidden || !sector.running)return 0;
       let advanced=0,remaining=Math.min(120,seconds*sector.rate);
-      while(remaining>1e-8){const quantum=(combat.shots.length||combat.firing||combat.hostiles.length||Object.keys(combat.alliedOrders).length)? .05:.25;const dt=Math.min(quantum,remaining);syncPerformance();if(!sector.enginePerformance&&sector.order)coast(sector);advanced+=stepSector(sector,dt);stepCombat(combat,sector,dt);remaining-=dt;}
+      while(remaining>1e-8){const quantum=(combat.shots.length||combat.firing||combat.own.mounts.some(m=>m.burst)||combat.hostiles.length||Object.keys(combat.alliedOrders).length)? .05:.25;const dt=Math.min(quantum,remaining);syncPerformance();if(!sector.enginePerformance&&sector.order)coast(sector);advanced+=stepSector(sector,dt);stepCombat(combat,sector,dt);remaining-=dt;}
       localElapsed+=seconds;
       if(document.body.dataset.screen==='bridge'&&state.selected==='tactical')tactical.refreshProjectiles();
       if(localElapsed>=.35){localElapsed=0;if(pollCommunications(communications,communicationsContext()))save();updateCommsBadge();if(document.body.dataset.screen==='bridge'){if(state.selected==='tactical')tactical.refresh();if(state.selected==='engineering')damageConsole.refresh();if(state.selected==='communications')commsConsole.refresh();if(state.selected==='navigation')localConsole.refresh();}}

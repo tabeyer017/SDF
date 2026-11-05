@@ -15,14 +15,14 @@
   <section id="start-screen" class="start-screen" aria-labelledby="start-title">
     <div class="start-art">
       <div class="start-orbits" aria-hidden="true"><i></i><i></i><i></i><span>✧</span></div>
-      <figure class="start-vessel"><img src="images/sdf-frigate-angled.png" alt="SDF Wayfarer, a Vanguard-class frigate, against the dark of space"><figcaption><span>SDF WAYFARER</span> VANGUARD-CLASS FRIGATE / YOUR FIRST COMMAND</figcaption></figure>
+      <figure class="start-vessel"><img src="images/sdf-frigate-angled.png" alt="A Vanguard-class SDF frigate against the dark of space"><figcaption><span data-player-ship-name data-ship-case="upper">SDF MARIE CURIE</span> VANGUARD-CLASS FRIGATE / YOUR FIRST COMMAND</figcaption></figure>
     </div>
     <header class="start-masthead"><span>✧ &nbsp; SOL DEFENSE FORCE</span><span>SOL SYSTEM / 2250</span></header>
     <div class="start-content">
       <div class="start-intro"><div class="eyebrow">STRATEGIC SPACE COMMAND</div><h1 id="start-title">SOL DEFENSE<br><span>FORCE</span></h1><p>A frontier to protect.<br>A ship to command.</p></div>
       <nav class="start-actions" aria-label="Main menu">
         <button id="continue-mission" class="start-continue" hidden><span>Continue<small id="continue-summary">Return to your patrol</small></span><b aria-hidden="true">↗</b></button>
-        <button id="new-mission"><span>New Mission<small>Take command of the Wayfarer</small></span><b aria-hidden="true">01</b></button>
+        <button id="new-mission"><span>New Mission<small>Name your ship and take command</small></span><b aria-hidden="true">01</b></button>
         <button id="new-campaign"><span>New Campaign<small>A longer watch · coming soon</small></span><b aria-hidden="true">02</b></button>
         <button id="menu-load-save"><span>Load Saved Game<small>Restore a patrol from a JSON file</small></span><b aria-hidden="true">03</b></button>
         <button id="menu-history"><span>History<small>The story of humanity in Sol</small></span><b aria-hidden="true">04</b></button>
@@ -48,7 +48,7 @@
     <section class="command-layout" aria-label="Strategic navigation console">
       <aside class="left-panel" id="ship-panel" aria-label="Ship and system directory">
         <div class="panel-label">YOUR COMMAND <span>01</span></div>
-        <div class="ship-card"><div class="ship-illustration"><img src="images/sdf-frigate-angled.png" alt="SDF frigate viewed from above its port bow" width="1774" height="887" decoding="async"><span>SDF — 07</span></div><div class="ship-title"><h2>SDF Wayfarer</h2><span class="badge">FRIGATE</span></div><p class="muted">Vanguard-class patrol vessel</p><div class="ship-state"><i class="status-dot"></i><span id="ship-status">Holding at Earth</span></div><div class="readiness"><span>VESSEL READINESS</span><strong>100<span>%</span></strong></div><div class="readiness-bar"><span></span></div><div class="systems"><span><i></i> Fusion core</span><b>NOMINAL</b><span><i></i> EPD propulsion</span><b>ONLINE</b><span><i></i> Inertial dampeners</span><b>ACTIVE</b><span><i></i> Radiation shielding</span><b>SECURE</b></div></div>
+        <div class="ship-card"><div class="ship-illustration"><img src="images/sdf-frigate-angled.png" alt="SDF frigate viewed from above its port bow" width="1774" height="887" decoding="async"><span>SDF — 07</span></div><div class="ship-title"><h2 data-player-ship-name>SDF Andes</h2><span class="badge">FRIGATE</span></div><p class="muted">Vanguard-class patrol vessel</p><div class="ship-state"><i class="status-dot"></i><span id="ship-status">Holding at Earth</span></div><div class="readiness"><span>VESSEL READINESS</span><strong>100<span>%</span></strong></div><div class="readiness-bar"><span></span></div><div class="systems"><span><i></i> Fusion core</span><b>NOMINAL</b><span><i></i> EPD propulsion</span><b>ONLINE</b><span><i></i> Inertial dampeners</span><b>ACTIVE</b><span><i></i> Radiation shielding</span><b>SECURE</b></div></div>
         <div class="sector-header panel-label"><div class="directory-tabs" role="group" aria-label="System directory"><button id="directory-planets" aria-pressed="true">Planets</button><button id="directory-settlements" aria-pressed="false">Settlements</button><button id="directory-mining" aria-pressed="false">Mining</button></div><span id="directory-count">08</span></div>
         <div id="mining-filter" hidden><label for="company-filter">MINING OPERATOR</label><select id="company-filter"><option value="all">All four companies</option></select></div>
         <div id="planet-directory" class="planet-directory"></div>
@@ -92,7 +92,7 @@
     <section id="bridge-console" class="bridge-console" data-view="deck" aria-label="Ship bridge areas">
       <header class="bridge-area-bar"><h1 id="bridge-area-name">Command</h1><div id="bridge-area-tabs" class="bridge-area-tabs" role="tablist" aria-label="Command controls"></div><button id="bridge-view-toggle">Command overview ↗</button><div class="bridge-area-clock"><span>SHIPBOARD TIME · UTC</span><time id="bridge-area-time"></time></div></header>
       <section class="bridge-deck-panel" aria-label="Main bridge deck plan">
-        <div class="bridge-deck-header"><span>SDF WAYFARER / MAIN BRIDGE</span><span id="bridge-watch">ROUTINE WATCH</span></div>
+        <div class="bridge-deck-header"><span data-player-ship-name data-ship-case="upper" data-ship-suffix=" / MAIN BRIDGE">SDF MARIE CURIE / MAIN BRIDGE</span><span id="bridge-watch">ROUTINE WATCH</span></div>
         <svg class="bridge-deck" viewBox="35 25 590 520" role="group" aria-label="Bridge deck plan. Select a bridge area to open its controls.">
           <defs><radialGradient id="bridge-floor"><stop stop-color="#1b2e3d"/><stop offset="1" stop-color="#0d1825"/></radialGradient></defs>
           <path d="M150 80Q330-15 510 80L610 350Q590 510 470 535H190Q70 510 50 350Z" fill="url(#bridge-floor)" stroke="#314454" stroke-width="2"/>
@@ -102,7 +102,7 @@
           <rect x="205" y="52" width="250" height="38" rx="8" fill="#172c39" stroke="#53818d" opacity=".85"/>
           <path d="M225 78h210" stroke="#86bfc7" opacity=".3"/>
           <text id="bridge-main-display" x="330" y="70" text-anchor="middle" fill="#8abfc9" font-family="monospace" font-size="8">SOL SYSTEM / PATROL WATCH</text>
-          <text x="330" y="390" text-anchor="middle" fill="#536c7b" font-family="monospace" font-size="9" letter-spacing="3">SDF WAYFARER</text>
+          <text x="330" y="390" text-anchor="middle" fill="#536c7b" font-family="monospace" font-size="9" letter-spacing="3" data-player-ship-name data-ship-case="upper">SDF MARIE CURIE</text>
           <text x="330" y="523" text-anchor="middle" fill="#6d8190" font-family="monospace" font-size="7" letter-spacing="2">AFT ACCESS / MAIN ENGINEERING</text>
           <g id="bridge-deck-stations"></g>
         </svg>
@@ -122,7 +122,9 @@
     <button class="dialog-close" data-close-menu-dialog aria-label="Close new mission">×</button>
     <div class="eyebrow">MISSION 01 / SOL SYSTEM PATROL</div>
     <h2 id="new-mission-title">Your first watch.</h2>
-    <p>Take command of the SDF Wayfarer at Earth on 1 January 2250. Plot your own patrol through the Solar System, investigate local contacts, and manage your ship from the bridge.</p>
+    <p>Name your Vanguard-class frigate and take command at Earth on 1 January 2250. Plot your own patrol through the Solar System, investigate local contacts, and manage your ship from the bridge.</p>
+    <label class="bridge-setting"><span>Ship name</span><select id="mission-ship-name" aria-label="New mission ship name"></select></label>
+    <p id="mission-name-convention" class="combat-note"></p>
     <dl class="menu-facts"><div><dt>Vessel</dt><dd>Vanguard-class frigate</dd></div><div><dt>Departure</dt><dd>Earth / Sol sector</dd></div><div><dt>Assignment</dt><dd>Open patrol &amp; training</dd></div></dl>
     <p id="new-mission-warning" class="menu-notice" hidden>Starting a new mission replaces your current browser autosave. Download your patrol first if you want to keep it.</p>
     <button id="backup-before-mission" class="secondary-button" hidden>Download current patrol ↓</button>
@@ -145,7 +147,7 @@
       <li><span>c. 2150</span><div><h3>The cold fusion breakthrough</h3><p>Humanity achieves cold fusion. Over the following century, new propulsion, inertial dampeners, and advanced protective materials open the Solar System to travel.</p></div></li>
       <li><span>2250</span><div><h3>A system within reach</h3><p>Electromagnetic Pulse Drives now carry ships across the system in a little over a month. Earth has a large station on the Moon; Mars has a surface colony and a station on Phobos.</p></div></li>
       <li><span>THE FRONTIER</span><div><h3>Beyond the inner worlds</h3><p>Stations on Ganymede, Titan, Titania, and Triton anchor humanity’s presence around the outer planets. Sixteen commercial mining stations operate in the asteroid belt under United Nations of Earth contracts.</p></div></li>
-      <li><span>YOUR WATCH</span><div><h3>Sol Defense Force</h3><p>You are the captain of an SDF vessel patrolling our home system. Civilian traffic, commercial operators, privateers, and pirates share the frontier. From the bridge of the Wayfarer, your watch begins.</p></div></li>
+      <li><span>YOUR WATCH</span><div><h3>Sol Defense Force</h3><p>You are the captain of an SDF vessel patrolling our home system. Civilian traffic, commercial operators, privateers, and pirates share the frontier. From the bridge of your frigate, your watch begins.</p></div></li>
     </ol>
     <button class="secondary-button" data-close-menu-dialog>Return to menu</button>
   </dialog>
@@ -162,13 +164,13 @@
     <h2>Welcome to the watch, Captain.</h2>
     <div class="briefing-tabs" role="group" aria-label="Briefing pages"><button data-briefing="mission" aria-pressed="true">Your mission</button><button data-briefing="details" aria-pressed="false">Prototype details</button></div>
     <div id="briefing-mission"><p>It is 2250. A century after the cold fusion breakthrough, humanity can cross its home system in a little over a month. Electromagnetic Pulse Drives, inertial dampeners, and advanced shielding have opened the frontier.</p><p>Your mission: patrol the Solar System. Select a planet or a point on the grid, add waypoints to your flight plan, and engage your EPD. Use the simulation controls to accelerate your journey.</p></div>
-    <div id="briefing-details" class="briefing-note" hidden><strong>First-look assumptions</strong><p>The SDF Wayfarer, its class, and the heliopause station are provisional. The outer patrol boundary is set at 120 AU; a nominal 3.8 AU/day makes a radial crossing approximately 32 days. The map uses a compressed radial scale and illustrative planet positions, held fixed during this prototype. Travel uses distances in AU, with straight legs and a safety exclusion around Sol. Complete patrol progress is autosaved in this browser. Use Saves to download or load a JSON save file. Strategic and local flight resume paused after reload.</p></div>
+    <div id="briefing-details" class="briefing-note" hidden><strong>First-look assumptions</strong><p>The Vanguard class and the heliopause station are provisional. The outer patrol boundary is set at 120 AU; a nominal 3.8 AU/day makes a radial crossing approximately 32 days. The map uses a compressed radial scale and illustrative planet positions, held fixed during this prototype. Travel uses distances in AU, with straight legs and a safety exclusion around Sol. Complete patrol progress is autosaved in this browser. Use Saves to download or load a JSON save file. Strategic and local flight resume paused after reload.</p></div>
     <button id="begin-button" class="primary-button">Take command <span>↗</span></button>
     <button id="restart-patrol" class="text-button">Restart patrol at Earth · resets route and shipboard time</button>
   </dialog>
   <dialog id="save-dialog" aria-labelledby="save-title">
     <button class="dialog-close" id="close-saves" aria-label="Close saves">×</button>
-    <span class="eyebrow">SDF WAYFARER / PATROL RECORD</span>
+    <span class="eyebrow" data-player-ship-name data-ship-case="upper" data-ship-suffix=" / PATROL RECORD">SDF MARIE CURIE / PATROL RECORD</span>
     <h2 id="save-title">Save &amp; load.</h2>
     <p>Keep a portable JSON save of your strategic journey, local flight, sensor history, target locks, and bridge settings.</p>
     <button id="download-save" class="primary-button">Save game (.json) <span>↓</span></button>

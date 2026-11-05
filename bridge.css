@@ -531,6 +531,7 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 .combat-note { color: #91a8b7; font: 10px/1.65 var(--mono); overflow-wrap: anywhere; }
 .combat-readout { color: #b4e2e3; font: 11px/1.7 var(--mono); }
 .combat-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: end; }
+.weapon-salvo-settings { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; align-items: end; }
 .combat-actions button { font-size: 10px; padding: 8px; }
 .combat-events { color: #9db1bc; font: 10px/1.7 var(--mono); padding-left: 18px; }
 .weapon-purpose { margin: 0; font-size: 9px; }
@@ -562,7 +563,7 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 .weapon-targeting option.aim-point-protected, .radar-fire-popup option.aim-point-protected { color: #71818d; }
 .weapon-targeting option.aim-point-destroyed:disabled, .radar-fire-popup option.aim-point-destroyed:disabled { color: #f47779; }
 .radar-fire-popup { position: fixed; inset: auto; margin: 0; width: min(410px,calc(100vw - 20px)); max-height: calc(100dvh - 20px); padding: 13px; border: 1px solid #6f8e98; border-radius: 4px; color: #c9dae2; background: #0d1723; box-shadow: 0 12px 44px #000b; overflow: hidden; }
-.radar-fire-popup:popover-open { display: grid; grid-template-rows: auto minmax(0,1fr) auto; gap: 10px; }
+.radar-fire-popup:popover-open { display: grid; grid-template-rows: auto auto auto minmax(0,1fr) auto; gap: 10px; }
 .radar-fire-popup::backdrop { background: transparent; }
 .radar-maneuver-popup { position: fixed; inset: auto; margin: 0; width: min(340px,calc(100vw - 20px)); max-height: calc(100dvh - 20px); padding: 14px; border: 1px solid #6f8e98; border-radius: 4px; color: #c9dae2; background: #0d1723; box-shadow: 0 12px 44px #000b; overflow: auto; }
 .radar-maneuver-popup:popover-open { display: grid; gap: 10px; }

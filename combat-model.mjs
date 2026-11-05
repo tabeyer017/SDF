@@ -1,4 +1,5 @@
 import { shipTypes, trainingContacts } from './tactical-model.mjs';
+import {defaultShipName,playerShipName} from './ship-names.mjs';
 
 // Provisional game balance values; rates are per barrel, time is simulated seconds.
 // Transient visual events stay out of saved simulation state.
@@ -15,9 +16,9 @@ export const weapons = {
   'autocannon-75':{range:20,rpm:40,damage:5,speed:1,penetration:.1,feed:'Continuous ammunition feed · no reload pause',guidance:'Ship radar + laser ranging / targeting'},
   'ciws-30':{range:20,rpm:3000,damage:.1,speed:1,penetration:0,feed:'Belt-fed drum · continuous feed',guidance:'Independent computer, tracking radar and tracking IR per mount'},
   'rail-gun':{range:150,rpm:6,damage:180,speed:10,penetration:.8,guidance:'Ship radar + laser ranging / targeting'},
-  'as-missiles':{range:200,rpm:4,damage:160,speed:1,penetration:.5,missile:true,feed:'Ready missile inventory · no reload pause',guidance:'Onboard radar + IR'},
-  'mp-missiles':{range:80,rpm:7.5,damage:60,speed:1,penetration:.25,missile:true,feed:'Ready missile inventory · no reload pause',guidance:'Onboard radar + IR'},
-  'gp-missiles':{range:120,rpm:6,damage:90,speed:1,penetration:.35,missile:true,feed:'Ready missile inventory · no reload pause',guidance:'Onboard radar + IR'}
+  'as-missiles':{range:200,rpm:4,damage:160,speed:1,penetration:.5,missile:true,feed:'Ready missile inventory · no reload pause',guidance:'Onboard radar + short-range IR fallback (20 km)'},
+  'mp-missiles':{range:80,rpm:7.5,damage:60,speed:1,penetration:.25,missile:true,feed:'Ready missile inventory · no reload pause',guidance:'Onboard radar + short-range IR fallback (20 km)'},
+  'gp-missiles':{range:120,rpm:6,damage:90,speed:1,penetration:.35,missile:true,feed:'Ready missile inventory · no reload pause',guidance:'Onboard radar + short-range IR fallback (20 km)'}
 };
 export const missileRoles={
   'anti-ship':'Anti-ship',precision:'Subsystem strike',aa:'AA · shuttles / fighters / missiles',
@@ -29,7 +30,11 @@ export const missileOptions={
   // Legacy AA presets and in-flight MP shots remain readable in existing saves.
   'mp-missiles':['precision','aa','anti-radiation','anti-jammer']
 };
-const subsystemAims=[['engines','Main engines'],['weapons','Weapon mounts'],['sensors','Radar / fire control'],['jammer','Radar jammer'],['reactor','Reactor'],['power','Power distribution'],['epd','EPD'],['bridge','Bridge'],['communications','Communications'],['life-support','Life support']];
+export const missileVolleySizes=[1,5,10,15];
+export const cannonBurstSizes=[1,5,10,20];
+export const CANNON_BURST_PAUSE_SECONDS=2;
+export const radarBurnThrough={duration:15,cooldown:180};
+const subsystemAims=[['engines','Main engines'],['weapons','Weapon mounts'],['ciws','CIWS mounts'],['sensors','Radar / fire control'],['jammer','Radar jammer'],['reactor','Reactor'],['power','Power distribution'],['epd','EPD'],['bridge','Bridge'],['communications','Communications'],['life-support','Life support']];
 export function weaponAimOptions(weapon){
   if(weapon==='as-missiles')return [['hull','Hull · heavy strike'],...subsystemAims];
   if(weapon==='mp-missiles')return subsystemAims;
@@ -38,7 +43,7 @@ export function weaponAimOptions(weapon){
 const internalAimPoints=new Set(['reactor','power','epd','bridge','communications','life-support']);
 export function aimPointState(ship,component){
   if(component==='incoming')return {available:true,destroyed:false,protected:false};
-  const systems=!ship?[]:component==='engines'?Object.entries(ship.systems).filter(([id])=>id.startsWith('engine-')).map(([,system])=>system):component==='weapons'?ship.mounts.map(mount=>ship.systems[mount.id]):[ship.systems[component]].filter(Boolean);
+  const systems=!ship?[]:component==='engines'?Object.entries(ship.systems).filter(([id])=>id.startsWith('engine-')).map(([,system])=>system):component==='weapons'||component==='ciws'?ship.mounts.filter(mount=>component==='weapons'||mount.weapon==='ciws-30').map(mount=>ship.systems[mount.id]):[ship.systems[component]].filter(Boolean);
   const destroyed=!!ship&&!systems.some(system=>system.hp>0);
   const protectedByHull=internalAimPoints.has(component)&&(!ship||ship.systems.hull.hp>0);
   return {available:!destroyed&&!protectedByHull,destroyed,protected:protectedByHull};
@@ -53,10 +58,10 @@ export function nextAimPoint(ship,weapon,current){
   return null;
 }
 // Guidance follows the chosen target and system; there is no separate launch preset.
-function launchRole(weapon,targetId,component){
+function launchRole(weapon,targetId,component,targetShip){
   if(!weapons[weapon].missile)return null;
   if(targetId?.startsWith('shot:'))return 'aa';
-  return component==='sensors'?'anti-radiation':component==='jammer'?'anti-jammer':component==='hull'?'anti-ship':'precision';
+  return component==='sensors'?'anti-radiation':component==='jammer'&&jammerEmitting(targetShip)?'anti-jammer':component==='hull'?'anti-ship':'precision';
 }
 // Hull, spares, repair teams, armor reduction, engines. SDF and pirate engine counts are confirmed.
 export const damageClasses={
@@ -95,17 +100,19 @@ export function createDamageShip(classId,player=false){
   }
   // Retained for compatibility with version 2 saves; launches derive guidance from aim.
   const roles=Object.fromEntries(Object.keys(missileOptions).map(w=>[w,w==='mp-missiles'?'precision':'anti-ship']));
-  return {classId,systems,mounts,ammo,maxAmmo:{...ammo},roles,spares,maxSpares:spares,teams,armor,
-    radar:true,jammer:classId.startsWith('pirate-'),ciwsAuto:true,surrendered:false,jobs:[],autoRepair:player,repairHolds:[],fire:false,breach:false,air:1800,underFireUntil:0};
+  return {classId,...(player?{name:defaultShipName(classId)}:{}),systems,mounts,ammo,maxAmmo:{...ammo},roles,spares,maxSpares:spares,teams,armor,
+    radar:true,jammer:false,jammerMode:'auto',burnThroughUntil:0,burnThroughReadyAt:0,ciwsAuto:true,surrendered:false,combatResponse:null,underMissileFireUntil:0,jobs:[],autoRepair:player,repairHolds:[],fire:false,breach:false,air:1800,underFireUntil:0};
 }
 export function createCombat(contacts=trainingContacts){
   return {time:0,ciwsFeedVersion:1,own:createDamageShip('sdf-frigate',true),contacts:Object.fromEntries(contacts.map(c=>[c.id,createDamageShip(c.shipType)])),
-    shots:[],nextShot:1,firing:null,hostiles:[],alliedOrders:{},docked:false,service:null,support:null,log:['Weapons safed · select a weapon and aim system before firing.']};
+    shots:[],nextShot:1,missileVolleySize:1,cannonBurstSize:5,firing:null,hostiles:[],alliedOrders:{},docked:false,service:null,support:null,log:['Weapons safed · select a weapon and aim system before firing.']};
 }
 export function changeEncounter(combat,contacts){
+  for(const mount of combat.own.mounts)delete mount.burst;
   combat.contacts=Object.fromEntries(contacts.map(c=>[c.id,createDamageShip(c.shipType)]));
   combat.engagement=null;combat.shots=[];combat.firing=null;combat.hostiles=[];combat.alliedOrders={};combat.docked=false;combat.service=null;combat.support=null;
   combat.own.jobs=combat.own.jobs.filter(j=>!j.station);
+  combat.own.burnThroughUntil=0;if(combat.own.jammerMode==='auto')combat.own.jammer=false;
 }
 export function condition(system){const ratio=system.hp/system.max;return ratio>.7?1:ratio>=.4?.7:ratio>0?.35:0;}
 export function ciwsFiringTime(ship,mount,rounds=75){
@@ -114,6 +121,8 @@ export function ciwsFiringTime(ship,mount,rounds=75){
 }
 const ciwsCycling='CIWS firing · belt feed cycling.';
 const weaponCycling='Weapon firing cycle.',missileCycling='Missile launch sequence cycling.';
+const cannonBurstCycling='Cannon burst in progress.';
+const jammingError='Radar jamming prevents a precision lock · target the jammer or use radar burn-through.';
 function engageCIWS(combat,ship,mount,targetId,sourceId){
   const rounds=Math.min(75,ship.ammo[mount.weapon]),duration=ciwsFiringTime(ship,mount,rounds);
   ship.ammo[mount.weapon]-=rounds;mount.readyAt=combat.time+duration;mount.ciwsTarget=targetId;mount.ciwsRounds=rounds;
@@ -127,20 +136,78 @@ export function shipPerformance(ship){
     sensors:condition(ship.systems.sensors)*(power||.2),power,epd:power>0&&ship.systems.epd.hp>0};
 }
 export const radarEmitting=ship=>!!ship?.radar&&ship.systems.sensors.hp>0&&shipPerformance(ship).power>0;
-export const jammerEmitting=ship=>!!ship?.jammer&&ship.systems.jammer.hp>0&&shipPerformance(ship).power>0;
+export const jammerEmitting=ship=>!!ship?.jammer&&!ship.surrendered&&ship.systems.jammer.hp>0&&shipPerformance(ship).power>0;
+export function updateElectronicWarfare(combat,sector){
+  const engaged=new Set();
+  const pair=(a,b)=>{
+    const first=vessel(combat,a),second=vessel(combat,b),p=position(sector,a),q=position(sector,b);
+    if(p&&q&&alive(first)&&alive(second)&&!first.surrendered&&!second.surrendered&&distance(p,q)<=200){engaged.add(a);engaged.add(b);}
+  };
+  for(const id of combat.hostiles)pair('own',id);
+  for(const id of combat.engagement?.targetIds??[])pair('own',id);
+  for(const order of combat.firing??[])pair('own',order.targetId);
+  for(const [id,order] of Object.entries(combat.alliedOrders))for(const targetId of order.targetIds)pair(id,targetId);
+  for(const shot of combat.shots)pair(shot.sourceId,shot.targetId);
+  for(const [id,ship] of [['own',combat.own],...Object.entries(combat.contacts)])for(const mount of ship.mounts)if(mount.burst)pair(id,mount.burst.targetId);
+  for(const [id,ship] of [['own',combat.own],...Object.entries(combat.contacts)]){
+    if(ship.combatResponse?.mode==='retreating')engaged.add(id);
+    if(ship.jammerMode==='auto')ship.jammer=engaged.has(id);
+    else if(ship.jammerMode==='on')ship.jammer=true;
+    else if(ship.jammerMode==='off')ship.jammer=false;
+    if(ship.surrendered||!alive(ship)||ship.systems.jammer.hp<=0||shipPerformance(ship).power<=0)ship.jammer=false;
+  }
+}
+export function setJammerMode(combat,sector,mode){
+  if(!['auto','on','off'].includes(mode))return false;
+  combat.own.jammerMode=mode;updateElectronicWarfare(combat,sector);
+  log(combat,mode==='on'?'Radar jammer emitting · visible to passive receivers even outside normal radar coverage.':mode==='off'?'Radar jammer held silent.':'Radar jammer automatic · combat only, silent during routine traffic.');
+  return true;
+}
+export function trackingSolution(combat,sector,sourceId,targetId){
+  const source=vessel(combat,sourceId),target=vessel(combat,targetId),p=position(sector,sourceId),q=position(sector,targetId);
+  if(!source||!target||!p||!q)return {detected:false,precision:false,quality:0,strength:0,emitting:false,status:'No sensor contact'};
+  const perf=shipPerformance(source),range=distance(p,q),emitting=jammerEmitting(target);
+  const coverage=sourceId==='own'?(sector.sensorRange??(source.radar?200:60)*perf.sensors):(source.radar?200:60)*perf.sensors;
+  const detected=perf.sensors>0&&(range<=coverage||emitting&&range<=200*perf.sensors);
+  const burn=radarEmitting(source)&&(source.burnThroughUntil??0)>combat.time;
+  const strength=detected&&emitting&&!burn?condition(target.systems.jammer)*shipPerformance(target).power*range/(range+40*Math.max(.1,perf.sensors)):0;
+  const precision=detected&&range<=coverage&&strength<.65,quality=detected?Math.max(.05,1-strength):0;
+  return {detected,precision,quality,strength,emitting,detectionRange:emitting?Math.max(coverage,200*perf.sensors):coverage,behavior:target.combatResponse?.mode??null,status:!detected?'No sensor contact':!precision?'JAMMED · emitter bearing only':burn?'Radar burn-through tracking':strength>.1?'Tracking degraded by radar jammer':'Clear tracking'};
+}
+export function syncElectronicTracking(combat,sector){
+  updateElectronicWarfare(combat,sector);
+  sector.tracking=Object.fromEntries(sector.contacts.map(contact=>[contact.id,trackingSolution(combat,sector,'own',contact.id)]));
+}
+export function burnThroughError(combat){
+  if(!radarEmitting(combat.own))return 'Burn-through requires operational active radar and main power.';
+  if(combat.docked||combat.service?.provider==='tender')return 'Undock or disconnect the tender before radar burn-through.';
+  if((combat.own.burnThroughUntil??0)>combat.time)return 'Radar burn-through already active.';
+  if((combat.own.burnThroughReadyAt??0)>combat.time)return `Radar cooling · ${Math.ceil(combat.own.burnThroughReadyAt-combat.time)} s before another burn-through.`;
+  return null;
+}
+export function requestRadarBurnThrough(combat){
+  const error=burnThroughError(combat);if(error)return {ok:false,message:error};
+  combat.own.burnThroughUntil=combat.time+radarBurnThrough.duration;
+  combat.own.burnThroughReadyAt=combat.time+radarBurnThrough.cooldown;
+  const message=`High-power radar burn-through · ${radarBurnThrough.duration} s tracking pulse · ${radarBurnThrough.cooldown} s between uses.`;
+  log(combat,message);return {ok:true,message};
+}
+export function infraredTrackingQuality(ship,range){
+  return alive(ship)&&range<=20?shipPerformance(ship).power*Math.max(0,1-range/25):0;
+}
 export function applyDamage(combat,id,damage,component='hull',penetration=0){
   const ship=vessel(combat,id);if(!targetable(ship)||!aimPointState(ship,component).available||!Number.isFinite(damage)||damage<=0)return 0;
   const wasAlive=alive(ship);
   const amount=damage*(1-ship.armor*(1-penetration));
   ship.systems.hull.hp=Math.max(0,ship.systems.hull.hp-amount);
   const candidate=Object.keys(ship.systems).filter(key=>key!=='hull');
-  const key=component==='engines'?candidate.find(k=>k.startsWith('engine-')&&ship.systems[k].hp>0):component==='weapons'?candidate.find(k=>ship.mounts.some(m=>m.id===k)&&ship.systems[k].hp>0):component;
+  const key=component==='engines'?candidate.find(k=>k.startsWith('engine-')&&ship.systems[k].hp>0):component==='weapons'||component==='ciws'?candidate.find(k=>ship.mounts.some(m=>m.id===k&&(component==='weapons'||m.weapon==='ciws-30'))&&ship.systems[k].hp>0):component;
   // Hull and equipment measure different effects of the same penetrating hit.
   if(key!=='hull'&&ship.systems[key])ship.systems[key].hp=Math.max(0,ship.systems[key].hp-amount*.3);
   ship.underFireUntil=combat.time+30;
   if(ship.systems.hull.hp<ship.systems.hull.max*.5)ship.breach=true;
   if((key==='reactor'||key==='power')&&ship.systems[key].hp<ship.systems[key].max*.4)ship.fire=true;
-  if(wasAlive&&!alive(ship)){ship.jobs=[];log(combat,`${id==='own'?'Wayfarer':id}: hull breached · disabled · internal systems exposed.`);}
+  if(wasAlive&&!alive(ship)){ship.jobs=[];log(combat,`${id==='own'?playerShipName(combat):id}: hull breached · disabled · internal systems exposed.`);}
   if(id==='own')scheduleRepairs(combat);
   return amount;
 }
@@ -158,18 +225,20 @@ export function intercept(source,target,speed){
   const aim=r.map((n,i)=>n+v[i]*time),length=Math.hypot(...aim)||1;
   return {time,velocity:Object.fromEntries(['x','y','z'].map((k,i)=>[k,(source[['vx','vy','vz'][i]]||0)/3600+aim[i]/length*speed]))};
 }
-export function canFire(combat,sector,sourceId,mountId,targetId,component='hull',{ignoreCooldown=false}={}){
+export function canFire(combat,sector,sourceId,mountId,targetId,component='hull',{ignoreCooldown=false,continuingBurst=false}={}){
   const ship=vessel(combat,sourceId),mount=ship?.mounts.find(m=>m.id===mountId),source=position(sector,sourceId);
   if(!alive(ship)||!mount||!source)return 'Weapon unavailable.';
   if(ship.surrendered)return 'Vessel has surrendered · weapons secured.';
+  if(ship.combatResponse?.mode==='retreating'&&!(mount?.weapon==='ciws-30'&&targetId?.startsWith('shot:')))return 'Vessel is disengaging · offensive fire ceased.';
   if(sourceId==='own'&&combat.docked)return 'Undock before firing.';
-  const spec=weapons[mount.weapon],role=launchRole(mount.weapon,targetId,component);
+  const spec=weapons[mount.weapon],role=launchRole(mount.weapon,targetId,component,vessel(combat,targetId));
   if(mount.weapon==='mp-missiles'&&(component==='hull'||targetId?.startsWith('shot:')))return 'MP missiles target ship subsystems only.';
   if(mount.weapon==='as-missiles'&&targetId?.startsWith('shot:'))return 'AS missiles target ships and ship systems only.';
   if(!weaponAimOptions(mount.weapon).some(([id])=>id===component))return 'Select a valid aim system for this weapon.';
   if(ship.systems[mountId].hp<=0||shipPerformance(ship).power<=0)return 'Mount or main power is offline.';
   if(sourceId==='own'&&combat.service?.provider==='tender'&&mount.weapon!=='ciws-30')return 'Repair tender connected · cancel tender service before firing.';
   if(ship.ammo[mount.weapon]<=0)return 'Ammunition depleted · replenish at a station or request a resupply / repair ship.';
+  if(!ignoreCooldown&&!continuingBurst&&mount.burst)return cannonBurstCycling;
   if(!ignoreCooldown&&mount.readyAt>combat.time+1e-8)return mount.weapon==='ciws-30'?ciwsCycling:spec.missile?missileCycling:weaponCycling;
   if(!spec.missile&&mount.weapon!=='ciws-30'&&(!ship.radar||shipPerformance(ship).sensors<=0))return 'Turret fire requires ship radar and laser fire control.';
   const threat=targetId?.startsWith('shot:')?combat.shots.find(s=>s.id===targetId):null;
@@ -181,14 +250,20 @@ export function canFire(combat,sector,sourceId,mountId,targetId,component='hull'
     if(aim.protected)return 'Internal system protected by hull · reduce hull to 0 first.';
   }
   if(distance(source,target)>spec.range)return 'Target is outside weapon range.';
-  if(sourceId==='own'&&mount.weapon!=='ciws-30'&&(shipPerformance(ship).sensors<=0||distance(source,target)>(sector.sensorRange??200)))return 'No live acquisition track in sensor coverage.';
+  if(!threat&&mount.weapon!=='ciws-30'){
+    const track=trackingSolution(combat,sector,sourceId,targetId);
+    if(!track.detected)return 'No live acquisition track in sensor coverage.';
+    if(!ignoreCooldown&&!track.precision&&role!=='anti-jammer'&&!(spec.missile&&infraredTrackingQuality(targetShip,distance(source,target))>0))return jammingError;
+  }
   if(threat&&mount.weapon!=='gp-missiles'&&mount.weapon!=='ciws-30')return 'Use GP missiles or CIWS against incoming missiles.';
   if(role==='anti-radiation'&&!radarEmitting(targetShip))return 'Target radar is not emitting.';
   if(role==='anti-jammer'&&!jammerEmitting(targetShip))return 'Target jammer is not emitting.';
   return null;
 }
-export function fireWeapon(combat,sector,sourceId,mountId,targetId,component='hull',rng=Math.random){
-  const error=canFire(combat,sector,sourceId,mountId,targetId,component);if(error)return {ok:false,message:error};
+function dischargeWeapon(combat,sector,sourceId,mountId,targetId,component='hull',rng=Math.random,volleySize=1,cannonBurstSize=1,continuingBurst=false){
+  if(!missileVolleySizes.includes(volleySize))return {ok:false,message:'Choose a missile volley of 1, 5, 10, or 15.'};
+  if(!cannonBurstSizes.includes(cannonBurstSize))return {ok:false,message:'Choose a cannon burst of 1, 5, 10, or 20.'};
+  const error=canFire(combat,sector,sourceId,mountId,targetId,component,{continuingBurst});if(error)return {ok:false,message:error};
   const ship=vessel(combat,sourceId),mount=ship.mounts.find(m=>m.id===mountId),spec=weapons[mount.weapon],source=position(sector,sourceId);
   const target=targetId.startsWith('shot:')?combat.shots.find(s=>s.id===targetId):position(sector,targetId);
   const plan=intercept(source,{...target,vx:target.vx??0,vy:target.vy??0,vz:target.vz??0},spec.speed);
@@ -197,30 +272,65 @@ export function fireWeapon(combat,sector,sourceId,mountId,targetId,component='hu
     engageCIWS(combat,ship,mount,targetId,sourceId);
     return {ok:true,message:'CIWS engaging missile.'};
   }
-  const rounds=Math.min(mount.weapon==='ciws-30'?10*mount.barrels:mount.barrels,ship.ammo[mount.weapon]);
+  const autocannon=mount.weapon.startsWith('autocannon-');
+  if(autocannon&&!continuingBurst)mount.burst={targetId,component,total:cannonBurstSize,remaining:cannonBurstSize};
+  const rounds=Math.min(spec.missile?volleySize:autocannon?1:(mount.weapon==='ciws-30'?10:1)*mount.barrels,ship.ammo[mount.weapon]);
   ship.ammo[mount.weapon]-=rounds;mount.readyAt=combat.time+60/spec.rpm*(rounds/mount.barrels)/condition(ship.systems[mountId]);
-  const role=launchRole(mount.weapon,targetId,component);
+  const burstTotal=mount.burst?.total,burstRound=autocannon?burstTotal-(--mount.burst.remaining):0;
+  if(autocannon&&(!mount.burst.remaining||!ship.ammo[mount.weapon])){
+    delete mount.burst;
+    const repeating=sourceId==='own'?(combat.firing??[]).some(order=>order.mountId===mountId):combat.hostiles.includes(sourceId)||!!combat.alliedOrders[sourceId];
+    if(repeating)mount.readyAt+=CANNON_BURST_PAUSE_SECONDS;
+  }
+  const role=launchRole(mount.weapon,targetId,component,vessel(combat,targetId));
   const tracking=mount.weapon==='ciws-30'?condition(ship.systems[mountId]):spec.missile?1:shipPerformance(ship).sensors;
   const targetShip=targetId.startsWith('shot:')?null:vessel(combat,targetId);
-  const jamming=targetShip&&jammerEmitting(targetShip)&&role!=='anti-jammer'?(spec.missile ? .9 : .8):1;
+  const jamming=mount.weapon==='ciws-30'||!targetShip||role==='anti-jammer'?1:Math.max(trackingSolution(combat,sector,sourceId,targetId).quality,spec.missile?infraredTrackingQuality(targetShip,distance(source,target)):0);
   const hitChance=Math.max(.05,(.95-.25*distance(source,target)/spec.range)*tracking*jamming);
-  // Misses are resolved and discarded. Self-destruction is a setting note only.
-  if(rng()>=hitChance){log(combat,`${sourceId}: ${mount.weapon} missed.`);return {ok:true,message:'Weapon fired · miss.'};}
   const guided=spec.missile;
-  const velocity=guided?Object.fromEntries(['x','y','z'].map(k=>[k,plan.velocity[k]-(source[{x:'vx',y:'vy',z:'vz'}[k]]||0)/3600])):plan.velocity;
-  combat.shots.push({id:`shot:${combat.nextShot++}`,sourceId,targetId,weapon:mount.weapon,role,component:role==='anti-radiation'?'sensors':role==='anti-jammer'?'jammer':component,
-    damage:spec.damage*rounds,x:source.x,y:source.y,z:source.z,vx:velocity.x*3600,vy:velocity.y*3600,vz:velocity.z*3600,remaining:Math.max(.25,plan.time*2+1)});
-  if(sourceId==='own'&&!targetId.startsWith('shot:')&&targetId!=='own'&&!combat.hostiles.includes(targetId))combat.hostiles.push(targetId);
-  log(combat,`${sourceId}: ${mount.weapon}${role?` / ${missileRoles[role]}`:''} fired.`);
-  return {ok:true,message:'Weapon fired.'};
+  // All projectiles retain launch momentum. Missile cruise speed is additional
+  // velocity in this fixed launch frame, not an absolute sector-speed cap.
+  const velocity=plan.velocity,launchVelocity=Object.fromEntries(['vx','vy','vz'].map(axis=>[axis,source[axis]??0]));
+  // Each missile has its own hit assessment, warhead and CIWS interception track.
+  let hits=0;
+  for(let i=0;i<(guided?rounds:1);i++){
+    if(rng()>=hitChance)continue;
+    hits++;
+    combat.shots.push({id:`shot:${combat.nextShot++}`,sourceId,targetId,weapon:mount.weapon,role,component:role==='anti-radiation'?'sensors':role==='anti-jammer'?'jammer':component,
+      damage:spec.damage*(guided?1:rounds),x:source.x,y:source.y,z:source.z,vx:velocity.x*3600,vy:velocity.y*3600,vz:velocity.z*3600,remaining:Math.max(.25,plan.time*2+1),...(guided?{launchVelocity:{...launchVelocity}}:{})});
+  }
+  if(hits&&sourceId==='own'&&!targetId.startsWith('shot:')&&targetId!=='own'&&!combat.hostiles.includes(targetId))combat.hostiles.push(targetId);
+  const message=guided?`${rounds}-missile volley fired · ${rounds-hits} missed.`:autocannon?`Cannon round ${burstRound}/${burstTotal} fired${hits?'.':' · miss.'}`:hits?'Weapon fired.':'Weapon fired · miss.';
+  log(combat,`${sourceId}: ${mount.weapon}${role?` / ${missileRoles[role]}`:''} · ${message}`);
+  return {ok:true,message};
+}
+export function fireWeapon(combat,sector,sourceId,mountId,targetId,component='hull',rng=Math.random,volleySize=1,cannonBurstSize=1){
+  return dischargeWeapon(combat,sector,sourceId,mountId,targetId,component,rng,volleySize,cannonBurstSize);
+}
+function advanceCannonBursts(combat,sector,rng){
+  for(const [sourceId,ship] of [['own',combat.own],...Object.entries(combat.contacts)])for(const mount of ship.mounts){
+    const burst=mount.burst;if(!burst||mount.readyAt>combat.time+1e-8)continue;
+    const target=vessel(combat,burst.targetId);
+    if(!aimPointState(target,burst.component).available){
+      const next=nextAimPoint(target,mount.weapon,burst.component);
+      if(!next){delete mount.burst;continue;}burst.component=next;
+    }
+    if(sourceId!=='own'&&ship.classId.startsWith('pirate-')){
+      const suppress=suppressionAims(target,mount.weapon);if(suppress?.length)burst.component=suppress[0];
+    }
+    const result=dischargeWeapon(combat,sector,sourceId,mount.id,burst.targetId,burst.component,rng,1,burst.total,true);
+    if(!result.ok&&result.message!==jammingError){delete mount.burst;log(combat,`${sourceId}: ${mount.id} burst stopped: ${result.message}`);}
+  }
 }
 export function startFiring(combat,sector,mountId,targetId,component){
   const error=canFire(combat,sector,'own',mountId,targetId,component,{ignoreCooldown:true});if(error)return {ok:false,message:error};
   const orders=combat.firing||[];
+  delete combat.own.mounts.find(m=>m.id===mountId).burst;
   combat.firing=[...orders.filter(order=>order.mountId!==mountId),{mountId,targetId,component}];
   return {ok:true,message:'Fire order active · run local time to fire.'};
 }
 export function ceaseFiring(combat,mountIds=null){
+  for(const mount of combat.own.mounts)if(!mountIds||mountIds.includes(mount.id))delete mount.burst;
   if(!mountIds)combat.engagement=null;
   else if(combat.engagement)combat.engagement.overrides=[...new Set([...combat.engagement.overrides,...mountIds])];
   const orders=mountIds?(combat.firing||[]).filter(order=>!mountIds.includes(order.mountId)):[];
@@ -231,7 +341,8 @@ export function commandWeapons(combat,sector,orders,continuous=false,rng=Math.ra
   const seen=new Set(),results=[];
   for(const order of orders){
     if(seen.has(order.mountId))continue;seen.add(order.mountId);
-    const result=continuous?startFiring(combat,sector,order.mountId,order.targetId,order.component):fireWeapon(combat,sector,'own',order.mountId,order.targetId,order.component,rng);
+    if(!continuous&&!canFire(combat,sector,'own',order.mountId,order.targetId,order.component))ceaseFiring(combat,[order.mountId]);
+    const result=continuous?startFiring(combat,sector,order.mountId,order.targetId,order.component):fireWeapon(combat,sector,'own',order.mountId,order.targetId,order.component,rng,combat.missileVolleySize,combat.cannonBurstSize);
     results.push({mountId:order.mountId,...result});
   }
   const count=results.filter(result=>result.ok).length,skipped=results.filter(result=>!result.ok);
@@ -241,6 +352,7 @@ export function orderEngagement(combat,sector,objective,targetIds){
   if(!['disable','destroy'].includes(objective)||!targetIds.length)return {ok:false,message:'Lock targets and set priorities first.'};
   ceaseFiring(combat);
   combat.engagement={objective,targetIds:[...new Set(targetIds)],overrides:[]};
+  updateElectronicWarfare(combat,sector);
   planEngagement(combat,sector);
   return {ok:true,message:`Automatic ${objective} order active · manual weapon commands override individual mounts.`};
 }
@@ -249,7 +361,7 @@ export function orderAlliedSupport(combat,sector,id,mode,targetIds){
   const refuse=message=>({accepted:false,message});
   if(contact?.type!=='friendly'||!ship?.classId.startsWith('sdf-'))return refuse('Only friendly SDF ships can receive these commands.');
   if(combat.hostiles.includes(id)||ship.surrendered)return refuse('Request refused. We are not accepting your combat orders.');
-  if(mode==='stand-down'){delete combat.alliedOrders[id];return {accepted:true,message:'Acknowledged. Standing down from your support order. Weapons already in flight cannot be recalled.'};}
+  if(mode==='stand-down'){delete combat.alliedOrders[id];for(const mount of ship.mounts)delete mount.burst;return {accepted:true,message:'Acknowledged. Standing down from your support order. Weapons already in flight cannot be recalled.'};}
   if(!['attack-targets','battle-assistance'].includes(mode))return refuse('Unrecognized support order.');
   if(!alive(ship)||ship.systems.hull.hp/ship.systems.hull.max<=.4||ship.fire||ship.breach)return refuse('Unable to comply. We must prioritize our own damage control.');
   if(ship.systems.bridge.hp<=0||shipPerformance(ship).power<=0||shipPerformance(ship).sensors<=0)return refuse('Unable to comply. Our bridge, power, or fire control is offline.');
@@ -263,14 +375,14 @@ export function orderAlliedSupport(combat,sector,id,mode,targetIds){
 function alliedSupport(combat,sector,rng){
   for(const [id,order] of Object.entries(combat.alliedOrders)){
     const ship=combat.contacts[id];
-    if(!alive(ship)||ship.surrendered||combat.hostiles.includes(id)||ship.systems.hull.hp/ship.systems.hull.max<=.4||ship.fire||ship.breach||ship.systems.bridge.hp<=0||shipPerformance(ship).power<=0){delete combat.alliedOrders[id];continue;}
+    if(!alive(ship)||ship.surrendered||combat.hostiles.includes(id)||ship.systems.hull.hp/ship.systems.hull.max<=.4||ship.fire||ship.breach||ship.systems.bridge.hp<=0||shipPerformance(ship).power<=0){delete combat.alliedOrders[id];for(const mount of ship.mounts)delete mount.burst;continue;}
     order.targetIds=order.targetIds.filter(targetId=>alive(combat.contacts[targetId])&&!combat.contacts[targetId].surrendered);
-    if(!order.targetIds.length){delete combat.alliedOrders[id];continue;}
+    if(!order.targetIds.length){delete combat.alliedOrders[id];for(const mount of ship.mounts)delete mount.burst;continue;}
     for(const mount of ship.mounts){
       if(mount.weapon==='ciws-30')continue;
       for(const targetId of order.targetIds){
         const component=mount.weapon==='mp-missiles'?'engines':'hull';
-        if(!canFire(combat,sector,id,mount.id,targetId,component)){fireWeapon(combat,sector,id,mount.id,targetId,component,rng);break;}
+        if(!canFire(combat,sector,id,mount.id,targetId,component)){fireWeapon(combat,sector,id,mount.id,targetId,component,rng,1,mount.weapon.startsWith('autocannon-')?5:1);break;}
       }
     }
   }
@@ -281,6 +393,91 @@ function engagementAims(combat,id,objective){
   if(objective==='disable')return ship.systems.hull.hp<=0?[]:['engines','weapons'].filter(aim=>aimPointState(ship,aim).available);
   return ['hull','reactor','power','engines','weapons','sensors','jammer','epd','bridge','communications','life-support'].filter(aim=>aimPointState(ship,aim).available);
 }
+export function standDownAgainst(combat,id){
+  for(const [sourceId,ship] of [['own',combat.own],...Object.entries(combat.contacts)])for(const mount of ship.mounts)if(sourceId===id||mount.burst?.targetId===id)delete mount.burst;
+  combat.hostiles=combat.hostiles.filter(target=>target!==id);
+  const firing=(combat.firing??[]).filter(order=>order.targetId!==id);combat.firing=firing.length?firing:null;
+  if(combat.engagement){combat.engagement.targetIds=combat.engagement.targetIds.filter(target=>target!==id);if(!combat.engagement.targetIds.length)combat.engagement=null;}
+  delete combat.alliedOrders[id];
+  for(const [allyId,order] of Object.entries(combat.alliedOrders)){
+    order.targetIds=order.targetIds.filter(target=>target!==id);if(!order.targetIds.length)delete combat.alliedOrders[allyId];
+  }
+}
+function responseNotice(ship,type,time){
+  if(!ship.combatResponse.notices.some(notice=>notice.type===type))ship.combatResponse.notices.push({type,time,reported:false});
+}
+export function surrenderShip(combat,id,reason='Surrender demand accepted',opponentId='own',announced=false){
+  const ship=combat.contacts[id];if(!ship||ship.surrendered)return false;
+  const notices=ship.combatResponse?.notices??[];
+  ship.surrendered=true;ship.radar=false;ship.jammer=false;ship.ciwsAuto=false;
+  ship.combatResponse={mode:'surrendered',reason,since:combat.time,opponentId,blockedFor:0,bestRange:0,contactLost:false,notices};
+  responseNotice(ship,'surrender',combat.time);
+  ship.combatResponse.notices.find(notice=>notice.type==='surrender').reported=announced;
+  standDownAgainst(combat,id);log(combat,`${id}: SURRENDERED · ${reason}. Weapons secured; existing projectiles remain in flight.`);
+  return true;
+}
+function offensiveReadiness(ship){
+  const mounts=ship.mounts.filter(m=>m.weapon!=='ciws-30');
+  const working=mounts.filter(m=>ship.systems[m.id].hp>0&&ship.ammo[m.weapon]>0);
+  const stocked=[...new Set(mounts.map(m=>m.weapon))];
+  return {weak:!working.length||working.length<=mounts.length/3||stocked.length>0&&stocked.every(w=>ship.ammo[w]<=ship.maxAmmo[w]*.1),
+    power:working.reduce((sum,m)=>sum+weapons[m.weapon].damage*weapons[m.weapon].rpm*m.barrels*condition(ship.systems[m.id]),0)*shipPerformance(ship).power};
+}
+function resolveNerve(id){let hash=0;for(const c of id)hash=(Math.imul(hash,31)+c.charCodeAt(0))>>>0;return (hash%11-5)/100;}
+export function updateEnemyResolve(combat,sector,seconds=0){
+  for(const contact of sector.contacts){
+    const id=contact.id,ship=combat.contacts[id];
+    if(!ship||ship.surrendered||contact.type!=='enemy'&&!combat.hostiles.includes(id))continue;
+    const attackers=new Set();
+    if(combat.hostiles.includes(id)||combat.engagement?.targetIds.includes(id)||(combat.firing??[]).some(f=>f.targetId===id)||combat.own.mounts.some(m=>m.burst?.targetId===id))attackers.add('own');
+    for(const [allyId,order] of Object.entries(combat.alliedOrders))if(order.targetIds.includes(id))attackers.add(allyId);
+    for(const shot of combat.shots)if(shot.targetId===id&&!shot.sourceId.startsWith('shot:'))attackers.add(shot.sourceId);
+    const opponentId=[...attackers].filter(key=>alive(vessel(combat,key))&&!vessel(combat,key).surrendered&&position(sector,key))
+      .sort((a,b)=>distance(contact,position(sector,a))-distance(contact,position(sector,b)))[0]??(ship.combatResponse?.mode==='retreating'?ship.combatResponse.opponentId:null);
+    const opponent=vessel(combat,opponentId),threat=position(sector,opponentId);if(!opponent||!threat)continue;
+    const range=distance(contact,threat),hull=ship.systems.hull.hp/ship.systems.hull.max,performance=shipPerformance(ship),offense=offensiveReadiness(ship);
+    const direction={x:(contact.x-threat.x)/(range||1),y:(contact.y-threat.y)/(range||1),z:(contact.z-threat.z)/(range||1)};if(!range)direction.x=1;
+    const opening=['x','y','z'].reduce((sum,axis)=>sum+direction[axis]*((contact[{x:'vx',y:'vy',z:'vz'}[axis]]??0)-(threat[{x:'vx',y:'vy',z:'vz'}[axis]]??0)),0);
+    const outwardSpeed=['x','y','z'].reduce((sum,axis)=>sum+direction[axis]*(contact[{x:'vx',y:'vy',z:'vz'}[axis]]??0),0);
+    const canEscape=performance.engines>0||opening>720&&outwardSpeed>720&&range>20;
+    const severeEmergency=(ship.fire&&ship.breach||ship.systems['life-support'].hp<=0)&&ship.air<=300;
+    const blocked=ship.combatResponse?.mode==='retreating'&&ship.combatResponse.blockedFor>=20;
+    const cornered=!canEscape||blocked,critical=hull<=.4||offense.weak||severeEmergency;
+    if(cornered&&critical||hull===0){
+      surrenderShip(combat,id,severeEmergency?'Critical fire / life-support emergency and no safe escape':offense.weak?'Offensive weapons exhausted or disabled; escape unavailable':'Critical hull damage; escape unavailable',opponentId);continue;
+    }
+    const defensesGone=ship.mounts.filter(m=>m.weapon==='ciws-30').every(m=>ship.systems[m.id].hp<=0)&&ship.systems.jammer.hp<=0;
+    const missilePressure=(ship.underMissileFireUntil??0)>combat.time||combat.shots.filter(s=>s.targetId===id&&weapons[s.weapon].missile).length>=2;
+    const threshold=(ship.classId.startsWith('pirate-')?.6:ship.classId.startsWith('sdf-')?.45:.55)+resolveNerve(id);
+    const losing=hull<opponent.systems.hull.hp/opponent.systems.hull.max-.15||offensiveReadiness(opponent).power>offense.power*1.1;
+    if(!ship.combatResponse&&canEscape&&(hull<=threshold&&losing||offense.weak||defensesGone&&missilePressure||severeEmergency)){
+      const reason=severeEmergency?'Critical onboard emergency':offense.weak?'Weapons damaged or ammunition nearly exhausted':defensesGone&&missilePressure?'CIWS and jammer lost under missile attack':'Hull damage and unfavorable odds';
+      ship.combatResponse={mode:'retreating',reason,since:combat.time,opponentId,blockedFor:0,bestRange:range,contactLost:false,notices:[]};
+      for(const mount of ship.mounts)delete mount.burst;
+      responseNotice(ship,'retreat',combat.time);delete combat.alliedOrders[id];log(combat,`${id}: DISENGAGING · ${reason}. Offensive fire ceased; defenses retained.`);
+    }
+    const response=ship.combatResponse;if(response?.mode!=='retreating')continue;
+    if(response.opponentId!==opponentId){response.opponentId=opponentId;response.bestRange=range;response.blockedFor=0;}
+    if(range>response.bestRange+.5){response.bestRange=range;response.blockedFor=0;}else response.blockedFor+=seconds;
+    const desired={vx:direction.x*7200,vy:direction.y*7200,vz:direction.z*7200};
+    const change=Math.hypot(...['vx','vy','vz'].map(v=>desired[v]-contact[v])),fraction=change?Math.min(1,120*performance.engines*seconds/change):0;
+    for(const axis of ['vx','vy','vz'])contact[axis]+=(desired[axis]-contact[axis])*fraction;
+  }
+}
+function updateRetreatReports(combat,sector){
+  for(const contact of sector.contacts){
+    const ship=combat.contacts[contact.id],response=ship.combatResponse;if(response?.mode!=='retreating')continue;
+    const lost=!sector.tracking?.[contact.id]?.detected;
+    if(lost&&!response.contactLost){responseNotice(ship,'contact-lost',combat.time);log(combat,`${contact.id}: CONTACT LOST while retreating · last-known sensor record retained; escape unconfirmed.`);}
+    response.contactLost=lost;
+  }
+}
+function suppressionAims(ship,weapon){
+  if(!alive(ship))return null;
+  if(aimPointState(ship,'ciws').available)return weapons[weapon].missile?[]:['ciws'];
+  if(jammerEmitting(ship))return !weapons[weapon].missile||['mp-missiles','gp-missiles'].includes(weapon)?['jammer']:[];
+  return null;
+}
 function planEngagement(combat,sector){
   const order=combat.engagement;if(!order)return;
   const manual=(combat.firing||[]).filter(f=>order.overrides.includes(f.mountId));
@@ -289,11 +486,18 @@ function planEngagement(combat,sector){
     // Point defense stays available for incoming missiles.
     if(order.overrides.includes(mount.id)||mount.weapon==='ciws-30')continue;
     for(const id of order.targetIds){
-      const component=engagementAims(combat,id,order.objective).find(aim=>!canFire(combat,sector,'own',mount.id,id,aim,{ignoreCooldown:true}));
+      const aims=engagementAims(combat,id,order.objective);
+      if(!aims.length)continue;
+      // Suppress CIWS with guns, then jamming with guns and MP / GP missiles.
+      const component=(suppressionAims(combat.contacts[id],mount.weapon)??aims).find(aim=>!canFire(combat,sector,'own',mount.id,id,aim,{ignoreCooldown:true}));
       if(component){automatic.push({mountId:mount.id,targetId:id,component});break;}
     }
   }
   combat.firing=[...manual,...automatic];if(!combat.firing.length)combat.firing=null;
+  for(const mount of combat.own.mounts)if(mount.burst&&!order.overrides.includes(mount.id)){
+    const assigned=automatic.find(f=>f.mountId===mount.id);
+    if(assigned){mount.burst.targetId=assigned.targetId;mount.burst.component=assigned.component;}else delete mount.burst;
+  }
   if(order.targetIds.every(id=>!engagementAims(combat,id,order.objective).length)){combat.engagement=null;log(combat,`Automatic ${order.objective} objective complete.`);}
 }
 export function queueRepair(combat,systemId,automatic=false){
@@ -418,12 +622,12 @@ function advanceSupportShip(combat,sector,seconds){
   combat.service={provider:'tender',full:true,remaining:60};support.phase='servicing';
   combat.own.jobs=[];combat.own.fire=false;combat.own.breach=false;combat.own.air=1800;
   for(const [systemId,system] of Object.entries(combat.own.systems))if(system.hp<system.max)combat.own.jobs.push({systemId,progress:0,station:true});
-  combat.firing=null;combat.engagement=null;sector.order=null;sector.manual.thrust=0;sector.own.vx=sector.own.vy=sector.own.vz=0;
+  ceaseFiring(combat);sector.order=null;sector.manual.thrust=0;sector.own.vx=sector.own.vy=sector.own.vz=0;
   log(combat,'Repair tender connected · repairing ship before ammunition transfer.');
 }
 export function dock(combat,sector){
   if(!alive(combat.own)||combat.service?.provider==='tender'||!stationSupport(sector.location)||Math.hypot(sector.own.x,sector.own.y,sector.own.z)>5||Math.hypot(sector.own.vx,sector.own.vy,sector.own.vz)>10||serviceThreats(combat,sector))return false;
-  combat.engagement=null;combat.docked=true;combat.firing=null;sector.order=null;sector.manual.thrust=0;sector.own.vx=sector.own.vy=sector.own.vz=0;sector.running=false;return true;
+  ceaseFiring(combat);combat.docked=true;sector.order=null;sector.manual.thrust=0;sector.own.vx=sector.own.vy=sector.own.vz=0;sector.running=false;return true;
 }
 export function requestService(combat,sector){
   const station=stationSupport(sector.location);if(!combat.docked||!station||combat.service)return false;
@@ -436,21 +640,41 @@ export function containEmergency(combat,type){
   if(!['fire','breach'].includes(type))return false;
   combat.own[type]=false;return true;
 }
-function resolveShots(combat,sector,seconds){
+function guideMissile(combat,sector,shot){
+  if(!weapons[shot.weapon].missile)return;
+  const target=shot.targetId.startsWith('shot:')?combat.shots.find(s=>s.id===shot.targetId):position(sector,shot.targetId);if(!target)return;
+  // Older in-flight saves did not record the launch frame. Adopt the source
+  // vessel's current momentum once, then retain it independently of that ship.
+  if(!shot.launchVelocity){const source=position(sector,shot.sourceId);shot.launchVelocity=Object.fromEntries(['vx','vy','vz'].map(axis=>[axis,source?.[axis]??0]));}
+  const plan=intercept({...shot,...shot.launchVelocity},target,weapons[shot.weapon].speed),d=distance(shot,target)||1;
+  for(const [axis,v] of [['x','vx'],['y','vy'],['z','vz']])shot[v]=plan?plan.velocity[axis]*3600:shot.launchVelocity[v]+(target[axis]-shot[axis])/d*weapons[shot.weapon].speed*3600;
+}
+export function refreshMissileGuidance(combat,sector){for(const shot of combat.shots)guideMissile(combat,sector,shot);}
+function resolveShots(combat,sector,seconds,rng){
   for(const shot of [...combat.shots]){
     if(!combat.shots.includes(shot))continue;
     const target=shot.targetId.startsWith('shot:')?combat.shots.find(s=>s.id===shot.targetId):position(sector,shot.targetId),targetShip=vessel(combat,shot.targetId);
     if(!target||(targetShip&&(!targetable(targetShip)||!aimPointState(targetShip,shot.component).available))||(shot.role==='anti-radiation'&&!radarEmitting(targetShip))||(shot.role==='anti-jammer'&&!jammerEmitting(targetShip))){
       combat.shots=combat.shots.filter(s=>s!==shot);continue;
     }
-    if(weapons[shot.weapon].missile){const d=distance(shot,target)||1;for(const [axis,v] of [['x','vx'],['y','vy'],['z','vz']])shot[v]=(target[axis]-shot[axis])/d*weapons[shot.weapon].speed*3600;}
+    guideMissile(combat,sector,shot);
     const r={x:target.x-shot.x,y:target.y-shot.y,z:target.z-shot.z},move={x:shot.vx/3600*seconds,y:shot.vy/3600*seconds,z:shot.vz/3600*seconds};
     const size=move.x**2+move.y**2+move.z**2,t=size?Math.max(0,Math.min(1,(r.x*move.x+r.y*move.y+r.z*move.z)/size)):0;
-    const hit=Math.hypot(r.x-move.x*t,r.y-move.y*t,r.z-move.z*t)<=.5;
+    const closest=Math.hypot(r.x-move.x*t,r.y-move.y*t,r.z-move.z*t),hit=closest<=.5;
+    // One guidance contest when entering the jammer's 40 km terminal envelope.
+    // Close launches can fall back to IR; missiles disrupted farther out never reach that opportunity.
+    if(targetShip&&weapons[shot.weapon].missile&&shot.role!=='anti-jammer'&&!shot.jammingChecked&&jammerEmitting(targetShip)&&(distance(shot,target)<=40||closest<=40)){
+      shot.jammingChecked=true;
+      const ir=infraredTrackingQuality(targetShip,Math.min(distance(shot,target),40));
+      const disruption=.45*condition(targetShip.systems.jammer)*shipPerformance(targetShip).power*(1-.85*ir);
+      if(rng()>=1-disruption){
+        combat.shots=combat.shots.filter(s=>s!==shot);log(combat,`${shot.targetId}: radar jammer defeated ${shot.weapon}${ir>0?' despite short-range IR fallback':''} · missile missed completely.`);continue;
+      }
+    }
     shot.x+=move.x;shot.y+=move.y;shot.z+=move.z;shot.remaining-=seconds;
     if(hit){
       if(shot.targetId.startsWith('shot:')){const intercepted=combat.shots.find(s=>s.id===shot.targetId);if(intercepted)flashInterception(combat,intercepted.targetId);combat.shots=combat.shots.filter(s=>s.id!==shot.targetId);log(combat,`${shot.sourceId}: incoming missile intercepted.`);}
-      else{const amount=applyDamage(combat,shot.targetId,shot.damage,shot.component,weapons[shot.weapon].penetration);log(combat,`${shot.targetId}: ${amount.toFixed(1)} damage · ${shot.component}.`);}
+      else{const amount=applyDamage(combat,shot.targetId,shot.damage,shot.component,weapons[shot.weapon].penetration);if(weapons[shot.weapon].missile&&targetShip)targetShip.underMissileFireUntil=combat.time+30;log(combat,`${shot.targetId}: ${amount.toFixed(1)} damage · ${shot.component}.`);}
     }
     if(hit||shot.remaining<=0)combat.shots=combat.shots.filter(s=>s!==shot);
   }
@@ -476,6 +700,8 @@ function autoCIWS(combat,sector,id,rng){
 export function stepCombat(combat,sector,seconds,rng=Math.random){
   if(!Number.isFinite(seconds)||seconds<=0)return;
   combat.time+=seconds;
+  updateEnemyResolve(combat,sector,seconds);
+  syncElectronicTracking(combat,sector);
   planEngagement(combat,sector);
   for(const f of [...(combat.firing||[])]){
     if(!f.targetId.startsWith('shot:')){
@@ -487,21 +713,35 @@ export function stepCombat(combat,sector,seconds,rng=Math.random){
       }
     }
     const error=canFire(combat,sector,'own',f.mountId,f.targetId,f.component);
-    if(!error)fireWeapon(combat,sector,'own',f.mountId,f.targetId,f.component,rng);
-    else if(![weaponCycling,missileCycling,ciwsCycling].includes(error)){ceaseFiring(combat,[f.mountId]);log(combat,`${f.mountId} fire order stopped: ${error}`);}
+    if(!error)fireWeapon(combat,sector,'own',f.mountId,f.targetId,f.component,rng,combat.missileVolleySize,combat.cannonBurstSize);
+    else if(![weaponCycling,missileCycling,ciwsCycling,cannonBurstCycling,jammingError].includes(error)){ceaseFiring(combat,[f.mountId]);log(combat,`${f.mountId} fire order stopped: ${error}`);}
   }
   alliedSupport(combat,sector,rng);
+  advanceCannonBursts(combat,sector,rng);
   const opponents=new Set([...combat.hostiles,...Object.values(combat.alliedOrders).flatMap(order=>order.targetIds)]);
   for(const id of opponents){
-    const ship=vessel(combat,id),source=position(sector,id);if(!alive(ship)||!source)continue;
+    const ship=vessel(combat,id),source=position(sector,id);if(!alive(ship)||!source||ship.combatResponse?.mode==='retreating')continue;
     const targetId=combat.hostiles.includes(id)&&alive(combat.own)?'own':Object.keys(combat.alliedOrders).find(allyId=>combat.alliedOrders[allyId].targetIds.includes(id)&&alive(combat.contacts[allyId]));
     if(!targetId)continue;
-    const mount=ship.mounts.find(m=>m.weapon!=='ciws-30'&&!canFire(combat,sector,id,m.id,targetId,m.weapon==='mp-missiles'?'engines':'hull'));
-    if(mount)fireWeapon(combat,sector,id,mount.id,targetId,mount.weapon==='mp-missiles'?'engines':mount.weapon==='as-missiles'?'hull':['weapons','engines','hull'][Math.floor(rng()*3)],rng);
+    for(const mount of ship.mounts){
+      if(mount.weapon==='ciws-30')continue;
+      const suppress=ship.classId.startsWith('pirate-')?suppressionAims(vessel(combat,targetId),mount.weapon):null;
+      const aims=suppress??(mount.weapon==='mp-missiles'?['engines']:['hull']);
+      let component=aims.find(aim=>!canFire(combat,sector,id,mount.id,targetId,aim));
+      if(!component)continue;
+      if(!suppress&&!['mp-missiles','as-missiles'].includes(mount.weapon)){
+        const aim=['weapons','engines','hull'][Math.min(2,Math.floor(rng()*3))];
+        if(!canFire(combat,sector,id,mount.id,targetId,aim))component=aim;
+      }
+      fireWeapon(combat,sector,id,mount.id,targetId,component,rng,1,mount.weapon.startsWith('autocannon-')?5:1);break;
+    }
   }
   autoCIWS(combat,sector,'own',rng);for(const id of new Set([...opponents,...Object.keys(combat.alliedOrders)]))autoCIWS(combat,sector,id,rng);
-  resolveShots(combat,sector,seconds);
+  resolveShots(combat,sector,seconds,rng);
   for(const ship of Object.values(combat.contacts))emergencyStep(ship,seconds);
   advanceSupportShip(combat,sector,seconds);
   advanceMaintenance(combat,seconds);
+  updateEnemyResolve(combat,sector);
+  syncElectronicTracking(combat,sector);
+  updateRetreatReports(combat,sector);
 }

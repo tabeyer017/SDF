@@ -129,7 +129,7 @@ test('sensor loss retains only the last known observation, and cancels a target 
 
 test('IFF memory retains verified identity, and never reveals identity of unseen distant contacts',()=>{
   const sector=createSector([{...target,y:50,z:0},{...target,id:'T-02',y:1000}]);assert.equal(observeSector(sector)[0].identified,true);
-  sector.contacts[0].y=70;const observed=observeSector(sector)[0];assert.equal(observed.identified,true);assert.match(observed.iffStatus,/Previously/);
+  sector.contacts[0].y=110;const observed=observeSector(sector)[0];assert.equal(observed.identified,true);assert.match(observed.iffStatus,/Previously/);
   assert.equal(sector.memory['T-02'],undefined);
 });
 

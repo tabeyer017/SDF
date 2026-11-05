@@ -1,4 +1,5 @@
-import { createCombat,createDamageShip,weapons,missileOptions,ciwsFiringTime } from './combat-model.mjs';
+import { createCombat,createDamageShip,weapons,missileOptions,missileVolleySizes,cannonBurstSizes,ciwsFiringTime,radarBurnThrough,weaponAimOptions } from './combat-model.mjs';
+import {migratePlayerShipName} from './ship-names.mjs';
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 function check(ok){if(!ok)throw new Error('Invalid damage / combat data in save file.');}
 function num(v,min=0,max=1e12){check(Number.isFinite(v)&&v>=min&&v<=max);return v;}
@@ -44,6 +45,7 @@ function upgradePirateFit(legacy){
 function ship(saved,classId,player){
   check(object(saved)&&saved.classId===classId&&object(saved.systems)&&object(saved.ammo)&&object(saved.roles));
   const legacy=legacyPirateFit(saved,classId),result=legacy??createDamageShip(classId,player);
+  if(player&&saved.name!==undefined){const name=migratePlayerShipName(classId,saved.name);check(name!==null);result.name=name;}
   for(const [id,s] of Object.entries(result.systems)){check(object(saved.systems[id]));s.hp=num(saved.systems[id].hp,0,s.max);}
   for(const weapon of Object.keys(result.ammo))result.ammo[weapon]=integer(saved.ammo[weapon],0,result.maxAmmo[weapon]);
   const mounts=array(saved.mounts,result.mounts.length);check(mounts.length===result.mounts.length);
@@ -51,6 +53,21 @@ function ship(saved,classId,player){
   for(const weapon of Object.keys(result.roles)){const role=saved.roles[weapon];check(role===null&&weapon!=='as-missiles'||missileOptions[weapon].includes(role));result.roles[weapon]=role;}
   result.spares=integer(saved.spares,0,result.maxSpares);result.radar=bool(saved.radar);result.jammer=bool(saved.jammer);result.ciwsAuto=bool(saved.ciwsAuto);
   result.surrendered=saved.surrendered===undefined?false:bool(saved.surrendered);
+  result.underMissileFireUntil=saved.underMissileFireUntil===undefined?0:num(saved.underMissileFireUntil);
+  if(saved.combatResponse!=null){
+    const response=saved.combatResponse;check(!player&&object(response)&&['retreating','surrendered'].includes(response.mode));
+    check((response.mode==='surrendered')===result.surrendered);
+    const used=new Set();
+    const notices=array(response.notices,3).map(notice=>{
+      check(object(notice)&&['retreat','surrender','contact-lost'].includes(notice.type)&&!used.has(notice.type));used.add(notice.type);
+      return {type:notice.type,time:num(notice.time),reported:bool(notice.reported)};
+    });
+    check(notices.some(notice=>notice.type===(response.mode==='surrendered'?'surrender':'retreat')));
+    result.combatResponse={mode:response.mode,reason:text(response.reason,200),since:num(response.since),opponentId:text(response.opponentId,100),blockedFor:num(response.blockedFor),bestRange:num(response.bestRange),contactLost:bool(response.contactLost),notices};
+  }
+  result.jammerMode=saved.jammerMode===undefined?(player&&saved.jammer?'on':'auto'):saved.jammerMode;check(['auto','on','off'].includes(result.jammerMode));
+  result.burnThroughUntil=saved.burnThroughUntil===undefined?0:num(saved.burnThroughUntil);
+  result.burnThroughReadyAt=saved.burnThroughReadyAt===undefined?0:num(saved.burnThroughReadyAt);
   result.autoRepair=saved.autoRepair===undefined?player:bool(saved.autoRepair);
   result.repairHolds=saved.repairHolds===undefined?[]:array(saved.repairHolds,Object.keys(result.systems).length).map(id=>{
     check(typeof id==='string'&&Object.hasOwn(result.systems,id));return id;
@@ -68,13 +85,32 @@ function ship(saved,classId,player){
 export function restoreCombat(saved,contacts){
   check(object(saved)&&object(saved.contacts));const result=createCombat(contacts);
   result.time=num(saved.time);result.nextShot=integer(saved.nextShot,1);
+  if(saved.missileVolleySize!==undefined){check(missileVolleySizes.includes(saved.missileVolleySize));result.missileVolleySize=saved.missileVolleySize;}
+  if(saved.cannonBurstSize!==undefined){check(cannonBurstSizes.includes(saved.cannonBurstSize));result.cannonBurstSize=saved.cannonBurstSize;}
   result.own=ship(saved.own,'sdf-frigate',true);
   for(const contact of contacts)result.contacts[contact.id]=ship(saved.contacts[contact.id],contact.shipType,false);
+  for(const vessel of [result.own,...Object.values(result.contacts)]){
+    check(vessel.burnThroughUntil<=result.time+radarBurnThrough.duration&&vessel.burnThroughReadyAt<=result.time+radarBurnThrough.cooldown);
+    check(vessel.burnThroughReadyAt>=vessel.burnThroughUntil);
+  }
   check(saved.ciwsFeedVersion===undefined||saved.ciwsFeedVersion===1);
   if(saved.ciwsFeedVersion===undefined)for(const vessel of [result.own,...Object.values(result.contacts)])for(const mount of vessel.mounts){
     if(mount.ciwsTarget)mount.readyAt=Math.min(mount.readyAt,result.time+ciwsFiringTime(vessel,mount,mount.ciwsRounds??75));
   }
   const validId=id=>id==='own'||Object.hasOwn(result.contacts,id);
+  for(const [id,vessel] of [['own',result.own],...Object.entries(result.contacts)]){
+    const savedShip=id==='own'?saved.own:saved.contacts[id];
+    for(const mount of vessel.mounts){
+      const burst=savedShip.mounts.find(m=>m.id===mount.id)?.burst;if(burst===undefined)continue;
+      check(mount.weapon.startsWith('autocannon-')&&object(burst)&&validId(burst.targetId));
+      check(cannonBurstSizes.includes(burst.total)&&burst.total>1&&weaponAimOptions(mount.weapon).some(([aim])=>aim===burst.component));
+      mount.burst={targetId:burst.targetId,component:burst.component,total:burst.total,remaining:integer(burst.remaining,1,burst.total-1)};
+    }
+  }
+  for(const [id,vessel] of Object.entries(result.contacts))if(vessel.combatResponse){
+    const response=vessel.combatResponse;check(validId(response.opponentId)&&response.opponentId!==id&&response.since<=result.time);
+    check(response.notices.every(notice=>notice.time<=result.time));
+  }
   const shotId=id=>typeof id==='string'&&/^shot:\d+$/.test(id)&&Number(id.slice(5))<result.nextShot;
   const targetId=id=>validId(id)||shotId(id);
   result.hostiles=array(saved.hostiles,contacts.length).map(id=>{check(id!=='own'&&validId(id));return id;});check(new Set(result.hostiles).size===result.hostiles.length);
@@ -93,9 +129,15 @@ export function restoreCombat(saved,contacts){
     const legacyShot=source.classId==='pirate-corvette'&&['mp-missiles','autocannon-75'].includes(s.weapon);
     check(mounts.length>0||legacyShot);
     check(weapons[s.weapon].missile?missileOptions[s.weapon].includes(s.role):s.role===null);
-    const component=text(s.component,100);check(['hull','engines','weapons','reactor','power','bridge','epd','sensors','communications','life-support','jammer'].includes(component));
+    const component=text(s.component,100);check(['hull','engines','weapons','ciws','reactor','power','bridge','epd','sensors','communications','life-support','jammer'].includes(component));
+    const maxBurst=s.weapon==='ciws-30'?10:s.sourceId==='own'&&s.weapon.startsWith('autocannon-')?Math.max(...cannonBurstSizes):1;
     const shot={id:s.id,sourceId:s.sourceId,targetId:s.targetId,weapon:s.weapon,role:s.role,component,
-      damage:num(s.damage,0,weapons[s.weapon].damage*(legacyShot?1:Math.max(...mounts.map(m=>m.barrels)))*(s.weapon==='ciws-30'?10:1)),remaining:num(s.remaining,0,1000000)};
+      damage:num(s.damage,0,weapons[s.weapon].damage*(legacyShot?1:Math.max(...mounts.map(m=>m.barrels)))*maxBurst),remaining:num(s.remaining,0,1000000)};
+    if(s.jammingChecked!==undefined){check(!!weapons[s.weapon].missile);shot.jammingChecked=bool(s.jammingChecked);}
+    if(s.launchVelocity!==undefined){
+      check(!!weapons[s.weapon].missile&&object(s.launchVelocity));
+      shot.launchVelocity=Object.fromEntries(['vx','vy','vz'].map(axis=>[axis,num(s.launchVelocity[axis],-1e6,1e6)]));
+    }
     for(const axis of ['x','y','z'])shot[axis]=num(s[axis],-1e12,1e12);
     for(const v of ['vx','vy','vz'])shot[v]=num(s[v],-1e7,1e7);
     return shot;
@@ -106,7 +148,7 @@ export function restoreCombat(saved,contacts){
     check(orders.length>0);
     result.firing=orders.map(f=>{
       check(object(f)&&result.own.mounts.some(m=>m.id===f.mountId)&&!used.has(f.mountId)&&targetId(f.targetId));used.add(f.mountId);
-      const component=text(f.component,100);check(['hull','engines','weapons','reactor','power','bridge','epd','sensors','communications','life-support','jammer'].includes(component));
+      const component=text(f.component,100);check(['hull','engines','weapons','ciws','reactor','power','bridge','epd','sensors','communications','life-support','jammer'].includes(component));
       return {mountId:f.mountId,targetId:f.targetId,component};
     });
   }

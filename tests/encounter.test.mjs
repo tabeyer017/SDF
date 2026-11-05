@@ -54,9 +54,11 @@ test('pirate events remain paused on arrival and produce incoming fire only when
   const {bridge:{sector,combat}}=game('Mars',1);
   assert.equal(sector.encounter.event,'raiders');assert.equal(sector.running,false);assert.equal(combat.shots.length,0);
   assert.deepEqual(combat.hostiles,sector.encounter.hostileIds);
+  // Pirates need autocannon range to strip our CIWS before using missiles.
+  Object.assign(sector.contacts.find(c=>combat.hostiles.includes(c.id)),{x:0,y:10,z:0});
   sector.running=true;stepSector(sector,.05);stepCombat(combat,sector,.05,()=>0);
   assert.ok(combat.shots.some(shot=>shot.targetId==='own'&&combat.hostiles.includes(shot.sourceId)));
-  const distant=sector.contacts.find(c=>Math.hypot(c.x,c.y,c.z)>60);
+  const distant=sector.contacts.find(c=>Math.hypot(c.x,c.y,c.z)>100);
   if(distant){const view=observeContact(distant);assert.equal(view.identified,false);assert.equal(view.ship.label,'UNKNOWN SHIP TYPE');}
 });
 

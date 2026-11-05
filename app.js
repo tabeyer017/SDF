@@ -5,6 +5,7 @@ import { mountBridge } from './bridge.mjs';
 import { createSave, parseSave, SAVE_STORAGE_KEY, LEGACY_SAVE_STORAGE_KEY } from './save-game.mjs';
 import { mountSaves } from './save-ui.mjs';
 import { mountStartMenu } from './start-menu.mjs';
+import {defaultShipName} from './ship-names.mjs';
 
 const $ = id => document.getElementById(id);
 const NS = 'http://www.w3.org/2000/svg';
@@ -23,6 +24,7 @@ const settlements=createSettlements(bodies);
 let directoryMode='planets';
 let miningPage=0, miningCompany='all';
 let bridgeConsole;
+const currentShipName=()=>bridgeConsole?.shipName()??savedGame?.bridge.combat.own.name??defaultShipName('sdf-frigate');
 const earth = bodies.find(b => b.id === 'earth');
 let state = { ship:{ x:earth.x, y:earth.y }, location:'Earth', route:[], active:false, paused:false, days:0, speed:1 };
 let savedGame=null,saveLoadError=false,lastAutosave=0;
@@ -57,7 +59,7 @@ function showScreen(screen){
   $('map-tab').classList.toggle('nav-active',screen==='map');
   $('bridge-button').classList.toggle('nav-active',screen==='bridge');
   document.querySelector('.page-heading h1').textContent=screen==='bridge'?'Command deck.':'The watch begins.';
-  document.querySelector('.page-heading .eyebrow').textContent=screen==='bridge'?'SDF WAYFARER / MAIN BRIDGE':'SOL SECTOR / NAVIGATION';
+  document.querySelector('.page-heading .eyebrow').textContent=screen==='bridge'?`${currentShipName().toUpperCase()} / MAIN BRIDGE`:'SOL SECTOR / NAVIGATION';
   document.querySelector('.page-heading p').textContent=screen==='bridge'?'Four areas. One command.':'One system. Our home. Your command.';
   bridgeConsole?.refresh();
 }
@@ -89,7 +91,7 @@ function updateSelection() {
 function routeUnsafe() { let previous=state.ship;return state.route.some(point=>{const unsafe=nearSol(previous,point);previous=point;return unsafe;}); }
 function renderTarget() {
   const p=mapPoint(selected);const group=$('target-marker');group.replaceChildren();
-  if(selected.id.startsWith('grid-')) { group.append(node('path',{d:`M${p.x-10} ${p.y-5}v-5h5 M${p.x+5} ${p.y-10}h5v5 M${p.x+10} ${p.y+5}v5h-5 M${p.x-5} ${p.y+10}h-5v-5`,stroke:'#c9aa73','stroke-width':1,fill:'none'}),node('text',{x:p.x+16,y:p.y+3,class:'planet-label'},selected.name)); }
+  if(!selected.id||selected.id.startsWith('grid-')) { group.append(node('path',{d:`M${p.x-10} ${p.y-5}v-5h5 M${p.x+5} ${p.y-10}h5v5 M${p.x+10} ${p.y+5}v5h-5 M${p.x-5} ${p.y+10}h-5v-5`,stroke:'#c9aa73','stroke-width':1,fill:'none'}),node('text',{x:p.x+16,y:p.y+3,class:'planet-label'},selected.name)); }
 }
 function segmentPath(a,b) { const steps=64;return Array.from({length:steps+1},(_,i)=>{const f=i/steps,p=mapPoint({x:a.x+(b.x-a.x)*f,y:a.y+(b.y-a.y)*f});return `${i?'L':'M'}${p.x.toFixed(2)},${p.y.toFixed(2)}`;}).join(' '); }
 function renderRoutes() {
@@ -176,7 +178,7 @@ function buildMap() {
   for(let i=0;i<160;i++){const p=mapPoint(at(32+random()*15,random()*360));$('asteroids').append(node('circle',{cx:p.x,cy:p.y,r:.55,fill:'#8298b6',opacity:.22}));}
   const belt=mapPoint(at(2.8,0));$('orbits').append(node('text',{x:0,y:Math.hypot(belt.x,belt.y)-9,'text-anchor':'middle',class:'orbit-label'},'A S T E R O I D  B E L T'));
   $('orbits').append(node('text',{x:0,y:451,'text-anchor':'middle',class:'orbit-label'},'H E L I O P A U S E  /  1 2 0  A U'));
-  $('ship-marker').append(node('circle',{r:12,fill:'#79d7e0',opacity:.07}),node('path',{d:'M0-8 5 6 0 3-5 6Z',fill:'#92e1e7',stroke:'#d4faff','stroke-width':.5,transform:'rotate(25)'}),node('text',{x:14,y:-13,class:'ship-label'},'SDF WAYFARER'));
+  $('ship-marker').append(node('circle',{r:12,fill:'#79d7e0',opacity:.07}),node('path',{d:'M0-8 5 6 0 3-5 6Z',fill:'#92e1e7',stroke:'#d4faff','stroke-width':.5,transform:'rotate(25)'}),node('text',{x:14,y:-13,class:'ship-label','data-player-ship-name':'','data-ship-case':'upper'},currentShipName().toUpperCase()));
 }
 function renderDirectory(){
   const mining=directoryMode==='mining';
@@ -292,10 +294,10 @@ document.querySelectorAll('.briefing-tabs button').forEach(button=>button.onclic
   document.querySelectorAll('.briefing-tabs button').forEach(item=>item.setAttribute('aria-pressed',String(item===button)));
 });
 for(const id of ['close-dialog','begin-button'])$(id).onclick=()=>$('briefing-dialog').close();
-function newPatrol(){
+function newPatrol(name){
   missionStarted=true;
   state={ship:{x:earth.x,y:earth.y},location:'Earth',route:[],active:false,paused:false,days:0,speed:1};
-  bridgeConsole?.resetPatrol();
+  bridgeConsole?.resetPatrol(typeof name==='string'?name:currentShipName());
   logs=[];routePage=0;log('New patrol initialized. Holding at Earth.');select(earth,false);showScreen('map');showView('map');resetView();renderPlan();save();$('briefing-dialog').close();toast('Patrol reset. Ready for your orders, Captain.');
 }
 $('restart-patrol').onclick=newPatrol;
@@ -329,7 +331,7 @@ new ResizeObserver(entries=>{
   svg.style.setProperty('--chart-small-size',`${Math.max(8,6/scale)}px`);
 }).observe($('map-surface'));
 bridgeConsole=mountBridge({
-  snapshot:()=>({shipName:'SDF Wayfarer',location:state.location,days:state.days,canEPD:bridgeConsole?.localStatus().canEPD!==false,active:state.active,paused:state.paused,routeCount:state.route.length,nextWaypoint:state.route[0]?.name||'',unsafe:routeUnsafe(),distance:formatDistance(routeDistance(state.ship,state.route)),eta:state.route.length?formatETA(routeDistance(state.ship,state.route)/EPD_AU_PER_DAY):'Awaiting course',targetName:selected.name}),
+  snapshot:()=>({shipName:currentShipName(),location:state.location,days:state.days,canEPD:bridgeConsole?.localStatus().canEPD!==false,active:state.active,paused:state.paused,routeCount:state.route.length,nextWaypoint:state.route[0]?.name||'',unsafe:routeUnsafe(),distance:formatDistance(routeDistance(state.ship,state.route)),eta:state.route.length?formatETA(routeDistance(state.ship,state.route)/EPD_AU_PER_DAY):'Awaiting course',targetName:selected.name}),
   openNavigation:()=>{bridgeConsole.selectStation('system-map');showScreen('bridge');showView('navigation');},
   engage:()=>{if(!state.active)$('engage-button').click();},
   pause:()=>{if(state.active)$('pause-button').click();},

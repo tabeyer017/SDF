@@ -1,6 +1,7 @@
 import { settlementDefinitions } from './settlements.mjs';
 import { miningStations } from './mining.mjs';
-import { shipPerformance, ceaseFiring, orderAlliedSupport, requestSupportShip, supportStatus } from './combat-model.mjs';
+import { shipPerformance, standDownAgainst, surrenderShip, orderAlliedSupport, requestSupportShip, supportStatus } from './combat-model.mjs';
+import {playerShipName,defaultShipName} from './ship-names.mjs';
 
 export const MAX_MESSAGES=200;
 export const communicationChannels=[
@@ -17,8 +18,8 @@ const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 const check=ok=>{if(!ok)throw new Error('Invalid communications data in save file.');};
 const percent=s=>Math.round(s.hp/s.max*100);
 const stamp=context=>Math.max(0,context.days??0)*86400;
-export function createCommunications(){
-  return {nextId:2,selectedId:'hq',filter:'all',encounter:0,alerts:[],messages:[{id:1,channelId:'hq',channelName:communicationChannels[0].name,kind:'hq',direction:'received',subject:'Patrol orders',body:'Wayfarer, Sol Command. Maintain the patrol watch, assist vessels in distress, and report hostile activity. Use this channel for situation reports and requests. Sol Command standing by.',time:0,location:'Earth',read:false}]};
+export function createCommunications(shipName=defaultShipName('sdf-frigate')){
+  return {nextId:2,selectedId:'hq',filter:'all',encounter:0,alerts:[],messages:[{id:1,channelId:'hq',channelName:communicationChannels[0].name,kind:'hq',direction:'received',subject:'Patrol orders',body:`${shipName}, Sol Command. Maintain the patrol watch, assist vessels in distress, and report hostile activity. Use this channel for situation reports and requests. Sol Command standing by.`,time:0,location:'Earth',read:false}]};
 }
 export function restoreCommunications(saved){
   if(saved===undefined)return createCommunications();
@@ -71,24 +72,20 @@ export function communicationLink(context,recipient){
   return null;
 }
 function ceaseEngagement(combat,id){
-  combat.hostiles=combat.hostiles.filter(target=>target!==id);
-  ceaseFiring(combat,(combat.firing||[]).filter(order=>order.targetId===id).map(order=>order.mountId));
-  for(const [allyId,order] of Object.entries(combat.alliedOrders)){
-    order.targetIds=order.targetIds.filter(targetId=>targetId!==id);
-    if(!order.targetIds.length)delete combat.alliedOrders[allyId];
-  }
+  standDownAgainst(combat,id);
 }
 function respond(recipient,request,context){
   const {combat,sector}=context,ship=recipient.kind==='ship'?combat.contacts[recipient.contactId]:null;
+  const ownName=playerShipName(combat);
   const weak=ship&&(ship.systems.hull.hp/ship.systems.hull.max<=.4||ship.mounts.every(m=>ship.systems[m.id].hp===0));
   const station=recipient.kind==='station',hq=recipient.kind==='hq',hostile=recipient.hostile&&!ship?.surrendered;
   switch(request){
-    case 'hail':return ship?.surrendered?'We have surrendered. Our weapons remain secured.':hostile?'Channel open. State your business, Wayfarer.':`Wayfarer, ${recipient.name} receiving. Go ahead.`;
+    case 'hail':return ship?.surrendered?'We have surrendered. Our weapons remain secured.':hostile?`Channel open. State your business, ${ownName}.`:`${ownName}, ${recipient.name} receiving. Go ahead.`;
     case 'status':return ship?`Hull integrity ${percent(ship.systems.hull)}%. ${ship.surrendered?'We have surrendered.':ship.fire||ship.breach?'Damage-control assistance requested.':combat.alliedOrders[recipient.contactId]?`Providing fire support against ${combat.alliedOrders[recipient.contactId].targetIds.length} transmitted targets.`:'Crew standing by.'}`:hq?`Patrol watch active. ${supportStatus(combat,sector)} Report hostile activity and assistance requests on this channel.`:`Traffic control online at ${recipient.name}. ${recipient.id.startsWith('mine-')?'Basic repairs, limited spare parts, and gun ammunition available.':'Station repairs and replenishment available.'}`;
     case 'report':return 'Situation report received and logged. Maintain the watch and report any material change.';
     case 'orders':return 'Continue your patrol, investigate unidentified traffic, offer aid to distressed vessels, and report hostile activity. Use Navigation to plot your course.';
     case 'assistance':return hostile?'Your request for assistance is refused.':hq?'Distress report received. No reinforcement unit is currently assigned. Proceed to a repair station if able; retain this channel for further reports.':station?`We can provide dockside assistance at ${recipient.name}. Travel here, then contact Engineering for docking and service. No rescue craft is available for dispatch.`:'We can provide damage-control advice over comms. No rescue or repair team is available for transfer; seek station services if able.';
-    case 'offer':return hostile?'We do not accept your assistance.':ship&&(ship.fire||ship.breach||percent(ship.systems.hull)<70)?'Assistance accepted. Please relay our distress to Earth HQ and direct us to station services.':'Thank you, Wayfarer. No immediate assistance is required; remain available on this channel.';
+    case 'offer':return hostile?'We do not accept your assistance.':ship&&(ship.fire||ship.breach||percent(ship.systems.hull)<70)?'Assistance accepted. Please relay our distress to Earth HQ and direct us to station services.':`Thank you, ${ownName}. No immediate assistance is required; remain available on this channel.`;
     case 'escort':return hostile?'Escort request refused.':hq?'Escort request logged. No escort unit is currently available for assignment.':station?'No escort craft available. Maintain a safe course and report threats to Earth HQ.':'Unable to change course for escort duty. We will keep a listening watch.';
     case 'docking':return sector.location===recipient.name?'Approach within 5 km of the arrival point, reduce speed below 10 KPH, and clear incoming threats. Request docking through Engineering.':`Proceed to ${recipient.name}. On arrival, hold within 5 km below 10 KPH and request docking through Engineering.`;
     case 'repairs':case 'resupply':return `${recipient.id.startsWith('mine-')?'Basic repairs, partial spare-parts replenishment, and gun ammunition':'Full repairs, destroyed-system replacement, spare parts, and ammunition'} available after docking at ${recipient.name}. Request station service in Engineering.`;
@@ -96,7 +93,7 @@ function respond(recipient,request,context){
     case 'surrender':
       if(ship.surrendered)return 'We have already surrendered. Weapons remain secured.';
       if(!weak)return 'Surrender demand rejected. We will not stand down.';
-      ship.surrendered=true;ship.radar=false;ship.jammer=false;ship.ciwsAuto=false;ceaseEngagement(combat,recipient.contactId);
+      surrenderShip(combat,recipient.contactId,'Surrender demand accepted','own',true);
       return 'We surrender. Weapons secured; offensive fire ceased. Our existing velocity is unchanged. Awaiting instructions. Weapons already in flight cannot be recalled.';
     case 'cease':
       if(hostile&&!weak)return 'Cease-fire request rejected.';
@@ -112,7 +109,7 @@ export function sendCommunication(state,context,recipientId,request,detail=''){
   if(error)return {ok:false,message:error};
   if(!communicationRequests(recipient).some(r=>r.id===request)||typeof detail!=='string'||detail.length>500||request==='message'&&!detail.trim())return {ok:false,message:'Choose a request and enter a message for Other message.'};
   const subject=requestLabels[request],hull=percent(context.combat.own.systems.hull);
-  const body=`${subject}. Wayfarer at ${context.sector.location}; hull ${hull}%.${detail.trim()?` ${detail.trim()}`:''}`;
+  const body=`${subject}. ${playerShipName(context.combat)} at ${context.sector.location}; hull ${hull}%.${detail.trim()?` ${detail.trim()}`:''}`;
   let support;
   if(request==='support'){
     const result=context.inTransit?{ok:false,message:'Disengage EPD before requesting a local support rendezvous.'}:requestSupportShip(context.combat,context.sector);
@@ -133,10 +130,23 @@ export function sendCommunication(state,context,recipientId,request,detail=''){
 export function pollCommunications(state,context){
   if(communicationLink(context,{available:true}))return false;
   let changed=false;
+  for(const [id,ship] of Object.entries(context.combat.contacts))for(const notice of ship.combatResponse?.notices??[]){
+    if(notice.reported)continue;
+    if(ship.surrendered&&notice.type!=='surrender'){notice.reported=true;changed=true;continue;}
+    const live=context.contacts.find(contact=>contact.id===id&&!contact.stale),remembered=context.sector.memory[id]?.observed;
+    if(notice.type!=='contact-lost'&&!live)continue;
+    if(!live&&!remembered)continue;
+    const observed=live??remembered,recipient={id:`ship:${state.encounter}:${id}`,name:`${observed.trackLabel} · ${observed.name}`,kind:'ship'};
+    const reason=observed.identified||notice.type==='surrender'?ship.combatResponse.reason:'The ship is abandoning its attack';
+    const subject=notice.type==='surrender'?'Surrender offered':notice.type==='retreat'?'Sensor watch · Enemy disengaging':'Sensor watch · Contact lost';
+    const body=notice.type==='surrender'?(ship.systems.communications.hp>0?`${recipient.name}: We surrender. ${reason}. Weapons and emitters secured. Do not fire. Weapons already in flight cannot be recalled.`:`Sensor watch: ${recipient.name} has ceased resistance and secured its weapons. Its communications array is offline; no surrender transmission received.`):notice.type==='retreat'?`Sensor watch: ${recipient.name} is disengaging and accelerating away. ${reason}. Offensive fire has ceased; defensive systems remain available.`:`Sensor watch: retreating ${recipient.name} has left sensor coverage. Last-known position retained. Escape is not confirmed; reacquisition remains possible.`;
+    addMessage(state,recipient,'received',subject,body,context);notice.reported=true;changed=true;
+    if(notice.type==='contact-lost')for(const earlier of ship.combatResponse.notices)if(earlier.type==='retreat')earlier.reported=true;
+  }
   for(const recipient of communicationsRecipients(state,context).filter(r=>r.kind==='ship'&&r.available)){
     const ship=context.combat.contacts[recipient.contactId];
     if(state.alerts.includes(recipient.id)||ship.surrendered||ship.systems.communications.hp<=0||!ship.fire&&!ship.breach&&percent(ship.systems.hull)>=40)continue;
-    addMessage(state,recipient,'received','Distress call',`${recipient.name} to Wayfarer: we are damaged and require assistance. Please acknowledge or offer assistance.`,context);
+    addMessage(state,recipient,'received','Distress call',`${recipient.name} to ${playerShipName(context.combat)}: we are damaged and require assistance. Please acknowledge or offer assistance.`,context);
     state.alerts.push(recipient.id);state.alerts=state.alerts.slice(-100);changed=true;
   }
   return changed;

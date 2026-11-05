@@ -29,6 +29,6 @@ export function mountSaves({capture,restore}){
     if(!pending)return;
     try{
       restore(pending);pending=null;file.value='';load.disabled=true;$('save-preview').textContent='';dialog.close();
-    }catch(error){status.textContent=`Could not load save: ${error.message}`;}
+    }catch(error){console.error('Could not restore SDF save',error);status.textContent=`Could not load save: ${error.message}`;}
   };
 }

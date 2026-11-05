@@ -167,17 +167,21 @@ test('Ctrl-click toggles a target while preserving every other lock', () => {
   assert.deepEqual(second, ['U-01', 'F-03']);
 });
 
-test('IFF identifies with a 90% threshold only within the physical 60 km radius', () => {
-  assert.equal(IFF_RANGE_KM, 60); assert.equal(IFF_IDENTIFICATION_CHANCE, .9);
-  const contact = { ...trainingContacts[1], x: 60, y: 0, z: 0, iffRoll: .899 };
+test('IFF identifies with a 90% threshold only within the physical 100 km radius', () => {
+  assert.equal(IFF_RANGE_KM, 100); assert.equal(IFF_IDENTIFICATION_CHANCE, .9);
+  const contact = { ...trainingContacts[1], x: 100, y: 0, z: 0, iffRoll: .899 };
   assert.equal(observeContact(contact).identified, true);
+  assert.equal(observeContact({ ...contact, x: 60, y: 0, z: 80 }).identified, true);
   assert.equal(observeContact({ ...contact, iffRoll: .9 }).identified, false);
-  assert.equal(observeContact({ ...contact, x: 60.001, iffRoll: 0 }).identified, false);
-  assert.equal(observeContact({ ...contact, x: 0, y: 0, z: 61, iffRoll: 0 }).identified, false);
+  const outside = observeContact({ ...contact, x: 100.001, iffRoll: 0 });
+  assert.equal(outside.identified, false);
+  assert.equal(outside.iffStatus, 'Beyond 100 km IFF range');
+  assert.equal(observeContact({ ...contact, x: 60, y: 0, z: 80.001, iffRoll: 0 }).identified, false);
+  assert.equal(observeContact({ ...contact, x: 0, y: 0, z: 101, iffRoll: 0 }).identified, false);
 });
 
 test('unidentified contacts reveal telemetry while withholding all catalog identity and size', () => {
-  for (const raw of [trainingContacts[0], trainingContacts[4], trainingContacts[5],trainingContacts[10]]) {
+  for (const raw of [trainingContacts[0], trainingContacts[5], trainingContacts[8], trainingContacts[10]]) {
     const observed = observeContact(raw);
     assert.equal(observed.identified, false);
     assert.equal(observed.type, 'unknown');

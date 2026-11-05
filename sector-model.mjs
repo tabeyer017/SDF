@@ -40,10 +40,12 @@ export function observeSector(sector) {
   const live=[];
   for(const contact of sector.contacts) {
     const relative=relativeContact(sector,contact);
-    if(contactDistance(relative)>(sector.sensorRange??SENSOR_RANGE)) continue;
+    const tracking=sector.tracking?.[contact.id];
+    if(tracking?(!tracking.detected||contactDistance(relative)>(tracking.detectionRange??SENSOR_RANGE)):contactDistance(relative)>(sector.sensorRange??SENSOR_RANGE)) continue;
     let observed=observeContact(relative);
     const previous=sector.memory[contact.id];
     if(!observed.identified && previous?.observed.identified) observed={...previous.observed,x:relative.x,y:relative.y,z:relative.z,vx:relative.vx,vy:relative.vy,vz:relative.vz,iffStatus:'Previously verified IFF'};
+    if(tracking)observed={...observed,trackingStatus:tracking.status,trackingQuality:tracking.quality,precisionTrack:tracking.precision,jammerEmitting:tracking.emitting,behavior:tracking.behavior};
     sector.memory[contact.id]={observed,position:{x:contact.x,y:contact.y,z:contact.z},velocity:velocity(contact),seen:sector.time};
     live.push(observed);
   }
@@ -61,7 +63,7 @@ export function issueManeuver(sector, mode, targetId, range=25) {
   }
   if(!['intercept','match','maintain','open','break'].includes(mode) || !Number.isFinite(range) || range<5 || range>200) return false;
   const target=observeSector(sector).find(c=>c.id===targetId);
-  if(!target) return false;
+  if(!target||target.precisionTrack===false) return false;
   sector.order={mode,targetId,range}; sector.running=true; sector.manual.thrust=0;sector.safety='Clear';sector.faceTarget=true;
   sector.status=`${maneuverNames[mode]} · ${target.trackLabel} · Navigation calculating`;
   return true;
@@ -109,6 +111,7 @@ function guidance(sector) {
   } else {
     const target=sector.contacts.find(c=>c.id===order.targetId);
     if(!target || length(subtract(target,own))>(sector.sensorRange??SENSOR_RANGE)){coast(sector);sector.status='Target lost beyond sensor coverage · maneuver cancelled · coasting';return null;}
+    if(sector.tracking?.[order.targetId]?.precision===false){coast(sector);sector.status='Target tracking lost to radar jamming · maneuver cancelled · coasting';return null;}
     const r=subtract(target,own), direction=unit(r), distance=length(r);
     if(sector.faceTarget) sector.facing=direction;
     let correction=0;

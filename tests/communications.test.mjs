@@ -119,6 +119,8 @@ test('only identified friendly SDF channels offer battle commands',()=>{
 
 test('accepted attack requests produce allied fire and hostile retaliation without taking over player weapons',()=>{
   const {state,context}=setup();context.lockedTargetIds=['N-02','F-03','U-01','E-04'];
+  const ally=context.sector.contacts.find(c=>c.id==='F-03');
+  Object.assign(context.sector.contacts.find(c=>c.id==='E-04'),{x:ally.x+10,y:ally.y,z:ally.z});
   const result=sendCommunication(state,context,'ship:0:F-03','attack-targets');
   assert.equal(result.accepted,true);assert.equal(context.sector.running,true);
   assert.deepEqual(context.combat.alliedOrders['F-03'].targetIds,['E-04']);assert.equal(context.combat.firing,null);
