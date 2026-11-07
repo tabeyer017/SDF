@@ -46,15 +46,15 @@ test('rail-gun impacts retain full damage and ballistic velocity at close and lo
 test('confirmed pirate fits create the specified turrets, CIWS, missile inventories and engines',()=>{
   for(const [classId,guns,missiles] of [['pirate-corvette',1,30],['pirate-frigate',2,40]]){
     const ship=createDamageShip(classId);
-    assert.equal(ship.mounts.filter(m=>m.weapon==='autocannon-120').length,guns);
+    assert.equal(ship.mounts.filter(m=>m.weapon==='autocannon-75').length,guns);
     assert.equal(ship.mounts.filter(m=>m.weapon==='ciws-30').length,2);
     assert.equal(ship.mounts.filter(m=>m.weapon==='gp-missiles').length,1);
     assert.equal(ship.ammo['gp-missiles'],missiles);
     assert.equal(ship.maxAmmo['gp-missiles'],missiles);
     assert.equal(ship.mounts.length,guns+3);
-    assert.ok(ship.mounts.every(m=>m.barrels===1));
+    assert.ok(ship.mounts.every(m=>m.barrels===(m.weapon==='autocannon-75'?2:1)));
     assert.equal(Object.keys(ship.systems).filter(id=>id.startsWith('engine-')).length,2);
-    assert.ok(!ship.mounts.some(m=>['mp-missiles','autocannon-75'].includes(m.weapon)));
+    assert.ok(!ship.mounts.some(m=>['mp-missiles','autocannon-120'].includes(m.weapon)));
   }
 });
 
@@ -84,14 +84,14 @@ test('legacy pirate saves migrate without resetting damage, spent rounds, cooldo
     const ship=restored.contacts[id];
     assert.equal(ship.systems.hull.hp,0);assert.equal(ship.spares,3);assert.equal(ship.surrendered,true);
     assert.equal(ship.ammo['gp-missiles'],missiles-3);
-    assert.equal(ship.ammo['autocannon-120'],guns*1200-10);
+    assert.equal(ship.ammo['autocannon-75'],guns*1200-10);
     assert.equal(ship.ammo['ciws-30'],11900);
     for(const mount of ship.mounts){
       assert.equal(mount.readyAt,25);
       assert.equal(ship.systems[mount.id].hp,mount.weapon==='ciws-30'?0:ship.systems[mount.id].max/2);
     }
-    assert.deepEqual(ship.jobs,[{systemId:'autocannon-120-1',progress:2,station:false}]);
-    assert.ok(!ship.systems['autocannon-75-1']);assert.ok(!ship.systems['mp-missiles-1']);
+    assert.deepEqual(ship.jobs,[{systemId:'autocannon-75-1',progress:2,station:false}]);
+    assert.ok(!ship.systems['autocannon-120-1']);assert.ok(!ship.systems['mp-missiles-1']);
   }
   assert.deepEqual(restoreCombat(JSON.parse(JSON.stringify(restored)),trainingContacts),restored);
   for(const edit of [c=>delete c.contacts['E-04'].systems.bridge,c=>c.contacts['E-06'].ammo['mp-missiles']=13,
@@ -109,6 +109,40 @@ test('old corvette shots keep their original weapon and damage after migration a
   assert.deepEqual(restoreCombat(JSON.parse(JSON.stringify(restored)),trainingContacts).shots,legacy.shots);
   const bad=structuredClone(restored);bad.shots[0].damage=61;assert.throws(()=>restoreCombat(bad,trainingContacts));
   bad.shots[0].damage=60;bad.shots[0].sourceId='E-04';assert.throws(()=>restoreCombat(bad,trainingContacts));
+});
+
+test('single-gun 120 mm pirate fits upgrade to twin 75 mm turrets without resetting individual mounts or in-flight rounds',()=>{
+  const saved=createCombat();saved.nextShot=3;
+  for(const id of ['E-04','E-06']){
+    const ship=saved.contacts[id];
+    for(const mount of ship.mounts.filter(m=>m.weapon==='autocannon-75')){
+      const oldId=mount.id.replace('autocannon-75-','autocannon-120-');
+      ship.systems[oldId]={...ship.systems[mount.id],hp:mount.id.endsWith('-1')?23:47};delete ship.systems[mount.id];
+      mount.id=oldId;mount.weapon='autocannon-120';mount.barrels=1;mount.readyAt=mount.id.endsWith('-1')?12:19;
+      mount.burst={targetId:'own',component:'hull',total:5,remaining:3};
+    }
+    ship.ammo['autocannon-120']=ship.ammo['autocannon-75']-17;delete ship.ammo['autocannon-75'];
+    ship.jobs=[{systemId:'autocannon-120-1',progress:2,station:false}];
+    ship.repairHolds=['autocannon-120-1'];ship.systems.hull.hp=123;
+    saved.shots.push({id:`shot:${saved.shots.length+1}`,sourceId:id,targetId:'own',weapon:'autocannon-120',role:null,component:'hull',damage:12,remaining:2,x:0,y:10,z:0,vx:0,vy:-5,vz:0});
+  }
+  const before=structuredClone(saved),restored=restoreCombat(saved,trainingContacts);
+  assert.deepEqual(saved,before);assert.deepEqual(restored.own,saved.own);assert.deepEqual(restored.shots,saved.shots);
+  for(const id of ['E-04','E-06']){
+    const ship=restored.contacts[id];assert.equal(ship.systems.hull.hp,123);
+    assert.equal(ship.ammo['autocannon-75'],before.contacts[id].ammo['autocannon-120']);
+    for(const mount of ship.mounts.filter(m=>m.weapon==='autocannon-75')){
+      assert.equal(mount.barrels,2);assert.equal(ship.systems[mount.id].hp,mount.id.endsWith('-1')?23:47);
+      assert.equal(mount.readyAt,mount.id.endsWith('-1')?12:19);
+      assert.deepEqual(mount.burst,{targetId:'own',component:'hull',total:5,remaining:3});
+    }
+    assert.deepEqual(ship.jobs,[{systemId:'autocannon-75-1',progress:2,station:false}]);
+    assert.deepEqual(ship.repairHolds,['autocannon-75-1']);
+    assert.ok(!ship.systems['autocannon-120-1']);
+  }
+  assert.deepEqual(restoreCombat(JSON.parse(JSON.stringify(restored)),trainingContacts),restored);
+  const invalid=structuredClone(saved);delete invalid.contacts['E-04'].systems['autocannon-120-2'];
+  assert.throws(()=>restoreCombat(invalid,trainingContacts));
 });
 
 test('mount cooldown and ammunition apply per barrel, and misses create no persistent object',()=>{
@@ -604,7 +638,7 @@ test('Disable and Destroy suppress CIWS, then the jammer, then attack the object
     applyDamage(restored,id,170,'ciws',1);
     assert.equal(restored.contacts[id].systems['ciws-30-1'].hp,0);
     assert.equal(restored.contacts[id].systems['ciws-30-2'].hp,50);
-    assert.equal(restored.contacts[id].systems['autocannon-120-1'].hp,80);
+    assert.equal(restored.contacts[id].systems['autocannon-75-1'].hp,80);
     stepCombat(restored,sector,.01,()=>0);
     assert.equal(restored.own.ammo['as-missiles'],before['as-missiles']);
     applyDamage(restored,id,170,'ciws',1);stepCombat(restored,sector,.01,()=>0);
@@ -747,20 +781,20 @@ test('both pirate classes suppress CIWS with autocannons, then use GP missiles a
     combat.hostiles=[id];combat.own.jammer=true;
     stepCombat(combat,sector,.01,()=>0);
     let shots=combat.shots.filter(s=>s.sourceId===id);
-    assert.equal(shots.length,1);assert.equal(shots[0].weapon,'autocannon-120');assert.equal(shots[0].component,'ciws');
+    assert.equal(shots.length,1);assert.equal(shots[0].weapon,'autocannon-75');assert.equal(shots[0].component,'ciws');
     const before=pirate.ammo['gp-missiles'];
     for(const mount of combat.own.mounts.filter(m=>m.weapon==='ciws-30'))combat.own.systems[mount.id].hp=0;
     stepCombat(combat,sector,.01,()=>0);
     assert.equal(pirate.ammo['gp-missiles'],before-1);
     assert.ok(combat.shots.some(s=>s.sourceId===id&&s.weapon==='gp-missiles'&&s.component==='jammer'&&s.role==='anti-jammer'));
-    for(const mount of pirate.mounts.filter(m=>m.weapon==='autocannon-120'))mount.readyAt=0;
+    for(const mount of pirate.mounts.filter(m=>m.weapon==='autocannon-75'))mount.readyAt=0;
     stepCombat(combat,sector,.01,()=>0);
-    assert.ok(combat.shots.some(s=>s.sourceId===id&&s.weapon==='autocannon-120'&&s.component==='jammer'));
+    assert.ok(combat.shots.some(s=>s.sourceId===id&&s.weapon==='autocannon-75'&&s.component==='jammer'));
     combat.own.systems.jammer.hp=0;
     pirate.mounts.find(m=>m.weapon==='gp-missiles').readyAt=0;stepCombat(combat,sector,.01,()=>0);
     shots=combat.shots.filter(s=>s.sourceId===id);
     assert.ok(shots.some(s=>s.weapon==='gp-missiles'&&s.component!=='ciws'&&s.component!=='jammer'));
-    assert.ok(shots.every(s=>['autocannon-120','gp-missiles'].includes(s.weapon)));
+    assert.ok(shots.every(s=>['autocannon-75','gp-missiles'].includes(s.weapon)));
   }
 });
 

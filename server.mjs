@@ -20,8 +20,9 @@ allowed.add('communications-console.mjs');
 allowed.add('start-screen.css');
 allowed.add('start-menu.mjs');
 allowed.add('ship-names.mjs');
+allowed.add('bridge-deck.mjs');
 for (const image of Object.values(shipFiveViews)) allowed.add(image);
-allowed.add('images/sdf-frigate-angled.png');
+allowed.add('images/sdf-frigate-side-view-transparent.png');
 http.createServer(async (req, res) => {
   const name = new URL(req.url, 'http://localhost').pathname.replace(/^\//, '') || 'index.html';
   if (!allowed.has(name)) { res.writeHead(404); res.end('Not found'); return; }

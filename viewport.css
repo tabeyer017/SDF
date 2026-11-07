@@ -1,6 +1,11 @@
 /* The command console occupies the viewport. Small displays switch views
    instead of stacking panels; flight plans page instead of scrolling. */
 html { height: 100%; overflow: hidden; }
+.left-panel, .right-panel { overflow-y: auto; min-height: 0; scrollbar-width: thin; }
+.left-panel > *, .right-panel > * { flex-shrink: 0; }
+.sector-header.panel-label { flex-wrap: wrap; gap: 6px; }
+.sector-header .directory-tabs { min-width: 0; flex-wrap: wrap; gap: 5px 8px; }
+.sector-header .directory-tabs button { white-space: nowrap; }
 body {
   min-width: 0;
   width: 100%;
@@ -24,7 +29,7 @@ main {
 }
 .page-heading { margin: 0; min-width: 0; }
 h1 { font-size: clamp(28px, 4vh, 40px); margin: 5px 0 3px; }
-.page-heading p { font-size: 10px; }
+.page-heading p { font-size: var(--font-small); }
 .date-block strong { margin: 6px 0; }
 .page-footer { min-width: 0; padding: 0 0 10px; gap: 8px; }
 .console-tabs { display: none; }
@@ -54,11 +59,11 @@ h1 { font-size: clamp(28px, 4vh, 40px); margin: 5px 0 3px; }
 .map-subtitle { display: none; }
 .map-surface { flex: 1 1 0; min-height: 0; height: auto; max-height: none; }
 .map-controls { top: 7px; right: 10px; }
-.map-coordinate { left: 15px; font-size: 7px; }
-.map-hint { bottom: 31px; padding: 6px 9px; font-size: 9px; max-width: calc(100% - 24px); white-space: normal; text-align: center; width: max-content; }
+.map-coordinate { left: 15px; font-size: var(--font-small); }
+.map-hint { bottom: 31px; padding: 6px 9px; font-size: var(--font-small); max-width: calc(100% - 24px); white-space: normal; text-align: center; width: max-content; }
 .scale-label { bottom: 11px; left: 15px; }
 .map-bottom { padding: 9px 12px; flex-shrink: 0; }
-.legend { gap: 11px; font-size: 8px; }
+.legend { gap: 11px; font-size: var(--font-small); }
 .time-controls { padding: 9px 12px; gap: 10px; flex-shrink: 0; }
 .phase-label span { display: none; }
 .right-panel {
@@ -69,10 +74,10 @@ h1 { font-size: clamp(28px, 4vh, 40px); margin: 5px 0 3px; }
 .destination-heading { margin-top: 9px; gap: 11px; }
 .destination-heading h2 { font-size: 27px; overflow-wrap: anywhere; }
 .destination-orb { width: 34px; height: 34px; }
-.destination-card > p { min-height: 0; font-size: 10px; margin: 8px 0; line-height: 1.6; }
+.destination-card > p { min-height: 0; font-size: var(--font-small); margin: 8px 0; line-height: 1.6; }
 .destination-card dl { margin: 10px 0; }
 .destination-card dl > div { margin: 8px 0; }
-.destination-card .selection-note { font-size: 8px; margin: 6px 0 0; }
+.destination-card .selection-note { font-size: var(--font-small); margin: 6px 0 0; }
 .secondary-button { padding: 9px; }
 .course-section { padding-top: 12px; flex-shrink: 0; }
 .waypoint-list { max-height: none; overflow: visible; margin: 7px 0 3px; }
@@ -80,27 +85,27 @@ h1 { font-size: clamp(28px, 4vh, 40px); margin: 5px 0 3px; }
 .waypoint-row > div { min-width: 0; }
 .waypoint-row > div > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .waypoint-row small { margin-top: 3px; }
-.waypoint-pagination { display: flex; justify-content: space-between; align-items: center; height: 25px; margin-bottom: 4px; color: var(--dim); font: 8px var(--mono); }
+.waypoint-pagination { display: flex; justify-content: space-between; align-items: center; height: 25px; margin-bottom: 4px; color: var(--dim); font: var(--font-small) var(--mono); }
 .waypoint-pagination button { min-width: 32px; height: 25px; border: 1px solid var(--line); color: var(--gold); }
 .empty-course { padding: 13px 0; }
 .empty-course > span { font-size: 25px; }
 .empty-course p { margin: 3px 0; }
-.empty-course small { font-size: 9px; }
+.empty-course small { font-size: var(--font-small); }
 .course-totals { padding: 10px 0 12px; }
 .course-totals > div > span { margin-bottom: 5px; }
 .primary-button { padding: 9px 12px; min-height: 34px; }
 .text-button { margin-top: 7px; }
-.safety-message { margin: 7px 0 0; font-size: 9px; line-height: 1.5; }
+.safety-message { margin: 7px 0 0; font-size: var(--font-small); line-height: 1.5; }
 .activity-section { min-height: 0; margin-top: auto; padding: 12px 0 8px; flex-shrink: 0; }
 .activity-section ol { margin: 8px 0 0; display: block; }
-.activity-section li { margin: 6px 0; font-size: 8px; }
+.activity-section li { margin: 6px 0; font-size: var(--font-small); }
 .planet-label { font-size: var(--chart-label-size, 18px); }
-.planet-sublabel { font-size: var(--chart-small-size, 10px); }
-.ship-label { font-size: var(--chart-small-size, 10px); }
-dialog { max-height: calc(100dvh - 24px); overflow: hidden; padding: 26px; }
+.planet-sublabel { font-size: var(--chart-small-size, var(--font-small)); }
+.ship-label { font-size: var(--chart-small-size, var(--font-small)); }
+dialog { max-height: calc(100dvh - 24px); overflow: auto; padding: 26px; }
 dialog h2 { font-size: 31px; margin: 12px 0; }
 .briefing-tabs { display: flex; gap: 15px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
-.briefing-tabs button { color: var(--dim); padding: 8px 0; font-size: 10px; border-bottom: 1px solid transparent; }
+.briefing-tabs button { color: var(--dim); padding: 8px 0; font-size: var(--font-small); border-bottom: 1px solid transparent; }
 .briefing-tabs button[aria-pressed="true"] { color: var(--gold); border-bottom-color: var(--gold); }
 dialog p { font-size: 11px; line-height: 1.65; }
 .briefing-note { margin: 16px 0; }
@@ -155,25 +160,25 @@ dialog p { font-size: 11px; line-height: 1.65; }
   .left-panel .sector-header { display: flex; margin: 14px 0 8px; padding: 13px 0 0; border-top: 1px solid var(--line); }
   .planet-directory { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; margin: 0; }
   .planet-item { font-size: 12px; min-height: 33px; padding: 6px; }
-  .planet-item > span:last-child { display: inline; font-size: 9px; }
+  .planet-item > span:last-child { display: inline; font-size: var(--font-small); }
   .planet-item .mini-planet { width: 8px; height: 8px; margin-right: 10px; }
   .edge-button { margin-top: 11px; padding-top: 12px; font-size: 11px; }
-  .edge-button small { display: block; margin-left: 0; font-size: 7px; }
+  .edge-button small { display: block; margin-left: 0; font-size: var(--font-small); }
   .right-panel { border: 0; padding: 16px 22px; order: 0; }
   .right-panel > .panel-label { display: flex; }
   .destination-card { padding: 12px 0 14px; }
   .destination-heading h2 { font-size: 30px; }
   .destination-card dl { font-size: 11px; }
-  .destination-card dd { font-size: 10px; }
+  .destination-card dd { font-size: var(--font-small); }
   .destination-card > #destination-description { display: block; }
   .destination-card dl > div { margin: 9px 0; }
   .course-section { border-top: 1px solid var(--line); padding-top: 14px; }
   .waypoint-row { font-size: 12px; min-height: 38px; }
-  .course-totals > div > span { font-size: 8px; }
+  .course-totals > div > span { font-size: var(--font-small); }
   .course-totals strong { font-size: 25px; }
   .course-totals { padding: 12px 0; }
   .primary-button, .secondary-button { font-size: 12px; min-height: 38px; }
-  .text-button { font-size: 10px; }
+  .text-button { font-size: var(--font-small); }
   .activity-section { grid-column: auto; margin-top: auto; padding-top: 10px; }
   .activity-section .panel-label { display: flex; }
   .activity-section li:nth-child(n+2) { display: none; }
@@ -200,25 +205,25 @@ dialog p { font-size: 11px; line-height: 1.65; }
   .topbar { padding: 0 14px; gap: 10px; }
   .brand { width: auto; gap: 8px; }
   .brand-name { font-size: 24px; }
-  .brand-name > span { font-size: 6px; }
+  .brand-name > span { font-size: var(--font-small); }
   .insignia { font-size: 29px; }
   nav { margin-left: auto; gap: 13px; }
-  nav button { font-size: 10px; }
+  nav button { font-size: var(--font-small); }
   .page-heading { gap: 8px; }
   .page-heading h1 { font-size: clamp(23px, 6.8vw, 28px); white-space: nowrap; }
   .date-block { flex-shrink: 0; }
   .date-block strong { font-size: clamp(12px, 4.2vw, 17px); white-space: nowrap; }
   .date-block strong span { display: inline; margin-left: 5px; }
-  .date-block > div { font-size: 6px; }
+  .date-block > div { font-size: var(--font-small); }
   .date-block > .eyebrow { display: none; }
-  .page-heading .eyebrow { font-size: 6px; }
-  .page-heading p { font-size: 8px; }
+  .page-heading .eyebrow { font-size: var(--font-small); }
+  .page-heading p { font-size: var(--font-small); }
   main { padding: 10px 10px 0; }
   .map-top { padding: 10px 12px; }
   .map-bottom { padding: 9px 10px; }
-  .map-coordinate { font-size: 6px; left: 12px; }
-  .legend { font-size: 7px; gap: 9px; }
-  .phase-label { font-size: 6px; }
+  .map-coordinate { font-size: var(--font-small); left: 12px; }
+  .legend { font-size: var(--font-small); gap: 9px; }
+  .phase-label { font-size: var(--font-small); }
   .phase-label span { display: none; }
   .right-panel { padding: 12px 17px; }
   .right-panel > .panel-label { display: none; }
@@ -235,8 +240,8 @@ dialog p { font-size: 11px; line-height: 1.65; }
   .left-panel .sector-header { margin-top: 12px; padding-top: 10px; }
   .left-panel .planet-item { min-height: 30px; }
   .page-footer { padding-bottom: 8px; }
-  .page-footer > span:first-child { font-size: 5px; }
-  .page-footer button { font-size: 6px; }
+  .page-footer > span:first-child { font-size: var(--font-small); }
+  .page-footer button { font-size: var(--font-small); }
 }
 @media (max-height: 680px) {
   .activity-section { display: none; }
@@ -260,13 +265,13 @@ dialog p { font-size: 11px; line-height: 1.65; }
   .course-totals strong { font-size: 22px; }
   .empty-course { padding: 8px 0; }
   .empty-course > span { display: none; }
-  .empty-course small { font-size: 8px; }
+  .empty-course small { font-size: var(--font-small); }
   .primary-button, .secondary-button { min-height: 32px; padding-block: 7px; }
-  .safety-message { font-size: 8px; margin-top: 5px; }
+  .safety-message { font-size: var(--font-small); margin-top: 5px; }
   dialog { padding: 20px; }
   dialog h2 { font-size: 27px; margin: 9px 0; }
-  dialog p, .briefing-note p { font-size: 10px; line-height: 1.5; }
-  #restart-patrol { font-size: 8px; margin-top: 11px; }
+  dialog p, .briefing-note p { font-size: var(--font-small); line-height: 1.5; }
+  #restart-patrol { font-size: var(--font-small); margin-top: 11px; }
 }
 @media (max-height: 480px) {
   body { grid-template-rows: 42px minmax(0, 1fr); }
@@ -275,7 +280,7 @@ dialog p { font-size: 11px; line-height: 1.65; }
   .page-heading h1 { font-size: 24px; }
   .date-block strong { font-size: 16px; margin: 0; }
   .date-block > div { display: none; }
-  .console-tabs button { padding: 5px; font-size: 10px; }
+  .console-tabs button { padding: 5px; font-size: var(--font-small); }
   .right-panel { padding: 10px 15px; }
   body[data-view="navigation"] .right-panel { grid-template-rows: minmax(0, 1fr); gap: 20px; }
   .right-panel > .panel-label { display: none; }
@@ -285,8 +290,8 @@ dialog p { font-size: 11px; line-height: 1.65; }
   .destination-card dl > div { margin: 6px 0; }
   .course-section { padding: 0; }
   .course-totals strong { font-size: 20px; }
-  .course-totals > div > span { font-size: 7px; margin-bottom: 3px; }
-  .waypoint-row { min-height: 29px; padding: 3px 0; font-size: 10px; }
+  .course-totals > div > span { font-size: var(--font-small); margin-bottom: 3px; }
+  .waypoint-row { min-height: 29px; padding: 3px 0; font-size: var(--font-small); }
   .waypoint-list { margin-top: 5px; }
   .waypoint-pagination { height: 21px; margin-bottom: 2px; }
   .waypoint-pagination button { height: 21px; }
@@ -301,13 +306,13 @@ dialog p { font-size: 11px; line-height: 1.65; }
   .ship-card .systems { gap: 5px; }
   dialog { padding: 17px 22px; }
   dialog h2 { font-size: 26px; margin: 7px 0; }
-  dialog p { font-size: 10px; line-height: 1.5; margin: 8px 0; }
+  dialog p { font-size: var(--font-small); line-height: 1.5; margin: 8px 0; }
   .briefing-tabs { margin-bottom: 8px; }
   .briefing-tabs button { padding: 6px 0; }
   .briefing-note { margin: 8px 0; }
-  .briefing-note p { font-size: 10px; }
+  .briefing-note p { font-size: var(--font-small); }
   #begin-button { margin-top: 9px; }
-  #restart-patrol { margin-top: 9px; font-size: 8px; }
+  #restart-patrol { margin-top: 9px; font-size: var(--font-small); }
 }
 @media (max-width: 620px) and (max-height: 640px) {
   main { gap: 6px; padding-top: 6px; }
@@ -317,7 +322,7 @@ dialog p { font-size: 11px; line-height: 1.65; }
 
 /* Surface sites use callouts so moon locations remain visible at system scale. */
 .directory-tabs { display: flex; align-items: center; gap: 10px; }
-.directory-tabs button { padding: 2px 0; font: 9px var(--mono); letter-spacing: .3px; color: var(--dim); }
+.directory-tabs button { padding: 2px 0; font: var(--font-small) var(--mono); letter-spacing: .3px; color: var(--dim); }
 .directory-tabs button[aria-pressed="true"] { color: var(--gold); }
 .directory-tabs button[aria-pressed="true"]::after { content: ''; display: block; height: 1px; margin-top: 3px; background: var(--gold); }
 .directory-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -325,14 +330,14 @@ dialog p { font-size: 11px; line-height: 1.65; }
 .planet-item .mini-planet.station { border: 1px solid #cfbc90; border-radius: 0; transform: rotate(45deg); background: transparent; box-shadow: none; }
 .planet-item .mini-planet.colony { border: 1px solid #d29b7f; border-radius: 1px; background: #d29b7f33; box-shadow: none; }
 .site-item { gap: 0; }
-.site-item > span:last-child { margin-left: auto; padding-left: 4px; font-size: 7px; flex-shrink: 0; }
+.site-item > span:last-child { margin-left: auto; padding-left: 4px; font-size: var(--font-small); flex-shrink: 0; }
 .facility-group { cursor: pointer; }
 .facility-leader { stroke: #9c947a; stroke-width: .8; stroke-dasharray: 2 4; opacity: .45; pointer-events: none; }
 .facility-symbol { fill: #15232c; stroke: #cfb987; stroke-width: 1.4; }
 .facility-group.colony .facility-symbol { fill: #d39b7d22; stroke: #d39b7d; }
 .large-station { stroke-width: 2; }
 .facility-label { font: var(--chart-label-size, 18px) var(--body); fill: #c4bba5; paint-order: stroke; stroke: #080f19; stroke-width: 4px; stroke-linejoin: round; }
-.facility-caption { font: var(--chart-small-size, 10px) var(--mono); fill: #7f8d98; letter-spacing: .5px; paint-order: stroke; stroke: #080f19; stroke-width: 3px; }
+.facility-caption { font: var(--chart-small-size, var(--font-small)) var(--mono); fill: #7f8d98; letter-spacing: .5px; paint-order: stroke; stroke: #080f19; stroke-width: 3px; }
 .facility-label, .facility-caption, .outpost .planet-label, .outpost .planet-sublabel { visibility: hidden; pointer-events: none; }
 .facility-group:hover .facility-label, .facility-group:hover .facility-caption,
 .facility-group:focus-visible .facility-label, .facility-group:focus-visible .facility-caption,
@@ -348,17 +353,17 @@ dialog p { font-size: 11px; line-height: 1.65; }
 .legend-site { border: 1px solid var(--gold); transform: rotate(45deg); }
 @media (max-width: 1200px) { .legend > span:nth-child(2) { display: none; } }
 @media (max-width: 980px), (max-height: 620px) {
-  .settlement-directory .site-item { font-size: 10px; }
+  .settlement-directory .site-item { font-size: var(--font-small); }
   .settlement-directory .site-item > span:last-child { display: none; }
 }
 
 /* Mining remains a paged directory within the existing screen footprint. */
 .directory-tabs { gap: 8px; }
-.directory-tabs button { font-size: 8px; }
+.directory-tabs button { font-size: var(--font-small); }
 #mining-filter { min-width: 0; margin: 4px 0 6px; flex-shrink: 0; }
-#mining-filter label { display: block; font: 6px var(--mono); letter-spacing: 1px; color: var(--dim); margin-bottom: 5px; }
-#company-filter { width: 100%; min-width: 0; height: 27px; padding: 0 5px; border: 1px solid var(--line); border-radius: 2px; color: #c9d1da; background: #101925; font: 9px var(--body); }
-.directory-pagination { height: 25px; display: flex; align-items: center; justify-content: space-between; margin-top: 4px; font: 8px var(--mono); color: var(--dim); flex-shrink: 0; }
+#mining-filter label { display: block; font: var(--font-small) var(--mono); letter-spacing: 1px; color: var(--dim); margin-bottom: 5px; }
+#company-filter { width: 100%; min-width: 0; height: 27px; padding: 0 5px; border: 1px solid var(--line); border-radius: 2px; color: #c9d1da; background: #101925; font: var(--font-small) var(--body); }
+.directory-pagination { height: 25px; display: flex; align-items: center; justify-content: space-between; margin-top: 4px; font: var(--font-small) var(--mono); color: var(--dim); flex-shrink: 0; }
 .directory-pagination button { width: 30px; height: 24px; border: 1px solid var(--line); color: var(--gold); }
 .mining-symbol { fill: #101e28; stroke: var(--mine-color, #84c7bd); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .mining .selection-ring { stroke: var(--mine-color, #84c7bd); }
@@ -368,10 +373,10 @@ dialog p { font-size: 11px; line-height: 1.65; }
 .directory-station-icon path { stroke: var(--gold); stroke-width: 1.5; fill: #15232c; }
 .destination-heading > div { min-width: 0; flex: 1; }
 .destination-caption { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.contract-button { font: 8px var(--mono); color: var(--gold); border: 1px solid #72624480; padding: 3px 5px; border-radius: 2px; flex-shrink: 0; }
+.contract-button { font: var(--font-small) var(--mono); color: var(--gold); border: 1px solid #72624480; padding: 3px 5px; border-radius: 2px; flex-shrink: 0; }
 .contract-details { margin: 18px 0; }
 .contract-details > div { padding: 9px 0; border-bottom: 1px solid var(--line); }
-.contract-details dt { font: 8px var(--mono); color: var(--dim); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 5px; }
+.contract-details dt { font: var(--font-small) var(--mono); color: var(--dim); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 5px; }
 .contract-details dd { margin: 0; font-size: 12px; color: var(--text); overflow-wrap: anywhere; }
 #contract-status { color: #99c4ad; }
 @media (max-width: 980px) and (min-width: 600px), (max-height: 620px) and (min-width: 600px) {
@@ -387,11 +392,11 @@ dialog p { font-size: 11px; line-height: 1.65; }
   .contract-details > div { padding: 7px 0; }
   .contract-details dd { font-size: 11px; }
 }
-@media (max-width: 620px) { .legend { gap: 7px; } .contract-button { font-size: 7px; padding: 5px; } }
+@media (max-width: 620px) { .legend { gap: 7px; } .contract-button { font-size: var(--font-small); padding: 5px; } }
 /* Portable JSON saves. */
 #save-dialog { max-height: calc(100dvh - 36px); overflow: auto; }
 .save-import { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); }
-.save-import label { display: block; color: var(--gold); font: 10px var(--mono); margin-bottom: 10px; }
+.save-import label { display: block; color: var(--gold); font: var(--font-small) var(--mono); margin-bottom: 10px; }
 .save-import input { width: 100%; min-width: 0; color: var(--text); font: 11px var(--mono); }
 .save-import input::file-selector-button { border: 1px solid var(--line); background: #172534; color: var(--text); padding: 8px; margin-right: 10px; cursor: pointer; }
 #save-status,#save-preview { font-size: 11px; line-height: 1.7; overflow-wrap: anywhere; }

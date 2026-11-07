@@ -4,6 +4,8 @@ A local, interactive first look at the strategic navigation map for SDF, set in 
 
 ## Run
 
+Interface text uses an 11 px minimum (`--font-small` in `styles.css`), including labels, hints, status text, button numbers, and narrow-screen layouts. Keep future small-text styles at this minimum or larger; wrap or scroll content instead of shrinking text to fit.
+
 Requires Node.js. No dependency installation is needed.
 
 ```sh
@@ -44,6 +46,8 @@ Final five-view PNGs used by the game remain in this project's `images/` folder.
 - To start over, open Mission briefing and choose Restart patrol at Earth.
 
 ## Bridge areas
+
+The Command overview shows the bridge in an elevated perspective cutaway, with an angular forward window and glazed port and starboard walls inspired by the ship reference models. Nine crew chairs sit at paired Flight Control, Tactical / Security, and Science / Comms consoles and three Engineering / Support consoles; a raised central chair belongs to the commander. Select a console bank or its label to open the existing bridge area. The view uses lightweight projected SVG geometry, with keyboard access and a smaller bridge preview plus station buttons on phones.
 
 Open **Bridge** in the top navigation to return to the deck and select an area. The deck controls include each area's icon and a description of its duties; consoles use the space previously occupied by the area directory. **Command** is the overview for readiness, current orders, alerts, and shortcuts. Four bridge areas combine the existing controls behind internal tabs, which support Left/Right arrows and Home/End. Phones show readable area cards in the deck view and offer a Command overview switch. Local Flight provides **Sector chart / Route & controls** views on phones.
 
@@ -87,7 +91,11 @@ Local simulation starts paused and runs when a maneuver, patrol, or manual order
 
 ### Tactical MFD buttons
 
-The enlarged radar is flanked by four equal-size buttons on each side, stacked vertically. The left buttons open **Targets** (locks and priorities), **Tracking** (range, speed, elevation and closure), **Ship info** (identity, reference image, weapons and engines), and **Systems** (target integrity, shuttles, boarding and crew). The right buttons open **Weapons** (mount selection, aim, volleys and firing), **Defense** (radar, CIWS, jammer and burn-through), **Maneuver**, and **Settings** (simulation speed and combat events). Each opens a live popup; close with **×**, **Escape**, or a backdrop click. Selections and orders carry between popups and radar quick controls. The same button layout is available on narrow screens.
+Tactical has two independent multifunction displays (MFDs), each with the same eight buttons flanking its center screen. The left-side buttons show **Radar**, **Targets / Tracking** (locks, priorities, range, speed, elevation and closure together), **Ship info**, and **Systems**. The right-side buttons show **Weapons**, **Defense**, **Maneuver**, and **Settings**. Each MFD changes its own screen without a popup or changing the other MFD's view. The left starts on Radar and the right on Targets / Tracking; both can show radar or the same interface simultaneously. Each radar retains its own pan and zoom, while coverage range, target locks, weapon selections, and combat state are shared. Long interfaces scroll within their screen. Narrow screens stack the two MFDs while retaining both button rails.
+
+The compact bezel buttons retain their numbers and use icons; their names appear on hover or keyboard focus. Each MFD uses a single-line header with its side and current interface, leaving more room for the screen.
+
+Radar range, Center, and Reset zoom are inside each Radar screen; Center and Reset zoom apply only to that radar. The Lock target selector is inside each Targets / Tracking screen, and the Armament catalog button is in Settings. Range and target locks remain shared between the two MFDs.
 
 ### Arrival encounters
 

@@ -1,4 +1,5 @@
 import { bridgeStations, bridgeAreas, bridgeAreaFor, canonicalBridgeStation, marineComplements, restoreBridgeState } from './bridge-model.mjs';
+import { mountBridgeDeck } from './bridge-deck.mjs';
 import { mountTactical } from './tactical.mjs';
 import { createSector, createEncounterSector, observeSector, issueManeuver, setManualHelm, coast, brake, addPatrolWaypoint, startPatrol, stepSector, LOCAL_SIMULATION_RATES } from './sector-model.mjs';
 import { applyEncounterEvent } from './encounter-model.mjs';
@@ -11,8 +12,7 @@ import { shuttleTypes,crewDoctrine } from './tactical-model.mjs';
 import {shipNameOptions,shipNamingConventions,playerShipName,setPlayerShipName} from './ship-names.mjs';
 
 export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLocalChange=()=>{},onSave=()=>{},savedGame=null}) {
-  const $=id=>document.getElementById(id),NS='http://www.w3.org/2000/svg';
-  const svg=(tag,attrs={},text)=>{const el=document.createElementNS(NS,tag);for(const [key,value] of Object.entries(attrs))el.setAttribute(key,value);if(text!==undefined)el.textContent=text;return el;};
+  const $=id=>document.getElementById(id);
   let saved=savedGame?.settings;
   if(!saved)try{saved=JSON.parse(localStorage.getItem('sdf-bridge-v1'));}catch{}
   const state=restoreBridgeState(saved);
@@ -190,6 +190,7 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLo
     $('bridge-station-name').textContent=station.name;
     $('bridge-station-group').textContent=area.name;
     $('bridge-station-summary').textContent=station.summary;
+    $('bridge-command-reference').hidden=state.selected!=='command';
     $('bridge-station-detail').style.setProperty('--station-color',station.color);
     $('bridge-watch').textContent=state.watch==='routine'?'ROUTINE WATCH':'HEIGHTENED WATCH';
     $('bridge-watch').classList.toggle('heightened',state.watch==='heightened');
@@ -214,15 +215,14 @@ export function mountBridge({snapshot,openNavigation,engage,pause,abort,log,onLo
   for(const station of bridgeAreas){
     const mobileButton=document.createElement('button');mobileButton.dataset.bridgeArea=station.id;mobileButton.style.setProperty('--station-color',station.color);mobileButton.setAttribute('aria-label',`Open ${station.name}`);
     const mobileIcon=document.createElement('span'),mobileName=document.createElement('strong'),mobileDescription=document.createElement('small');mobileIcon.className='bridge-area-icon';mobileIcon.setAttribute('aria-hidden','true');mobileIcon.textContent=station.symbol;mobileName.textContent=station.name;mobileDescription.textContent=station.summary;mobileDescription.id=`bridge-mobile-description-${station.id}`;mobileButton.setAttribute('aria-describedby',mobileDescription.id);mobileButton.append(mobileIcon,mobileName,mobileDescription);mobileButton.onclick=()=>selectArea(station.id);mobileAreas.append(mobileButton);
-    const g=svg('g',{class:'bridge-deck-station',transform:`translate(${station.x} ${station.y})`,'data-bridge-area':station.id,role:'button',tabindex:0,'aria-label':`Open ${station.name}`,'aria-describedby':`bridge-deck-description-${station.id}`});
-    g.style.setProperty('--station-color',station.color);
-    if(station.id==='command'){
-      g.append(svg('circle',{r:62,class:'command-platform'}),svg('path',{d:'M-30-19h23v31h-23ZM8-19h23v31H8ZM-35-14v30h34M3 16h34v-30',class:'command-chairs'}),svg('text',{y:-34,'text-anchor':'middle',class:'bridge-deck-command-icon','aria-hidden':'true'},station.symbol),svg('text',{y:35,'text-anchor':'middle',class:'bridge-deck-label'},'COMMAND'),svg('text',{id:`bridge-deck-description-${station.id}`,y:48,'text-anchor':'middle',class:'bridge-deck-command-description'},station.summary));
-    }else{
-      g.append(svg('rect',{x:-92,y:-34,width:184,height:80,rx:10,class:'bridge-console-shell'}),svg('text',{y:-10,'text-anchor':'middle',class:'bridge-deck-area-icon','aria-hidden':'true'},station.symbol),svg('text',{y:13,'text-anchor':'middle',class:'bridge-deck-label'},station.name),svg('text',{id:`bridge-deck-description-${station.id}`,y:32,'text-anchor':'middle',class:'bridge-deck-description'},station.summary));
-    }
-    g.onclick=()=>selectArea(station.id);g.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();selectArea(station.id);}};$('bridge-deck-stations').append(g);
   }
+  mountBridgeDeck({root:$('bridge-deck'),areas:bridgeAreas,onSelect:selectArea});
+  $('bridge-game-guide').onclick=()=>$('how-to-play-dialog').showModal();
+  $('bridge-game-history').onclick=()=>$('history-dialog').showModal();
+  for(const [id,page] of [['bridge-game-mission','mission'],['bridge-game-details','details']])$(id).onclick=()=>{
+    document.querySelector(`[data-briefing="${page}"]`).click();
+    $('briefing-dialog').showModal();
+  };
   $('bridge-view-toggle').onclick=()=>{const root=$('bridge-console');root.dataset.view=root.dataset.view==='deck'?'station':'deck';updateViewButton();};
   updateViewButton();refresh();
   return {

@@ -96,7 +96,7 @@ function renderTarget() {
 function segmentPath(a,b) { const steps=64;return Array.from({length:steps+1},(_,i)=>{const f=i/steps,p=mapPoint({x:a.x+(b.x-a.x)*f,y:a.y+(b.y-a.y)*f});return `${i?'L':'M'}${p.x.toFixed(2)},${p.y.toFixed(2)}`;}).join(' '); }
 function renderRoutes() {
   const group=$('routes');group.replaceChildren();let previous=state.ship;
-  state.route.forEach((point,i)=>{const p=mapPoint(point);group.append(node('path',{d:segmentPath(previous,point),class:`route-line ${state.active?'active':''} ${nearSol(previous,point)?'unsafe':''}`}));group.append(node('circle',{cx:p.x,cy:p.y,r:11,class:'waypoint-dot'}),node('text',{x:p.x,y:p.y+3,'text-anchor':'middle',fill:'#d5b77c','font-size':8,'font-family':'monospace'},i+1));previous=point;});
+  state.route.forEach((point,i)=>{const p=mapPoint(point);group.append(node('path',{d:segmentPath(previous,point),class:`route-line ${state.active?'active':''} ${nearSol(previous,point)?'unsafe':''}`}));group.append(node('circle',{cx:p.x,cy:p.y,r:11,class:'waypoint-dot'}),node('text',{x:p.x,y:p.y+3,'text-anchor':'middle',fill:'#d5b77c','font-size':11,'font-family':'monospace'},i+1));previous=point;});
   const p=mapPoint(state.ship);$('ship-marker').setAttribute('transform',`translate(${p.x} ${p.y})`);
 }
 function renderPlan() {

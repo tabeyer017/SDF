@@ -98,7 +98,7 @@ export function mountSectorConsole({root,flight,openSystem,strategic}) {
     position.textContent=`${s.location} sector · T+${s.time.toFixed(0)} s · Ship X ${s.own.x.toFixed(1)} / Y ${s.own.y.toFixed(1)} / Z ${s.own.z.toFixed(1)} km`;
     chart.replaceChildren(svg('rect',{x:-250,y:-250,width:500,height:500,fill:'#091a21',stroke:'#38535f'}));
     for(let i=-2;i<=2;i++)chart.append(svg('path',{d:`M${i*100} -250V250M-250 ${i*100}H250`,stroke:i===0?'#729ba8':'#476976','stroke-width':i===0?1.4:1,'vector-effect':'non-scaling-stroke'}));
-    chart.append(svg('text',{x:-250,y:-258,fill:'#9fbfc9','font-size':10},`${radius.toLocaleString()} KM RADIUS · ${plane==='top'?'X / Y':'X / Z'} · ${camera?'PLANETARY OVERVIEW':'CENTERED ON SHIP'}`));
+    chart.append(svg('text',{x:-250,y:-258,fill:'#9fbfc9','font-size':11},`${radius.toLocaleString()} KM RADIUS · ${plane==='top'?'X / Y':'X / Z'} · ${camera?'PLANETARY OVERVIEW':'CENTERED ON SHIP'}`));
     // Clip every spatial layer to the chart; labels and controls stay outside the plot.
     const defs=svg('defs'),clip=svg('clipPath',{id:'sector-plot-clip'});clip.append(svg('rect',{x:-250,y:-250,width:500,height:500}));defs.append(clip);chart.append(defs);
     const layer=svg('g',{'clip-path':'url(#sector-plot-clip)'});chart.append(layer);
@@ -115,10 +115,10 @@ export function mountSectorConsole({root,flight,openSystem,strategic}) {
       }
     }
     layer.append(svg('circle',{cx:px(s.own),cy:py(s.own),r:(s.sensorRange??SENSOR_RANGE)/radius*250,fill:'#78cbd608',stroke:'#8cd3df','stroke-width':1.6,'stroke-dasharray':'5 4','vector-effect':'non-scaling-stroke'}));
-    for(const h of sectorHazards){const slice=Math.sqrt(Math.max(0,h.radius**2-(h[plane==='top'?'z':'y']-origin[plane==='top'?'z':'y'])**2));if(!slice)continue;layer.append(svg('circle',{cx:px(h),cy:py(h),r:slice/radius*250,fill:'#f4777920',stroke:'#f47779'}));if(radius<=2500)layer.append(svg('text',{x:px(h)+8,y:py(h)-8,fill:'#f47779','font-size':9},h.name));}
+    for(const h of sectorHazards){const slice=Math.sqrt(Math.max(0,h.radius**2-(h[plane==='top'?'z':'y']-origin[plane==='top'?'z':'y'])**2));if(!slice)continue;layer.append(svg('circle',{cx:px(h),cy:py(h),r:slice/radius*250,fill:'#f4777920',stroke:'#f47779'}));if(radius<=2500)layer.append(svg('text',{x:px(h)+8,y:py(h)-8,fill:'#f47779','font-size':11},h.name));}
     layer.append(svg('path',{d:`M${px({x:0,y:0,z:0})-5} ${py({x:0,y:0,z:0})}h10m-5-5v10`,stroke:'#d5b77c'}));
     const points=[s.own,...s.route];if(points.length>1)layer.append(svg('polyline',{points:points.map(p=>`${px(p)},${py(p)}`).join(' '),fill:'none',stroke:'#d5b77c','stroke-width':1.2}));
-    s.route.forEach((p,i)=>layer.append(svg('circle',{cx:px(p),cy:py(p),r:4,fill:'#d5b77c'}),svg('text',{x:px(p)+8,y:py(p)-7,fill:'#e7cf9d','font-size':10},`${i+1} · Z ${p.z.toFixed(1)}`)));
+    s.route.forEach((p,i)=>layer.append(svg('circle',{cx:px(p),cy:py(p),r:4,fill:'#d5b77c'}),svg('text',{x:px(p)+8,y:py(p)-7,fill:'#e7cf9d','font-size':11},`${i+1} · Z ${p.z.toFixed(1)}`)));
     const path=predictedPath(s);
     layer.append(svg('polyline',{points:path.map(p=>`${px(p)},${py(p)}`).join(' '),fill:'none',stroke:'#90e6e7','stroke-dasharray':'4 4','stroke-width':1.3}));
     const liveIds=new Set(live.map(c=>c.id));trackList.replaceChildren();
@@ -126,12 +126,12 @@ export function mountSectorConsole({root,flight,openSystem,strategic}) {
       const current=liveIds.has(id),c=record.observed,p=record.position,age=Math.max(0,s.time-record.seen),color=current?contactTypes[c.type].color:'#78838d';
       const marker=svg('g',{transform:`translate(${px(p)} ${py(p)})`});
       const shape=c.type==='friendly'?svg('circle',{r:4}):c.type==='enemy'?svg('rect',{x:-4,y:-4,width:8,height:8}):svg('path',{d:c.type==='unknown'?'M0-5 5 0 0 5-5 0Z':'M0-5 5 5-5 5Z'});
-      shape.setAttribute('fill',current?color:'none');shape.setAttribute('stroke',color);marker.append(shape);if(radius<=2500)marker.append(svg('text',{x:8,y:-7,fill:color,'font-size':9,class:'sector-contact-label'},`${c.trackLabel}${current?'':` · ${age.toFixed(0)}s old`}`));layer.append(marker);
+      shape.setAttribute('fill',current?color:'none');shape.setAttribute('stroke',color);marker.append(shape);if(radius<=2500)marker.append(svg('text',{x:8,y:-7,fill:color,'font-size':11,class:'sector-contact-label'},`${c.trackLabel}${current?'':` · ${age.toFixed(0)}s old`}`));layer.append(marker);
       if(current){const future={...p};for(const key of ['x','y','z'])future[key]+=record.velocity[key]/60;layer.append(svg('path',{d:`M${px(p)} ${py(p)}L${px(future)} ${py(future)}`,stroke:color,'stroke-dasharray':'2 4',opacity:.6}));}
       trackList.append(el('li','',`${c.trackLabel} · ${current?'Live':`Last known ${age.toFixed(0)}s ago`} · Z ${p.z.toFixed(1)} km · ${c.ship.label}`));
     }
-    const ship=svg('g',{transform:`translate(${px(s.own)} ${py(s.own)})`});ship.append(svg('circle',{r:7,fill:'#091a21',stroke:'#b3eff0'}),svg('path',{d:`M0 0L${s.facing.x*18} ${-s.facing[axis]*18}`,stroke:'#b3eff0','stroke-width':2}),svg('text',{x:11,y:16,fill:'#b3eff0','font-size':9},playerShipName(flight.combat).toUpperCase()));layer.append(ship);
-    chart.append(svg('text',{x:-250,y:267,fill:'#9fbfc9','font-size':9},`CYAN: ${Math.round(s.sensorRange??SENSOR_RANGE)} KM SENSORS / PREDICTION · GOLD: PATROL · HOLLOW: LAST KNOWN`));
+    const ship=svg('g',{transform:`translate(${px(s.own)} ${py(s.own)})`});ship.append(svg('circle',{r:7,fill:'#091a21',stroke:'#b3eff0'}),svg('path',{d:`M0 0L${s.facing.x*18} ${-s.facing[axis]*18}`,stroke:'#b3eff0','stroke-width':2}),svg('text',{x:11,y:16,fill:'#b3eff0','font-size':11},playerShipName(flight.combat).toUpperCase()));layer.append(ship);
+    chart.append(svg('text',{x:-250,y:267,fill:'#9fbfc9','font-size':11},`CYAN: ${Math.round(s.sensorRange??SENSOR_RANGE)} KM SENSORS / PREDICTION · GOLD: PATROL · HOLLOW: LAST KNOWN`));
   }
   return {refresh};
 }

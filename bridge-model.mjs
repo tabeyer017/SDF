@@ -4,7 +4,7 @@ import { radarRanges,boardingComplements } from './tactical-model.mjs';
 export const marineComplements=Object.fromEntries(Object.entries(boardingComplements).filter(([id])=>id.startsWith('sdf-')));
 
 export const bridgeStations = [
-  { id:'command', name:'Command overview', short:'Command', group:'Command', symbol:'✧', color:'#d5b77c', x:330,y:305, summary:'Review ship readiness, current orders, and alerts. Coordinate the watch and open any of the four bridge areas.' },
+  { id:'command', name:'Command overview', short:'Command', group:'Command', symbol:'✧', color:'#d5b77c', x:330,y:305, summary:'Open the game guide and information. Review ship readiness, current orders, and alerts, or coordinate the watch from any bridge area.' },
   { id:'system-map', name:'System Map', short:'System Map', group:'Flight Control', symbol:'⌖', color:'#8ac9d0', summary:'Plot a strategic patrol through the Solar System.' },
   { id:'ops', name:'Operations', short:'Ops', group:'Forward & flight control', symbol:'◈', color:'#8ac9d0', x:405,y:157, summary:'Coordinate daily ship resources, internal systems, sensor assignments, and readiness reports. Choose the current bridge duty priority.' },
   { id:'navigation', name:'Local Flight', short:'Local Flight', group:'Flight Control', symbol:'⌖', color:'#8ac9d0', summary:'Choose stops on the local chart and fly the route with automatic guidance. Optional manual controls are available for direct thrust and steering.' },
@@ -18,7 +18,7 @@ export const bridgeStations = [
 
 // Station IDs remain stable so existing saves reopen the same controls.
 export const bridgeAreas = [
-  {id:'command',name:'Command',short:'Command',symbol:'✧',color:'#d5b77c',x:330,y:305,summary:'Readiness, orders & alerts',tabs:[['command','Overview']]},
+  {id:'command',name:'Command',short:'Command',symbol:'✧',color:'#d5b77c',x:330,y:305,summary:'Game guide, information & command overview',tabs:[['command','Overview']]},
   {id:'flight',name:'Flight Control',short:'Flight Control',symbol:'⌖',color:'#8ac9d0',x:330,y:140,summary:'System travel & local flight',tabs:[['system-map','System Map'],['navigation','Local Flight']]},
   {id:'tactical-security',name:'Tactical / Security',short:'Tactical / Security',symbol:'◇',color:'#d6977f',x:140,y:305,summary:'Weapons, defenses & marines',tabs:[['tactical','Tactical'],['security','Security']]},
   {id:'science-comms',name:'Science / Comms',short:'Science / Comms',symbol:'✺',color:'#aaa7d1',x:520,y:305,summary:'Sensors, analysis & messages',tabs:[['science','Science'],['communications','Comms']]},

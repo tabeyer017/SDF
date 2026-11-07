@@ -53,11 +53,11 @@ test('Engage ends without further fire when offensive mounts, ammunition, main p
 test('an impact that disables the last offensive mount ends Engage during the same simulation step',()=>{
   const {combat,sector,enemy,contact}=setup();contact.y=1;
   for(const mount of enemy.mounts)enemy.systems[mount.id].hp=0;
-  enemy.systems['autocannon-120-1'].hp=1;enemy.systems.jammer.hp=0;
+  enemy.systems['autocannon-75-1'].hp=1;enemy.systems.jammer.hp=0;
   orderEngagement(combat,sector,'engage',['E-04']);
   fireWeapon(combat,sector,'own','autocannon-120-1','E-04','weapons',()=>0,1,5);
   stepCombat(combat,sector,1,()=>0);
-  assert.equal(enemy.systems['autocannon-120-1'].hp,0);
+  assert.equal(enemy.systems['autocannon-75-1'].hp,0);
   assert.ok(enemy.systems.hull.hp>0);
   assert.equal(combat.engagement,null);assert.equal(combat.firing,null);
   assert.ok(!combat.own.mounts.some(m=>m.burst));

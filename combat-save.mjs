@@ -7,39 +7,44 @@ function integer(v,min=0,max=1e12){num(v,min,max);check(Number.isInteger(v));ret
 function bool(v){check(typeof v==='boolean');return v;}
 function text(v,max=300){check(typeof v==='string'&&v.length<=max);return v;}
 function array(v,max){check(Array.isArray(v)&&v.length<=max);return v;}
-// Recognize only the exact three-mount pirate fits used before quantities were confirmed.
+// Recognize the exact older pirate fits so new equipment preserves patrol damage and supplies.
 function legacyPirateFit(saved,classId){
-  const weapons=classId==='pirate-frigate'?['gp-missiles','autocannon-120','ciws-30']:
+  const earlyWeapons=classId==='pirate-frigate'?['gp-missiles','autocannon-120','ciws-30']:
     classId==='pirate-corvette'?['mp-missiles','autocannon-75','ciws-30']:null;
-  if(!weapons||!Array.isArray(saved.mounts)||saved.mounts.length!==3||
-    !weapons.every(weapon=>saved.mounts.some(m=>object(m)&&m.id===`${weapon}-1`)))return null;
+  if(!earlyWeapons||!Array.isArray(saved.mounts))return null;
+  const guns=classId==='pirate-frigate'?2:1;
+  const earlyIds=earlyWeapons.map(weapon=>`${weapon}-1`);
+  const confirmedIds=['gp-missiles-1',...Array.from({length:guns},(_,i)=>`autocannon-120-${i+1}`),'ciws-30-1','ciws-30-2'];
+  const matches=ids=>saved.mounts.length===ids.length&&ids.every(id=>saved.mounts.some(m=>object(m)&&m.id===id));
+  const early=matches(earlyIds);if(!early&&!matches(confirmedIds))return null;
+  const ids=early?earlyIds:confirmedIds;
   const legacy=createDamageShip(classId);
   for(const mount of legacy.mounts)delete legacy.systems[mount.id];
-  legacy.mounts=weapons.map(weapon=>{
-    const id=`${weapon}-1`,max=weapon==='ciws-30'?50:weapon.endsWith('missiles')?100:80;
+  legacy.mounts=ids.map(id=>{
+    const weapon=id.replace(/-\d+$/,''),max=weapon==='ciws-30'?50:weapon.endsWith('missiles')?100:80;
     legacy.systems[id]={name:id,hp:max,max};return {id,weapon,barrels:1,readyAt:0};
   });
-  legacy.ammo=Object.fromEntries(weapons.map(weapon=>[weapon,weapon==='ciws-30'?6000:weapon==='gp-missiles'?16:weapon==='mp-missiles'?12:1200]));
+  legacy.ammo=early?Object.fromEntries(earlyWeapons.map(weapon=>[weapon,weapon==='ciws-30'?6000:weapon==='gp-missiles'?16:weapon==='mp-missiles'?12:1200])):
+    {'gp-missiles':classId==='pirate-frigate'?40:30,'autocannon-120':1200*guns,'ciws-30':12000};
   legacy.maxAmmo={...legacy.ammo};return legacy;
 }
 function upgradePirateFit(legacy){
-  const current=createDamageShip(legacy.classId),rename=legacy.classId==='pirate-corvette'?
-    {'mp-missiles':'gp-missiles','autocannon-75':'autocannon-120'}:{};
+  const current=createDamageShip(legacy.classId),rename={'mp-missiles':'gp-missiles','autocannon-120':'autocannon-75'};
+  const mountId=id=>id.replace(/^mp-missiles-/,'gp-missiles-').replace(/^autocannon-120-/,'autocannon-75-');
   const result={...legacy,systems:current.systems,mounts:current.mounts,ammo:current.ammo,maxAmmo:current.maxAmmo};
   for(const [id,system] of Object.entries(result.systems))if(legacy.systems[id])system.hp=legacy.systems[id].hp;
   for(const mount of result.mounts){
-    const source=legacy.mounts.find(m=>(rename[m.weapon]??m.weapon)===mount.weapon);
+    const source=legacy.mounts.find(m=>mountId(m.id)===mount.id)??legacy.mounts.find(m=>(rename[m.weapon]??m.weapon)===mount.weapon);
     // Newly specified mounts inherit their former weapon group's damage and reload time.
     result.systems[mount.id].hp=legacy.systems[source.id].hp;mount.readyAt=source.readyAt;
+    if(mountId(source.id)===mount.id)for(const key of ['ciwsTarget','ciwsRounds'])if(source[key]!==undefined)mount[key]=source[key];
   }
   for(const [weapon,remaining] of Object.entries(legacy.ammo)){
     const replacement=rename[weapon]??weapon;
     result.ammo[replacement]=Math.max(0,result.maxAmmo[replacement]-(legacy.maxAmmo[weapon]-remaining));
   }
-  result.jobs=legacy.jobs.map(job=>{
-    const mount=legacy.mounts.find(m=>m.id===job.systemId);
-    return {...job,systemId:mount?`${rename[mount.weapon]??mount.weapon}-1`:job.systemId};
-  });
+  result.jobs=legacy.jobs.map(job=>({...job,systemId:mountId(job.systemId)}));
+  result.repairHolds=legacy.repairHolds.map(mountId);
   return result;
 }
 function ship(saved,classId,player){
@@ -101,7 +106,8 @@ export function restoreCombat(saved,contacts){
   for(const [id,vessel] of [['own',result.own],...Object.entries(result.contacts)]){
     const savedShip=id==='own'?saved.own:saved.contacts[id];
     for(const mount of vessel.mounts){
-      const burst=savedShip.mounts.find(m=>m.id===mount.id)?.burst;if(burst===undefined)continue;
+      const source=savedShip.mounts.find(m=>m.id===mount.id)??(vessel.classId.startsWith('pirate-')&&mount.weapon==='autocannon-75'?savedShip.mounts.find(m=>m.id===mount.id.replace('autocannon-75-','autocannon-120-')):undefined);
+      const burst=source?.burst;if(burst===undefined)continue;
       check(mount.weapon.startsWith('autocannon-')&&object(burst)&&validId(burst.targetId));
       check(cannonBurstSizes.includes(burst.total)&&burst.total>1&&weaponAimOptions(mount.weapon).some(([aim])=>aim===burst.component));
       mount.burst={targetId:burst.targetId,component:burst.component,total:burst.total,remaining:integer(burst.remaining,1,burst.total-1)};
@@ -125,8 +131,8 @@ export function restoreCombat(saved,contacts){
   const seen=new Set();result.shots=array(saved.shots,1000).map(s=>{
     check(object(s)&&shotId(s.id)&&!seen.has(s.id)&&validId(s.sourceId)&&targetId(s.targetId)&&Object.hasOwn(weapons,s.weapon));seen.add(s.id);
     const source=s.sourceId==='own'?result.own:result.contacts[s.sourceId],mounts=source.mounts.filter(m=>m.weapon===s.weapon);
-    // Old corvette projectiles keep their original warhead and guidance across subsequent saves.
-    const legacyShot=source.classId==='pirate-corvette'&&['mp-missiles','autocannon-75'].includes(s.weapon);
+    // In-flight rounds retain their original weapon and damage across equipment upgrades.
+    const legacyShot=source.classId.startsWith('pirate-')&&s.weapon==='autocannon-120'||source.classId==='pirate-corvette'&&s.weapon==='mp-missiles';
     check(mounts.length>0||legacyShot);
     check(weapons[s.weapon].missile?missileOptions[s.weapon].includes(s.role):s.role===null);
     const component=text(s.component,100);check(['hull','engines','weapons','ciws','reactor','power','bridge','epd','sensors','communications','life-support','jammer'].includes(component));

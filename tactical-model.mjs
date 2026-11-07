@@ -34,7 +34,7 @@ export const shipFiveViews = {
   'sdf-destroyer': 'images/sdf-destroyer-five-view.png',
   'sdf-cruiser': 'images/sdf-cruiser-five-view.png',
   'sdf-heavy-cruiser': 'images/sdf-heavy-cruiser-five-view.png',
-  'spf-logistics-tender': 'images/spf-logistics-tender-five-view.png'
+  'spf-logistics-tender': 'images/sdf-logistics-tender-five-view.png'
 };
 export const contactTypes = {
   unknown: { label: 'Unknown', color: '#f1cf62', shape: 'diamond' },
@@ -74,9 +74,9 @@ export const shipTypes = {
   'une-large-transport': { label: 'UNE - LARGE TRANSPORT', faction: 'United Nations of Earth', role: 'Mass passenger / logistics transport', engines: '4 × Atlas CF-80 fusion drives · EPD Mk III', loadout:['ciws-30'] },
   'pirate-frigate': {
     label:'PIRATE - FRIGATE',faction:'Pirate raider group',role:'Armed raider / interdiction',engines:'2 × Reaver CF-70 fusion drives · modified EPD Mk III',
-    loadout:['gp-missiles','autocannon-120','ciws-30'],fitConfirmed:true,
+    loadout:['gp-missiles','autocannon-75','ciws-30'],fitConfirmed:true,
     fitting:{
-      'autocannon-120':{quantity:2,turrets:2,gunsPerTurret:1,configuration:'2 turrets · 1 forward, 1 aft on top of the shuttle hangar'},
+      'autocannon-75':{quantity:4,turrets:2,gunsPerTurret:2,configuration:'2 turrets · 1 forward, 1 aft on top of the shuttle hangar · 2 autocannons per turret'},
       'gp-missiles':{quantity:40,location:'Ventral launch / bottom'},
       'ciws-30':{quantity:2,port:1,starboard:1,location:'Port and starboard · 1 per side'}
     },
@@ -84,9 +84,9 @@ export const shipTypes = {
   },
   'pirate-corvette': {
     label:'PIRATE - CORVETTE',faction:'Pirate raider group',role:'Fast attack / pursuit',engines:'2 × Reaver CF-40 fusion drives · modified EPD Mk II',
-    loadout:['gp-missiles','autocannon-120','ciws-30'],fitConfirmed:true,
+    loadout:['gp-missiles','autocannon-75','ciws-30'],fitConfirmed:true,
     fitting:{
-      'autocannon-120':{quantity:1,turrets:1,gunsPerTurret:1,configuration:'1 forward turret · 1 autocannon'},
+      'autocannon-75':{quantity:2,turrets:1,gunsPerTurret:2,configuration:'1 forward turret · 2 autocannons'},
       'gp-missiles':{quantity:30,location:'Ventral launch / bottom'},
       'ciws-30':{quantity:2,port:1,starboard:1,location:'Port and starboard · 1 per side'}
     },

@@ -25,7 +25,7 @@ const state=s=>s.hp===0?'OFFLINE':condition(s)===1?'Operational':condition(s)===
 const integrityPercent=s=>Math.round(Math.max(0,Math.min(1,s.hp/s.max))*100);
 const integrityStatus=s=>condition(s)===1?'healthy':condition(s)===.7?'damaged':'critical';
 
-export function mountWeaponsConsole({flight}){
+export function mountWeaponsConsole({flight,idPrefix='tactical',onSelectionChange=()=>{}}){
   const root=el('section','weapons-control');root.setAttribute('aria-label','Weapon fire control');
   root.append(el('h4','','FIRE CONTROL'));
   let target=null,lockedTargets=[],combatState=null;
@@ -43,7 +43,7 @@ export function mountWeaponsConsole({flight}){
     const name=`${armamentTypes[m.weapon].name} · ${m.id.split('-').at(-1)}`;
     const row=el('div','weapon-mount-row'),label=el('label','weapon-mount-choice'),check=el('input','');check.type='checkbox';check.checked=i===0;check.setAttribute('aria-label',`Select ${name}`);
     label.append(check,el('span','',name));
-    const status=el('p','weapon-mount-status'),details=el('details','weapon-targeting');details.name='weapon-targeting';details.open=i===0;
+    const status=el('p','weapon-mount-status'),details=el('details','weapon-targeting');details.name=`${idPrefix}-weapon-targeting`;details.open=i===0;
     const summary=el('summary','','Targeting');details.append(summary);
     const assigned=select(`Target · ${name}`,[],()=>refresh()),component=select(`Aim at system · ${name}`,weaponAimOptions(m.weapon),()=>refresh()),threat=select(`AA missile target · ${name}`,[],()=>refresh());
     assigned.wrap.firstElementChild.textContent='Target';component.wrap.firstElementChild.textContent='Aim at system';threat.wrap.firstElementChild.textContent='AA missile target';
@@ -101,8 +101,8 @@ export function mountWeaponsConsole({flight}){
   const salvoSettings=el('div','weapon-salvo-settings');salvoSettings.append(volley.wrap,burst.wrap);
   const volleyNote=el('p','combat-note','Missiles per launcher · cannon shells per mount, one at a time. Fire stops at the count; Tactical pauses and repeats.');
   root.append(ownStatus,objectives,objectiveStatus,salvoSettings,volleyNote,commandBar,list);
-  const quick=el('section','radar-fire-popup');quick.popover='auto';quick.setAttribute('role','dialog');quick.setAttribute('aria-labelledby','quick-fire-title');
-  const quickHeader=el('header','quick-fire-heading'),quickTitle=el('h3','');quickTitle.id='quick-fire-title';
+  const quick=el('section','radar-fire-popup');quick.popover='auto';quick.setAttribute('role','dialog');quick.setAttribute('aria-labelledby',`${idPrefix}-quick-fire-title`);
+  const quickHeader=el('header','quick-fire-heading'),quickTitle=el('h3','');quickTitle.id=`${idPrefix}-quick-fire-title`;
   const closeQuick=button('×',()=>closeQuickFire());closeQuick.setAttribute('aria-label','Close quick fire control');quickHeader.append(quickTitle,closeQuick);
   const quickList=el('fieldset','quick-fire-list');quickList.append(el('legend','','WEAPONS / AIM AT SYSTEM'));
   const quickRows=new Map();let quickTargetId=null,quickAnchor=null;
@@ -137,7 +137,7 @@ export function mountWeaponsConsole({flight}){
       row.assigned.input.value=id;
       if(row.component.input.value==='incoming')row.component.input.value=weaponAimOptions(row.m.weapon)[0][0];
     }
-    refresh();quick.showPopover();positionQuickFire();
+    refresh();publishSelection();quick.showPopover();positionQuickFire();
     quickRows.values().next().value.check.focus({preventScroll:true});
   }
   quick.addEventListener('toggle',event=>{if(event.newState==='closed')quickTargetId=null;});
@@ -227,7 +227,19 @@ export function mountWeaponsConsole({flight}){
       positionQuickFire();
     }
   }
-  return {root,defense,settings,targetDetails,refresh,openQuickFire,closeQuickFire,isQuickFireOpen:()=>quick.matches(':popover-open')};
+  const publishSelection=()=>onSelectionChange([...rows].map(([id,row])=>({id,selected:row.check.checked,target:row.assigned.input.value,component:row.component.input.value,threat:row.threat.input.value})));
+  for(const surface of [root,quick]){
+    surface.addEventListener('change',publishSelection);
+    surface.addEventListener('click',event=>{if(event.target.closest('button'))publishSelection();});
+  }
+  function restoreSelection(selection){
+    for(const item of selection){
+      const row=rows.get(item.id);if(!row)continue;
+      row.check.checked=item.selected;row.assigned.input.value=item.target;row.component.input.value=item.component;row.threat.input.value=item.threat;
+    }
+    refresh();
+  }
+  return {root,defense,settings,targetDetails,refresh,restoreSelection,openQuickFire,closeQuickFire,isQuickFireOpen:()=>quick.matches(':popover-open')};
 }
 
 export function mountDamageConsole({root,flight}){

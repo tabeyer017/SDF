@@ -190,16 +190,18 @@ test('left-click selects exactly one target, including a target already in a mul
 test('pirate class references include confirmed weapon locations, defenses and assault shuttles',()=>{
   for(const [id,guns,missiles] of [['pirate-corvette',1,30],['pirate-frigate',2,40]]){
     const ship=shipTypes[id];assert.equal(ship.fitConfirmed,true);
-    assert.equal(ship.fitting['autocannon-120'].quantity,guns);
-    assert.equal(ship.fitting['autocannon-120'].turrets,guns);
+    assert.equal(ship.fitting['autocannon-75'].quantity,guns*2);
+    assert.equal(ship.fitting['autocannon-75'].turrets,guns);
+    assert.equal(ship.fitting['autocannon-75'].gunsPerTurret,2);
+    assert.ok(!ship.loadout.includes('autocannon-120'));
     assert.equal(ship.fitting['gp-missiles'].quantity,missiles);
     assert.equal(ship.fitting['gp-missiles'].location,'Ventral launch / bottom');
     assert.deepEqual(ship.fitting['ciws-30'],{quantity:2,port:1,starboard:1,location:'Port and starboard · 1 per side'});
     assert.deepEqual(ship.countermeasures,['chaff','flares','radar-jammer']);
     assert.deepEqual(ship.hangar,{bays:1,assaultShuttles:4});assert.equal(ship.boarding.personnel,40);
   }
-  assert.match(shipTypes['pirate-corvette'].fitting['autocannon-120'].configuration,/forward turret/);
-  assert.match(shipTypes['pirate-frigate'].fitting['autocannon-120'].configuration,/1 forward, 1 aft on top of the shuttle hangar/);
+  assert.match(shipTypes['pirate-corvette'].fitting['autocannon-75'].configuration,/forward turret · 2 autocannons/);
+  assert.match(shipTypes['pirate-frigate'].fitting['autocannon-75'].configuration,/1 forward, 1 aft on top of the shuttle hangar · 2 autocannons per turret/);
 });
 
 test('Ctrl-click toggles a target while preserving every other lock', () => {
@@ -254,7 +256,7 @@ test('unidentified contacts reveal telemetry while withholding all catalog ident
 test('every ship type maps to its matching existing five-view PNG', async () => {
   assert.deepEqual(Object.keys(shipFiveViews).sort(), Object.keys(shipTypes).sort());
   for (const [id, ship] of Object.entries(shipTypes)) {
-    const expectedName = `${ship.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-five-view.png`;
+    const expectedName = id==='spf-logistics-tender'?'sdf-logistics-tender-five-view.png':`${ship.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-five-view.png`;
     assert.equal(shipFiveViews[id], `images/${expectedName}`);
     const data = await readFile(new URL(`../${shipFiveViews[id]}`, import.meta.url));
     assert.deepEqual([...data.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
