@@ -7,6 +7,6 @@
   "scripts": {
     "dev": "node server.mjs",
     "start": "node server.mjs",
-    "test": "node --test tests/navigation.test.mjs tests/settlements.test.mjs tests/mining.test.mjs tests/bridge.test.mjs tests/tactical.test.mjs tests/sector.test.mjs tests/save-game.test.mjs tests/combat.test.mjs tests/communications.test.mjs tests/encounter.test.mjs tests/resolve.test.mjs tests/ship-names.test.mjs tests/missile-guidance.test.mjs"
+    "test": "node --test tests/navigation.test.mjs tests/settlements.test.mjs tests/mining.test.mjs tests/bridge.test.mjs tests/tactical.test.mjs tests/sector.test.mjs tests/save-game.test.mjs tests/combat.test.mjs tests/communications.test.mjs tests/encounter.test.mjs tests/resolve.test.mjs tests/ship-names.test.mjs tests/missile-guidance.test.mjs tests/boarding.test.mjs"
   }
 }

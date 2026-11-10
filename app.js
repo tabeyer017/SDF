@@ -54,15 +54,6 @@ function showView(view) {
   document.body.dataset.view=view;
   document.querySelectorAll('.console-tabs button').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.view===view)));
 }
-function showScreen(screen){
-  document.body.dataset.screen=screen;
-  $('map-tab').classList.toggle('nav-active',screen==='map');
-  $('bridge-button').classList.toggle('nav-active',screen==='bridge');
-  document.querySelector('.page-heading h1').textContent=screen==='bridge'?'Command deck.':'The watch begins.';
-  document.querySelector('.page-heading .eyebrow').textContent=screen==='bridge'?`${currentShipName().toUpperCase()} / MAIN BRIDGE`:'SOL SECTOR / NAVIGATION';
-  document.querySelector('.page-heading p').textContent=screen==='bridge'?'Four areas. One command.':'One system. Our home. Your command.';
-  bridgeConsole?.refresh();
-}
 function select(body, navigate=true) {
   selected=body;
   document.querySelectorAll('.planet-item,.planet-group,.facility-group').forEach(el=>{
@@ -132,22 +123,13 @@ function updateTelemetry() {
   $('total-eta').textContent=state.route.length?formatETA(d/EPD_AU_PER_DAY):'—';
   const firstLeg=$('waypoint-list').querySelector('.waypoint-row small');
   if(firstLeg && state.route.length && routePage===0){const leg=distance(state.ship,state.route[0]);firstLeg.textContent=`${formatDistance(leg)} · ${formatETA(leg/EPD_AU_PER_DAY)}`;}
-  const dt=date();const day=String(dt.getUTCDate()).padStart(2,'0'),month=dt.toLocaleString('en',{month:'short',timeZone:'UTC'}).toUpperCase();
-  $('stardate').replaceChildren(document.createTextNode(`${day} ${month} ${dt.getUTCFullYear()} `),Object.assign(document.createElement('span'),{textContent:dt.toISOString().slice(11,16)}));
   const local=bridgeConsole?.localStatus();
   if(local){
     const percent=Math.ceil(local.hull*100);document.querySelector('.readiness strong').replaceChildren(document.createTextNode(String(percent)),Object.assign(document.createElement('span'),{textContent:'%'}));
-    document.querySelector('.readiness-bar span').style.width=`${percent}%`;document.querySelector('.readiness > span').textContent='HULL INTEGRITY';
+    document.querySelector('.readiness-bar span').style.width=`${percent}%`;
     const systems=document.querySelectorAll('.systems b');systems[0].textContent=local.core?'ONLINE':'OFFLINE';systems[1].textContent=local.canEPD?'AVAILABLE':'UNAVAILABLE';
-    document.querySelector('.page-footer > span:first-child').textContent=percent===0?'SHIP LOST':percent<100?'DAMAGE CONTROL ACTIVE':'ALL SYSTEMS OPERATIONAL';
     $('engage-button').disabled=!state.active&&(!state.route.length||routeUnsafe()||!local.canEPD);
   }
-  $('ship-status').textContent=state.active?`En route to ${state.route[0].name}`:local?.running?`Local flight near ${state.location}`:`Holding at ${state.location}`;
-  $('clock-state').textContent=state.active?(state.paused?'TRANSIT PAUSED':'PATROL IN PROGRESS'):local?.running?'LOCAL FLIGHT IN PROGRESS':local?.time?'LOCAL FLIGHT PAUSED':'AWAITING ORDERS';
-  $('simulation-status').textContent=state.active?(state.paused?'Paused':`Transit · ${state.speed}×`):'Standby';
-  $('pause-button').textContent=state.paused?'▶':'Ⅱ';
-  $('pause-button').disabled=!state.active;
-  document.querySelectorAll('.speed').forEach(el=>el.classList.toggle('active',Number(el.dataset.speed)===state.speed));
   bridgeConsole?.refresh();
 }
 function buildMap() {
@@ -247,7 +229,7 @@ svg.addEventListener('pointermove',e=>{
 window.addEventListener('pointerup',()=>{dragging=null;});
 svg.addEventListener('click',e=>{if(moved||e.target.closest('.planet-group,.facility-group'))return;const p=unmapPoint(mapCoords(e));const au=Math.hypot(p.x,p.y);if(au>EDGE_AU){toast('Choose a point within the 120 AU patrol boundary.');return;}if(au<.18){toast('Sol safety exclusion: choose a point farther from the Sun.');return;}select({id:`grid-${p.x.toFixed(3)}-${p.y.toFixed(3)}`,name:`Grid ${p.x>=0?'+':''}${p.x.toFixed(1)}, ${p.y<=0?'+':''}${(-p.y).toFixed(1)}`,type:'CUSTOM PATROL WAYPOINT',description:'An open-space navigation fix. Add this point to build a patrol route or steer safely around Sol.',color:'#cdb27e',...p});});
 svg.addEventListener('wheel',e=>{e.preventDefault();zoomBy(e.deltaY<0?1.1:1/1.1);},{passive:false});
-$('zoom-in').onclick=()=>zoomBy(1.25);$('zoom-out').onclick=()=>zoomBy(.8);$('recenter').onclick=resetView;$('reset-view').onclick=resetView;
+$('zoom-in').onclick=()=>zoomBy(1.25);$('zoom-out').onclick=()=>zoomBy(.8);$('recenter').onclick=resetView;
 $('edge-button').onclick=()=>select(bodies.at(-1));
 for(const mode of ['planets','settlements','mining'])$(`directory-${mode}`).onclick=()=>{
   directoryMode=mode;
@@ -279,15 +261,23 @@ $('add-waypoint').onclick=()=>{
 $('clear-course').onclick=()=>{if(state.active)return;state.route=[];log('Flight plan cleared.');renderPlan();save();};
 $('engage-button').onclick=()=>{
   if(state.active){state.active=false;state.paused=false;state.location='deep space';bridgeConsole?.arrive(state.location);log('EPD disengaged. Vector Drive ready.');toast('Transit aborted. Remaining waypoints retained.');}
-  else {if(!state.route.length||routeUnsafe())return;if(bridgeConsole?.localStatus().canEPD===false){toast('EPD unavailable: check Engineering or undock.');return;}bridgeConsole?.suspendLocal();state.active=true;state.paused=false;log(`EPD engaged. Destination: ${state.route[0].name}.`);toast('Course confirmed. Electromagnetic Pulse Drive engaged.');}
+  else {if(!state.route.length||routeUnsafe())return;if(bridgeConsole?.localStatus().canEPD===false){toast('EPD unavailable: recover deployed shuttles, check Engineering or undock.');return;}bridgeConsole?.suspendLocal();state.active=true;state.paused=false;log(`EPD engaged. Destination: ${state.route[0].name}.`);toast('Course confirmed. Electromagnetic Pulse Drive engaged.');}
   renderPlan();save();
-  if(state.active && focusedConsole.matches && document.body.dataset.screen!=='bridge'){showView('map');svg.focus({preventScroll:true});}
+  if(state.active && focusedConsole.matches && document.querySelector('#bridge-console').dataset.station==='system-map'){showView('map');svg.focus({preventScroll:true});}
 };
-$('pause-button').onclick=()=>{if(!state.active)return;state.paused=!state.paused;updateTelemetry();save();};
-document.querySelectorAll('.speed').forEach(button=>button.onclick=()=>{state.speed=Number(button.dataset.speed);updateTelemetry();save();});
-for(const id of ['briefing-button','about-button'])$(id).onclick=()=>$('briefing-dialog').showModal();
-$('map-tab').onclick=()=>{showScreen('map');showView('map');resetView();svg.focus({preventScroll:true});};
-$('bridge-button').onclick=()=>{bridgeConsole.openBridge();showScreen('bridge');};
+$('pause-button').onclick=()=>{
+  if(!state.active){bridgeConsole.toggleLocal();return;}
+  state.paused=!state.paused;updateTelemetry();save();
+};
+$('watch-rate').onchange=()=>{
+  const rate=Number($('watch-rate').value);
+  if(!state.active){bridgeConsole.setLocalRate(rate);return;}
+  if([1,10,100].includes(rate)){state.speed=rate;updateTelemetry();save();}
+};
+for(const [id,page] of [['briefing-button','mission'],['about-button','details']])$(id).onclick=()=>{
+  document.querySelector(`[data-briefing="${page}"]`).click();
+  $('briefing-dialog').showModal();
+};
 document.querySelectorAll('.briefing-tabs button').forEach(button=>button.onclick=()=>{
   $('briefing-mission').hidden=button.dataset.briefing!=='mission';
   $('briefing-details').hidden=button.dataset.briefing!=='details';
@@ -298,7 +288,7 @@ function newPatrol(name){
   missionStarted=true;
   state={ship:{x:earth.x,y:earth.y},location:'Earth',route:[],active:false,paused:false,days:0,speed:1};
   bridgeConsole?.resetPatrol(typeof name==='string'?name:currentShipName());
-  logs=[];routePage=0;log('New patrol initialized. Holding at Earth.');select(earth,false);showScreen('map');showView('map');resetView();renderPlan();save();$('briefing-dialog').close();toast('Patrol reset. Ready for your orders, Captain.');
+  logs=[];routePage=0;log('New patrol initialized. Holding at Earth.');select(earth,false);bridgeConsole.selectStation('system-map');showView('map');resetView();renderPlan();save();$('briefing-dialog').close();toast('Patrol reset. Ready for your orders, Captain.');
 }
 $('restart-patrol').onclick=newPatrol;
 $('briefing-dialog').addEventListener('click',e=>{if(e.target===$('briefing-dialog')){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();}});
@@ -331,10 +321,8 @@ new ResizeObserver(entries=>{
   svg.style.setProperty('--chart-small-size',`${Math.max(8,6/scale)}px`);
 }).observe($('map-surface'));
 bridgeConsole=mountBridge({
-  snapshot:()=>({shipName:currentShipName(),location:state.location,days:state.days,canEPD:bridgeConsole?.localStatus().canEPD!==false,active:state.active,paused:state.paused,routeCount:state.route.length,nextWaypoint:state.route[0]?.name||'',unsafe:routeUnsafe(),distance:formatDistance(routeDistance(state.ship,state.route)),eta:state.route.length?formatETA(routeDistance(state.ship,state.route)/EPD_AU_PER_DAY):'Awaiting course',targetName:selected.name}),
-  openNavigation:()=>{bridgeConsole.selectStation('system-map');showScreen('bridge');showView('navigation');},
+  snapshot:()=>({shipName:currentShipName(),location:state.location,days:state.days,canEPD:bridgeConsole?.localStatus().canEPD!==false,active:state.active,paused:state.paused,speed:state.speed,routeCount:state.route.length,nextWaypoint:state.route[0]?.name||'',unsafe:routeUnsafe(),distance:formatDistance(routeDistance(state.ship,state.route)),eta:state.route.length?formatETA(routeDistance(state.ship,state.route)/EPD_AU_PER_DAY):'Awaiting course',targetName:selected.name}),
   engage:()=>{if(!state.active)$('engage-button').click();},
-  pause:()=>{if(state.active)$('pause-button').click();},
   abort:()=>{if(state.active)$('engage-button').click();},
   log,onLocalChange:()=>{updateTelemetry();save();},onSave:save,savedGame:savedGame?.bridge
 });
@@ -343,7 +331,7 @@ function restoreSave(game){
   missionStarted=true;
   state=game.navigation;selected=restoredSelection(game.selection);logs=game.logs.map(item=>({...item}));routePage=0;lastTime=0;
   bridgeConsole.restoreState(game.bridge);select(selected,false);renderPlan();
-  showScreen('bridge');showView('map');
+  showView('map');
   log('JSON save restored. Flight paused.');save();toast('Save loaded. Strategic and local flight are paused.');
   startMenu?.enter();
 }
@@ -356,7 +344,7 @@ startMenu=mountStartMenu({
   hasPatrol:()=>missionStarted||!!savedGame||hasLegacyPatrol,
   summary:()=>`${state.location} · ${date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'})} · flight paused`,
   onPause:()=>{if(state.active)state.paused=true;bridgeConsole.pauseLocal();lastTime=0;updateTelemetry();save();},
-  onEnter:()=>{if(!missionStarted&&savedGame)showScreen('bridge');missionStarted=true;lastTime=0;save();},
+  onEnter:()=>{missionStarted=true;lastTime=0;updateTelemetry();save();},
   onNewMission:newPatrol
 });
 window.addEventListener('keydown',event=>{
@@ -367,6 +355,5 @@ window.addEventListener('keydown',event=>{
   if(event.key.toLowerCase()!=='b'&&!station)return;
   event.preventDefault();
   if(station)bridgeConsole.selectStation(station);else bridgeConsole.openBridge();
-  showScreen('bridge');
 });
 requestAnimationFrame(frame);

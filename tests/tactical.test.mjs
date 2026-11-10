@@ -5,6 +5,143 @@ import { radarRanges, rangeRings, projectContact, contactsInRange, projectVeloci
 import { restoreBridgeState } from '../bridge-model.mjs';
 import { expandRadarRounds, radarDamageSummary, shipDamageSummary } from '../tactical.mjs';
 import { createDamageShip } from '../combat-model.mjs';
+import { projectTacticalView, tacticalViews, bridgeCombatActive, tacticalProjectiles, incomingTacticalThreats } from '../tactical-view-model.mjs';
+import { createSector, relativeContact, issueManeuver } from '../sector-model.mjs';
+import { createCombat, fireWeapon, stepCombat } from '../combat-model.mjs';
+
+test('tactical views cover the complete bearing circle once, including sector boundaries',()=>{
+  for(let bearing=-180;bearing<180;bearing+=.5){
+    const contact={x:50*Math.sin(bearing*Math.PI/180),y:50*Math.cos(bearing*Math.PI/180),z:0};
+    const views=Object.keys(tacticalViews).filter(view=>projectTacticalView(contact,view,60));
+    assert.equal(views.length,1,`bearing ${bearing}`);
+  }
+  for(const [direction,x,y] of [['forward',0,50],['port',-50,0],['starboard',50,0],['rear',0,-50]]){
+    const point=projectTacticalView({x,y,z:0},direction,60);assert.equal(point.x,320);assert.equal(point.y,180);
+  }
+});
+
+test('tactical horizon preserves signed elevation in all four views',()=>{
+  for(const [direction,x,y] of [['forward',0,50],['port',-50,0],['starboard',50,0],['rear',0,-50]]){
+    assert.ok(projectTacticalView({x,y,z:25},direction,60).y<180);
+    assert.ok(projectTacticalView({x,y,z:-25},direction,60).y>180);
+    assert.equal(projectTacticalView({x,y,z:0},direction,60).y,180);
+  }
+  assert.equal(projectTacticalView({x:0,y:0,z:50},'forward',60).elevation,90);
+  assert.equal(projectTacticalView({x:0,y:0,z:-50},'forward',60).elevation,-90);
+});
+
+test('tactical reference excludes stale and out-of-range tracks using full 3D distance',()=>{
+  assert.ok(projectTacticalView({x:0,y:30,z:40},'forward',50));
+  assert.equal(projectTacticalView({x:0,y:30,z:41},'forward',50),null);
+  assert.equal(projectTacticalView({x:0,y:30,z:0,stale:true},'forward',50),null);
+});
+
+test('tactical reference follows a changing bow without rotating sector positions',()=>{
+  const sector=createSector(),contact={x:30,y:40,z:10,vx:0,vy:0,vz:0};
+  assert.ok(projectTacticalView(relativeContact(sector,contact),'forward',60));
+  issueManeuver(sector,'port');
+  assert.equal(projectTacticalView(relativeContact(sector,contact),'forward',60),null);
+  assert.ok(projectTacticalView(relativeContact(sector,contact),'starboard',60));
+  assert.equal(contact.x,30);assert.equal(contact.y,40);
+});
+
+test('blast shields respond to combat and incoming or outgoing fire, not merely enemy presence',()=>{
+  const sector=createSector(),combat=createCombat(sector.contacts),enemy=sector.contacts.find(c=>c.type==='enemy');
+  assert.equal(bridgeCombatActive(combat,sector),false);
+  combat.hostiles=[enemy.id];assert.equal(bridgeCombatActive(combat,sector),true);
+  combat.contacts[enemy.id].surrendered=true;assert.equal(bridgeCombatActive(combat,sector),false);
+  combat.shots=[{sourceId:enemy.id,targetId:'own'}];assert.equal(bridgeCombatActive(combat,sector),true);
+  combat.shots=[{sourceId:'own',targetId:enemy.id}];assert.equal(bridgeCombatActive(combat,sector),true);
+  combat.shots=[];combat.contacts[enemy.id].surrendered=false;enemy.x=1000;assert.equal(bridgeCombatActive(combat,sector),false);
+});
+
+test('tactical view shows incoming and outgoing in-range missiles and every cannon round',()=>{
+  const sector=createSector(),combat=createCombat();
+  const missile={id:'shot:1',sourceId:'own',targetId:'E-04',weapon:'as-missiles',damage:160,x:0,y:20,z:10,vx:0,vy:3600,vz:0};
+  combat.shots=[missile,{...missile,id:'shot:2',weapon:'autocannon-120',damage:24,z:-5},
+    {...missile,id:'shot:3',sourceId:'E-04',targetId:'own'}, {...missile,id:'shot:4',y:200}, {...missile,id:'shot:5',x:30,y:0}];
+  const before=structuredClone(combat.shots),markers=tacticalProjectiles(combat,sector,'forward',60);
+  assert.equal(markers.length,4);assert.equal(markers.filter(p=>p.missile).length,2);
+  assert.equal(markers.filter(p=>p.affiliation==='outgoing').length,3);
+  assert.equal(markers.filter(p=>p.affiliation==='incoming').length,1);
+  assert.equal(markers.filter(p=>!p.missile).length,2);
+  assert.equal(new Set(markers.map(p=>p.id)).size,4);
+  assert.ok(markers.find(p=>p.missile).y<180);assert.ok(markers.filter(p=>!p.missile).every(p=>p.y>180));
+  assert.notEqual(markers[1].x,markers[2].x);
+  assert.deepEqual(combat.shots,before);
+});
+
+test('outgoing projectiles switch views with the bow and use velocity at the muzzle',()=>{
+  const sector=createSector(),combat=createCombat();
+  combat.shots=[{id:'shot:1',sourceId:'own',weapon:'gp-missiles',damage:90,x:0,y:0,z:0,vx:3600,vy:0,vz:0}];
+  assert.equal(tacticalProjectiles(combat,sector,'forward',60).length,0);
+  assert.equal(tacticalProjectiles(combat,sector,'starboard',60).length,1);
+  combat.shots[0].x=10;sector.facing={x:1,y:0,z:0};
+  const marker=tacticalProjectiles(combat,sector,'forward',60)[0];
+  assert.equal(marker.x,320);assert.equal(marker.y,180);
+  assert.equal(tacticalProjectiles(combat,sector,'starboard',60).length,0);
+});
+
+test('outgoing tracks update position and depth, and disappear when their shot is removed',()=>{
+  const sector=createSector(),combat=createCombat();
+  const shot={id:'shot:1',sourceId:'own',weapon:'gp-missiles',damage:90,x:0,y:10,z:0,vx:3600,vy:3600,vz:0};combat.shots=[shot];
+  const first=tacticalProjectiles(combat,sector,'forward',60)[0];
+  shot.x=5;shot.y=20;
+  const moved=tacticalProjectiles(combat,sector,'forward',60)[0];
+  assert.ok(moved.x>first.x);assert.ok(moved.scale<first.scale);
+  combat.shots=[];assert.deepEqual(tacticalProjectiles(combat,sector,'forward',60),[]);
+});
+
+test('projectile colors distinguish friendly, hostile, unknown and fire aimed at us without revealing unseen identity',()=>{
+  const sector=createSector(),combat=createCombat();
+  sector.memory['F-03']={observed:{type:'friendly'}};
+  sector.memory['E-04']={observed:{type:'enemy'}};
+  const shot={targetId:'U-01',weapon:'gp-missiles',damage:90,x:0,y:15,z:0,vx:0,vy:-3600,vz:0};
+  combat.shots=['own','F-03','E-04','E-06'].map((sourceId,i)=>({...shot,id:`shot:${i+1}`,sourceId}));
+  assert.deepEqual(tacticalProjectiles(combat,sector,'forward',60).map(p=>p.affiliation),['outgoing','friendly','hostile','other']);
+  // An identified friendly firing at us is still an incoming threat.
+  combat.shots[1].targetId='own';
+  assert.equal(tacticalProjectiles(combat,sector,'forward',60)[1].affiliation,'incoming');
+  combat.hostiles=['E-06'];
+  assert.equal(tacticalProjectiles(combat,sector,'forward',60)[3].affiliation,'hostile');
+});
+
+test('incoming warning counts all directions and individual rounds without counting unrelated fire',()=>{
+  const sector=createSector(),combat=createCombat();
+  const shot={sourceId:'E-04',targetId:'own',weapon:'gp-missiles',damage:90,x:0,y:15,z:0,vx:0,vy:-3600,vz:0};
+  combat.shots=[{...shot,id:'shot:1'}, {...shot,id:'shot:2',y:-5,weapon:'autocannon-120',damage:24},
+    {...shot,id:'shot:3',x:-8,y:0}, {...shot,id:'shot:4',x:200}, {...shot,id:'shot:5',targetId:'F-03'}, {...shot,id:'shot:6',sourceId:'own',targetId:'E-04'}];
+  const warning=incomingTacticalThreats(combat,sector,60);
+  assert.deepEqual(warning,{missiles:2,rounds:2,nearest:5,directions:['forward','rear','port']});
+  assert.equal(tacticalProjectiles(combat,sector,'forward',60).filter(p=>p.affiliation==='incoming').length,1);
+  combat.shots=[];assert.deepEqual(incomingTacticalThreats(combat,sector,60),{missiles:0,rounds:0,nearest:null,directions:[]});
+});
+
+test('head-on incoming fire grows on approach and disappears after the simulation removes it',()=>{
+  const sector=createSector(),combat=createCombat();
+  const shot={id:'shot:1',sourceId:'E-04',targetId:'own',weapon:'gp-missiles',damage:90,x:0,y:30,z:0,vx:0,vy:-3600,vz:0};combat.shots=[shot];
+  const far=tacticalProjectiles(combat,sector,'forward',60)[0];shot.y=5;
+  const near=tacticalProjectiles(combat,sector,'forward',60)[0];
+  assert.equal(near.angle,90);assert.equal(near.x,far.x);assert.equal(near.y,far.y);assert.ok(near.scale>far.scale);
+  assert.equal(incomingTacticalThreats(combat,sector,60).nearest,5);
+  combat.shots=[];assert.deepEqual(tacticalProjectiles(combat,sector,'forward',60),[]);
+});
+
+test('a simulated enemy missile closes on our ship, appears as incoming, and leaves the view on impact',()=>{
+  const sector=createSector(),combat=createCombat();
+  Object.assign(sector.contacts.find(c=>c.id==='E-04'),{x:0,y:8,z:0,vx:0,vy:0,vz:0});
+  combat.own.ciwsAuto=false;combat.own.jammerMode='off';combat.own.jammer=false;
+  assert.equal(fireWeapon(combat,sector,'E-04','gp-missiles-1','own','hull',()=>0).ok,true);
+  const id=combat.shots[0].id,hull=combat.own.systems.hull.hp;
+  const first=tacticalProjectiles(combat,sector,'forward',60).find(p=>p.shotId===id);
+  assert.equal(first.affiliation,'incoming');
+  for(let i=0;i<20;i++)stepCombat(combat,sector,.05,()=>0);
+  const next=tacticalProjectiles(combat,sector,'forward',60).find(p=>p.shotId===id);
+  assert.ok(next.distance<first.distance);assert.ok(next.scale>first.scale);
+  for(let i=0;i<200&&combat.shots.some(s=>s.id===id);i++)stepCombat(combat,sector,.05,()=>0);
+  assert.ok(!tacticalProjectiles(combat,sector,'forward',60).some(p=>p.shotId===id));
+  assert.ok(combat.own.systems.hull.hp<hull);
+});
 
 test('our ship hover uses current integrity and updates after damage and repair',()=>{
   const ship=createDamageShip('sdf-frigate',true);

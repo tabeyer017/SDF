@@ -1,5 +1,6 @@
-import { shipTypes, trainingContacts } from './tactical-model.mjs';
+import { shipTypes, trainingContacts, contactTypes } from './tactical-model.mjs';
 import {defaultShipName,playerShipName} from './ship-names.mjs';
+import {createBoarding,advanceBoarding,hasDeployedShuttles} from './boarding-model.mjs';
 
 // Provisional game balance values; rates are per barrel, time is simulated seconds.
 // Transient visual events stay out of saved simulation state.
@@ -24,6 +25,32 @@ export const missileRoles={
   'anti-ship':'Anti-ship',precision:'Subsystem strike',aa:'AA · shuttles / fighters / missiles',
   'anti-radiation':'Anti-radiation · radar emitter','anti-jammer':'Anti-jammer · radar jammer'
 };
+
+// Display every round in a combined cannon shot without changing combat state.
+export function expandProjectileRounds(shots) {
+  return shots.flatMap(shot => {
+    if (weapons[shot.weapon].missile) return [shot];
+    const count = Math.max(1, Math.round(shot.damage / weapons[shot.weapon].damage));
+    return Array.from({length: count}, (_, index) => ({...shot, roundIndex: index, roundCount: count}));
+  });
+}
+
+export const projectileStyles = {
+  outgoing: {label: 'Our fire', title: 'Outgoing', color: '#7cffff'},
+  incoming: {label: 'Incoming', title: 'Incoming', color: contactTypes.enemy.color},
+  hostile: {label: 'Hostile fire', title: 'Hostile', color: contactTypes.enemy.color},
+  friendly: {label: 'Friendly fire', title: 'Friendly', color: contactTypes.friendly.color},
+  other: {label: 'Unidentified fire', title: 'Unidentified', color: '#ffd166'}
+};
+
+// Use observed identity; unseen ship fittings never reveal a firing affiliation.
+export function projectileAffiliation(shot, combat, sourceTrack) {
+  if (shot.sourceId === 'own') return 'outgoing';
+  if (shot.targetId === 'own') return 'incoming';
+  if (sourceTrack?.type === 'enemy' || combat.hostiles.includes(shot.sourceId)) return 'hostile';
+  if (sourceTrack?.type === 'friendly') return 'friendly';
+  return 'other';
+}
 export const missileOptions={
   'as-missiles':['anti-ship','precision','anti-radiation','anti-jammer'],
   'gp-missiles':['anti-ship','precision','aa','anti-radiation','anti-jammer'],
@@ -106,14 +133,16 @@ export function createDamageShip(classId,player=false){
 }
 export function createCombat(contacts=trainingContacts){
   return {time:0,ciwsFeedVersion:1,own:createDamageShip('sdf-frigate',true),contacts:Object.fromEntries(contacts.map(c=>[c.id,createDamageShip(c.shipType)])),
-    shots:[],nextShot:1,missileVolleySize:1,cannonBurstSize:5,firing:null,hostiles:[],alliedOrders:{},docked:false,service:null,support:null,log:['Weapons safed · select a weapon and aim system before firing.']};
+    shots:[],nextShot:1,missileVolleySize:1,cannonBurstSize:5,firing:null,hostiles:[],alliedOrders:{},docked:false,service:null,support:null,boarding:createBoarding({classId:'sdf-frigate'}),log:['Weapons safed · select a weapon and aim system before firing.']};
 }
 export function changeEncounter(combat,contacts){
+  if(hasDeployedShuttles(combat))return false;
   for(const mount of combat.own.mounts)delete mount.burst;
   combat.contacts=Object.fromEntries(contacts.map(c=>[c.id,createDamageShip(c.shipType)]));
   combat.engagement=null;combat.shots=[];combat.firing=null;combat.hostiles=[];combat.alliedOrders={};combat.docked=false;combat.service=null;combat.support=null;
   combat.own.jobs=combat.own.jobs.filter(j=>!j.station);
   combat.own.burnThroughUntil=0;if(combat.own.jammerMode==='auto')combat.own.jammer=false;
+  combat.boarding={...createBoarding(combat.own),reports:combat.boarding?.reports.map(({targetId,...notice})=>notice)??[],nextReport:combat.boarding?.nextReport??1};
 }
 export function condition(system){const ratio=system.hp/system.max;return ratio>.7?1:ratio>=.4?.7:ratio>0?.35:0;}
 export function ciwsFiringTime(ship,mount,rounds=75){
@@ -751,6 +780,7 @@ export function stepCombat(combat,sector,seconds,rng=Math.random){
   resolveShots(combat,sector,seconds,rng);
   for(const ship of Object.values(combat.contacts))emergencyStep(ship,seconds);
   advanceSupportShip(combat,sector,seconds);
+  advanceBoarding(combat,sector,seconds,id=>surrenderShip(combat,id,'Captured by SDF marines','own',true));
   advanceMaintenance(combat,seconds);
   updateEnemyResolve(combat,sector);
   // End orders and unfinished bursts as soon as this step's impacts remove a threat.

@@ -5,14 +5,12 @@ import {playerShipName,shipNamingConventions} from './ship-names.mjs';
 import { weapons, recentInterceptions, supportStatus, condition, radarEmitting, jammerEmitting } from './combat-model.mjs';
 import { relativeContact, isHardTurn } from './sector-model.mjs';
 import { friendlyCommands } from './communications-model.mjs';
+import { contactSymbol, contactGlyphScale, createRadarLegend, createShuttleTrackLayer } from './radar-symbol.mjs';
+import { expandProjectileRounds, projectileAffiliation, projectileStyles } from './combat-model.mjs';
+import { mountHud } from './tactical-view.mjs';
+import { HUD_RANGE_KM, relativeShuttleTracks } from './tactical-view-model.mjs';
 
-export function expandRadarRounds(shots){
-  return shots.flatMap(shot=>{
-    if(weapons[shot.weapon].missile)return [shot];
-    const count=Math.max(1,Math.round(shot.damage/weapons[shot.weapon].damage));
-    return Array.from({length:count},(_,index)=>({...shot,roundIndex:index,roundCount:count}));
-  });
-}
+export const expandRadarRounds = expandProjectileRounds;
 export function radarDamageSummary(contact,ship){
   if(!contact?.identified||contact.type!=='enemy'||contact.stale||!ship)return [];
   return shipDamageSummary(ship);
@@ -33,7 +31,7 @@ export function shipDamageSummary(ship){
   });
 }
 
-export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, flight, onNavigate }) {
+export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, flight, onNavigate, mountSecurity }) {
   const NS = 'http://www.w3.org/2000/svg';
   const el = (tag, className, text) => { const node = document.createElement(tag); node.className = className; if (text !== undefined) node.textContent = text; return node; };
   const svg = (tag, attrs = {}, text) => { const node = document.createElementNS(NS, tag); for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value); if (text !== undefined) node.textContent = text; return node; };
@@ -53,30 +51,27 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     return { text: `Vc ${value} KPH · ${direction}`, className: signClass(rounded) };
   }
   let lockedIds = [], priorities = {}, activeId = null, hoverMarker = null, pendingLock=null;
+  const targetListeners = new Set();
   const orderedLocks=()=>[...lockedIds].sort((a,b)=>priorities[a]-priorities[b]);
   const lockedContacts=()=>orderedLocks().map(id=>contacts.find(c=>c.id===id)).filter(Boolean);
   const radarLabel=target=>`Lock ${target.trackLabel}${priorities[target.id]?`, priority ${priorities[target.id]}`:''}, ${contactTypes[target.type].label}, ${target.identified?`${target.ship.label}, ${target.name}, `:''}${contactDistance(target).toFixed(1)} KM, ${speedText(target)}, ${closureReadout(target).text}, ${zText(target)}${target.trackingStatus?`, ${target.trackingStatus}`:''}${target.behavior==='retreating'?', DISENGAGING':target.behavior==='surrendered'?', SURRENDERED':''}`;
 
   const heading = el('div', 'tactical-heading');
-  const title = el('div', ''); title.append(el('span', 'tactical-eyebrow', 'TACTICAL / WEAPONS CONTROL'));
   const rangeButtons=[];
   const sensorStatus = el('div', 'radar-sensor-status');
   const count = el('span', 'radar-count'); count.setAttribute('role', 'status');
   const ewReadout=el('span','radar-iff-status');ewReadout.setAttribute('role','status');sensorStatus.append(ewReadout);
-  sensorStatus.append(count, el('span', 'radar-iff-status', `IFF · ${IFF_RANGE_KM} KM · ~${IFF_IDENTIFICATION_CHANCE * 100}% IDENTIFICATION`));heading.append(title,sensorStatus);
+  const iff=el('span','radar-iff-info','IFF');iff.tabIndex=0;
+  const iffTip=el('span','mfd-button-tooltip',`Identification · ${IFF_RANGE_KM} km · ~${IFF_IDENTIFICATION_CHANCE * 100}% success`);
+  iffTip.id='radar-iff-tip';iffTip.setAttribute('role','tooltip');iff.setAttribute('aria-describedby',iffTip.id);iff.append(iffTip);
+  sensorStatus.append(count,iff);heading.append(sensorStatus);
 
   const workspace = el('div', 'tactical-workspace');
   const charts=[];
   function projectileSymbol(missile,color){
     return missile?svg('path',{d:'M5 0L-3-1.5V1.5Z',fill:color,stroke:color,'stroke-width':.35}):svg('circle',{r:1.8,fill:color});
   }
-  function symbol(type, size = 6) {
-    const attrs = { fill: contactTypes[type].color, stroke: contactTypes[type].color, 'stroke-width': 1.4 };
-    if (type === 'unknown') return svg('path', { ...attrs, d: `M0 ${-size} ${size} 0 0 ${size} ${-size} 0Z` });
-    if (type === 'neutral') return svg('path', { ...attrs, d: `M0 ${-size} ${size} ${size} ${-size} ${size}Z` });
-    if (type === 'friendly') return svg('circle', { ...attrs, r: size });
-    return svg('rect', { ...attrs, x: -size, y: -size, width: size * 2, height: size * 2 });
-  }
+  const symbol = contactSymbol;
   function changeRange(value){
     if(value===range)return;
     range=value;hideTooltip();onRangeChange(value);render();
@@ -88,7 +83,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     const caption = el('div', 'radar-caption'); caption.append(el('h3', '', 'TACTICAL RADAR'), el('span', '', 'TOP VIEW · X / Y · HOVER FOR ELEVATION'));
     const chart = svg('svg', { viewBox: '-165 -165 330 330', role: 'group', 'aria-label': 'Tactical radar: X starboard, Y forward; hover or focus a contact for elevation' });
     card.append(caption, chart); screens.append(card);
-    const radar={id,view:'top',chart,area:radarArea};charts.push(radar);
+    const radar={id,view:'top',chart,area:radarArea,shuttles:createShuttleTrackLayer('radar-contact-glyph')};charts.push(radar);
     let radarPan={x:0,y:0},radarZoom=1,radarDrag=null,suppressRadarClick=false;
     function updateRadarView(){
       const size=330/radarZoom;
@@ -138,17 +133,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     chart.addEventListener('click',event=>{if(suppressRadarClick){event.preventDefault();event.stopImmediatePropagation();suppressRadarClick=false;}},true);
     chart.setAttribute('aria-label','Tactical radar: drag to pan, scroll to zoom; range buttons set coverage; X starboard, Y forward; hover or focus a contact for elevation');
     caption.lastElementChild.textContent='DRAG TO PAN · SCROLL TO ZOOM';
-    const legend = el('div', 'radar-legend'); legend.setAttribute('aria-label', 'Target classifications and weapon fire: triangles are missiles, dots are cannon rounds');
-    for (const [type, info] of Object.entries(contactTypes)) {
-      const item = el('span', ''); const icon = svg('svg', { viewBox: '-10 -10 20 20', 'aria-hidden': 'true' }); icon.append(symbol(type)); item.append(icon, document.createTextNode(info.label)); legend.append(item);
-    }
-    for(const [label,color] of [['Outgoing fire','#7cffff'],['Hostile / incoming fire',contactTypes.enemy.color],['Friendly fire',contactTypes.friendly.color],['Other fire','#ffd166']]){
-      const item=el('span',''),icon=svg('svg',{viewBox:'-12 -8 24 16',class:'radar-fire-key','aria-hidden':'true'});
-      item.title='Triangle: missile · dot: cannon round';
-      const missile=projectileSymbol(true,color);missile.setAttribute('transform','translate(-5 0)');icon.append(missile);
-      const cannon=projectileSymbol(false,color);cannon.setAttribute('cx',7);icon.append(cannon);
-      item.append(icon,document.createTextNode(label));legend.append(item);
-    }
+    const legend = createRadarLegend();
     const encounterReport=el('p','tactical-encounter');encounterReport.setAttribute('role','status');
     radarArea.append(rangeGroup,encounterReport,screens,legend);
     Object.assign(radar,{legend,encounterReport});return radar;
@@ -167,8 +152,8 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
   }
 
   const displayGroups={
-    left:[['radar','Radar'],['targets','Targets / Tracking'],['ship','Ship info'],['systems','Systems']],
-    right:[['weapons','Weapons'],['defense','Defense'],['maneuver','Maneuver'],['settings','Settings']]
+    left:[['radar','Radar'],['targets','Targets / Tracking'],['ship','Ship info'],['hud','HUD']],
+    right:[['weapons','Weapons'],['defense','Defense / Systems'],['maneuver','Maneuver'],['settings','Settings']]
   };
   function displayIcon(key){
     const icon=svg('svg',{class:'mfd-button-icon',viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'});
@@ -176,7 +161,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
       radar:'M12 12 20 4M21 12a9 9 0 1 1-9-9M17 12a5 5 0 1 1-5-5',
       targets:'M12 2v4m0 12v4M2 12h4m12 0h4M18 12a6 6 0 1 1-12 0 6 6 0 0 1 12 0Z',
       ship:'m12 2 6 17-6-3-6 3 6-17Zm0 7v7M8 22h8',
-      systems:'M4 5h16v6H4zM4 15h16v6H4zM7 8h.01M7 18h.01M11 8h6m-6 10h6',
+      hud:'M3 5h18v14H3zM6 12h4l2 2 2-2h4M12 8v2',
       weapons:'M9 17V8c0-3 3-6 3-6s3 3 3 6v9M9 17h6v4H9zM9 9h6M5 19v-4l4-4m10 8v-4l-4-4',
       defense:'m12 2 8 3v6c0 5-8 11-8 11S4 16 4 11V5l8-3Zm-4 10 3 3 5-6',
       maneuver:'M4 21v-8a5 5 0 0 1 5-5h11m-5-5 5 5-5 5',
@@ -192,18 +177,23 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     const displayScreen=el('section','tactical-mfd-screen');displayScreen.id=`tactical-${id}-screen`;displayScreen.setAttribute('aria-labelledby',`tactical-${id}-title`);
     const displayHeader=el('header','tactical-mfd-header'),displayHeading=el('div','');
     const displayContext=el('span','tactical-eyebrow'),displayTitle=el('h2','');displayTitle.id=`tactical-${id}-title`;displayHeading.append(displayContext,displayTitle);
-    const displayIndex=el('span','mfd-screen-index');displayIndex.setAttribute('aria-hidden','true');
-    displayHeader.append(displayHeading,displayIndex);displayScreen.append(displayHeader,targetPanel,combatPanel);
-    const mfd={id,label,targetPanel,combatPanel,displayPanes,displayButtons,displayScreen,displayContext,displayTitle,displayIndex,controlUnit};
+    displayHeader.append(displayHeading);displayScreen.append(displayHeader,targetPanel,combatPanel);
+    const mfd={id,label,targetPanel,combatPanel,displayPanes,displayButtons,displayScreen,displayContext,displayTitle,controlUnit};
     function displayRail(side){
       const rail=el('aside','tactical-mfd-rail');rail.dataset.side=side;rail.setAttribute('aria-label',`${label} ${side==='left'?'sensor and target':'combat'} display controls`);
       for(const [key,label] of displayGroups[side]){
         const pane=el('section','tactical-mfd-pane');pane.id=`tactical-${id}-display-${key}`;pane.hidden=true;pane.setAttribute('role','region');pane.setAttribute('aria-labelledby',`tactical-${id}-button-${key}`);displayPanes[side][key]=pane;
         if(key==='radar'){pane.classList.add('tactical-mfd-radar');mfd.radar=createRadar(id);pane.append(mfd.radar.area);displayScreen.append(pane);}
+        else if(key==='hud'){
+          pane.classList.add('tactical-mfd-hud');displayScreen.append(pane);
+          mfd.hud=mountHud({root:pane,flight,getContacts:()=>contacts,
+            getLockState:()=>({lockedIds,priorities,activeId}),onLock:(trackId,toggle)=>lock(trackId,`hud-${id}`,toggle),
+            onHover:showTooltip,onLeave:hideTooltip,onContextMenu:openQuickFire,contactLabel:radarLabel});
+        }
         else (side==='left'?targetPanel:combatPanel).append(pane);
         const button=el('button','tactical-mfd-button');button.id=`tactical-${id}-button-${key}`;button.type='button';
         const hoverLabel=el('span','mfd-button-tooltip',label);hoverLabel.id=`tactical-${id}-label-${key}`;hoverLabel.setAttribute('role','tooltip');
-        button.append(el('span','mfd-button-index',String(displayButtons.size+1).padStart(2,'0')),displayIcon(key),hoverLabel);
+        button.append(displayIcon(key),hoverLabel);
         button.setAttribute('aria-label',`Open ${label.toLowerCase()} display`);button.setAttribute('aria-controls',pane.id);button.setAttribute('aria-pressed','false');
         button.setAttribute('aria-describedby',hoverLabel.id);
         button.onclick=()=>openDisplay(mfd,side,key);displayButtons.set(`${side}-${key}`,button);rail.append(button);
@@ -211,6 +201,8 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
       return rail;
     }
     const leftRail=displayRail('left'),rightRail=displayRail('right');
+    if(mountSecurity){const security=el('section','');mfd.security=mountSecurity(security,{getTarget:()=>contacts.find(contact=>contact.id===activeId),idPrefix:`tactical-${id}`});displayPanes.right.defense.append(security);}
+    mfd.systemsDetails=el('section','tactical-combined-systems');mfd.systemsDetails.setAttribute('aria-label','Target systems and facilities');displayPanes.right.defense.append(mfd.systemsDetails);
     const targetPicker=createTargetPicker(id);mfd.picker=targetPicker.picker;mfd.targetDetails=el('section','target-tracking-details');
     displayPanes.left.targets.append(targetPicker.selection,mfd.targetDetails);
     controlUnit.append(leftRail,displayScreen,rightRail);workspace.append(controlUnit);
@@ -222,19 +214,20 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
   function closeQuickFireControls(){for(const mfd of displays)mfd.weaponControls?.closeQuickFire();}
   function quickFireIsOpen(){return displays.some(mfd=>mfd.weaponControls?.isQuickFireOpen());}
   function openDisplay(mfd,side,key){
-    const {displayScreen,displayContext,displayTitle,displayIndex,displayButtons,displayPanes,targetPanel,combatPanel}=mfd;
+    const {displayScreen,displayContext,displayTitle,displayButtons,displayPanes,targetPanel,combatPanel}=mfd;
     hideTooltip();closeQuickFireControls();closeFriendlyPopup();
     if(maneuverPopup.matches(':popover-open'))maneuverPopup.hidePopover();
     const changed=displayScreen.dataset.display!==key;
     displayScreen.dataset.display=key;
     displayContext.textContent=mfd.label.toUpperCase();displayTitle.textContent=displayGroups[side].find(([id])=>id===key)[1];
-    displayIndex.textContent=`${displayButtons.get(`${side}-${key}`).firstElementChild.textContent} / 08`;
-    targetPanel.hidden=side!=='left'||key==='radar';combatPanel.hidden=side!=='right';
+    targetPanel.hidden=side!=='left'||['radar','hud'].includes(key);combatPanel.hidden=side!=='right';
     for(const [group,panes] of Object.entries(displayPanes))for(const [id,pane] of Object.entries(panes))pane.hidden=group!==side||id!==key;
     for(const [id,button] of displayButtons)button.setAttribute('aria-pressed',String(id===`${side}-${key}`));
     if(changed){targetPanel.scrollTop=0;combatPanel.scrollTop=0;}
+    if(key==='hud'){mfd.hud.refresh();displayPanes.left.hud.focus({preventScroll:true});}
+    if(key==='defense')mfd.security?.refresh();
   }
-  const note = el('div', 'tactical-note');const flightStatus=el('span','','');note.append(flightStatus, el('span', '', 'LOCAL COMBAT · PROVISIONAL PERFORMANCE · CONSTANT PROJECTILE DAMAGE'));
+  const note = el('div', 'tactical-note'),flightStatus=el('span','');note.append(flightStatus);
   const tooltip = el('div', 'radar-tooltip'); tooltip.id = 'radar-track-tooltip'; tooltip.setAttribute('role', 'tooltip'); tooltip.hidden = true;
   root.append(heading,workspace,note,tooltip);
   const priorityDialog=el('dialog','target-priority-dialog');priorityDialog.id='target-priority-dialog';priorityDialog.setAttribute('aria-labelledby','target-priority-title');
@@ -248,7 +241,8 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
   priorityForm.onsubmit=event=>{
     event.preventDefault();if(!pendingLock)return;
     const draft=pendingLock,priority=Number(priorityInput.value);
-    if(!draft.edit&&!contactsInRange(contacts.filter(c=>!c.stale),range).some(c=>c.id===draft.id)){priorityError.textContent='This ship is no longer in radar coverage. Cancel and choose another track.';return;}
+    const acquisitionRange=draft.sourceView?.startsWith('hud-')?HUD_RANGE_KM:range;
+    if(!draft.edit&&!contactsInRange(contacts.filter(c=>!c.stale),acquisitionRange).some(c=>c.id===draft.id)){priorityError.textContent='This ship is no longer within this display’s live sensor coverage. Cancel and choose another track.';return;}
     let next;
     try{next=draft.edit?{lockedIds:[...lockedIds],priorities:restoreTargetPriorities(lockedIds,{...priorities,[draft.id]:priority})}:prioritizeTargets(lockedIds,priorities,draft.id,priority,draft.toggle);}
     catch(error){priorityError.textContent=error.message;return;}
@@ -258,16 +252,19 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
   function markerScale(chart){
     const bounds=chart.getBoundingClientRect(),scale=Math.min(bounds.width/330,bounds.height/330);
     const legendWidth=chart.closest('.tactical-radar-area').querySelector('.radar-legend svg').getBoundingClientRect().width;
-    return scale>0&&legendWidth>0?(legendWidth*6/20)/(4.5*scale):1;
+    return contactGlyphScale(scale,legendWidth);
   }
-  const chartResize=new ResizeObserver(()=>{for(const {chart} of charts)for(const marker of chart.querySelectorAll('.radar-contact-glyph'))marker.setAttribute('transform',`scale(${markerScale(chart)})`);});
+  const chartResize=new ResizeObserver(()=>{for(const radar of charts){
+    const {chart}=radar,scale=radar.glyphScale=markerScale(chart);
+    for(const glyph of chart.querySelectorAll('.radar-contact-glyph'))glyph.setAttribute('transform',`scale(${scale})`);
+  }});
   for(const {chart} of charts)chartResize.observe(chart);
   for(const mfd of displays){
     mfd.weaponControls=flight?.combat?mountWeaponsConsole({flight,idPrefix:`tactical-${mfd.id}`,onSelectionChange:selection=>{
       for(const other of displays)if(other!==mfd)other.weaponControls?.restoreSelection(selection);
     }}):null;
     const controls=mfd.weaponControls,panes=mfd.displayPanes.right;
-    if(controls){panes.weapons.append(controls.root);panes.defense.append(controls.defense);panes.settings.append(controls.settings);}
+    if(controls){panes.weapons.append(controls.root);panes.defense.prepend(controls.defense);panes.settings.append(controls.settings);}
     else for(const pane of Object.values(panes))pane.append(el('p','target-empty','Flight controls unavailable in this training snapshot.'));
   }
   let weaponControls=displays[0].weaponControls;
@@ -426,6 +423,11 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     return `${parts.join(' · ')}. Each craft carries ${capacity} marines / raiders, excluding flight crew.`;
   }
   function boardingText(ship){const b=ship.boarding;return b?`${b.personnel} ${b.unit.toLowerCase()}${b.platoons?` · ${b.platoons} ${b.platoons===1?'platoon':'platoons'}`:''}, including up to ${Math.floor(b.personnel*crewDoctrine.maxAndroidFraction)} androids (30% maximum). Boarding, ship seizure, and defense of their ship.`:'Not specified';}
+  function facilityInfo(id,label,description){
+    const button=el('button','facility-info');button.type='button';button.title=description;button.setAttribute('aria-label',`${label} details`);
+    const icon=svg('svg',{viewBox:'0 0 24 24','aria-hidden':'true'});icon.append(svg('circle',{cx:12,cy:12,r:9}),svg('path',{d:'M12 11v6m0-10v1'}));
+    const hint=el('span','defense-action-tooltip',description);hint.id=id;hint.setAttribute('role','tooltip');button.setAttribute('aria-describedby',id);button.append(icon,hint);return button;
+  }
   function crewText(ship){return `${crewDoctrine.automation} ${ship.crew?.androids==='included'?crewDoctrine.androids:'Android complement not specified.'}`;}
   const fitPicker=el('label','bridge-setting armament-fit-picker');fitPicker.append(el('span','','SHIP CLASS SPECIFICATION'));
   const fitSelect=el('select','');fitSelect.setAttribute('aria-label','Ship class specification');
@@ -492,7 +494,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     tooltip.hidden = false;
     const bounds = marker.getBoundingClientRect(); positionTooltip(event?.clientX ?? bounds.right, event?.clientY ?? bounds.top);
   }
-  const hideWhenInactive = () => { if (root.parentElement.dataset.station !== 'tactical' || document.body.dataset.screen !== 'bridge') { hideTooltip();closeQuickFireControls();closeFriendlyPopup();if(maneuverPopup.matches(':popover-open'))maneuverPopup.hidePopover();if(priorityDialog.open)priorityDialog.close(); } };
+  const hideWhenInactive = () => { if (!document.getElementById('tactical-view-dialog')?.open && (root.parentElement.dataset.station !== 'tactical' || document.body.dataset.screen !== 'bridge')) { hideTooltip();closeQuickFireControls();closeFriendlyPopup();if(maneuverPopup.matches(':popover-open'))maneuverPopup.hidePopover();if(priorityDialog.open)priorityDialog.close(); } };
   const observer = new MutationObserver(hideWhenInactive);
   observer.observe(document.body, { attributes: true, attributeFilter: ['data-screen'] });
   observer.observe(root.parentElement, { attributes: true, attributeFilter: ['data-station'] });
@@ -522,19 +524,21 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     render();
     onChange();
     if(quick){hideTooltip();weaponControls?.openQuickFire(id,quick.x,quick.y);return;}
-    if(sourceView)charts.find(item=>item.id===sourceView)?.chart.querySelector(`.radar-track[data-track="${id}"]`)?.focus({preventScroll:true});
+    if(sourceView?.startsWith('hud-'))displays.find(item=>`hud-${item.id}`===sourceView)?.hud.focusContact(id);
+    else if(sourceView)charts.find(item=>item.id===sourceView)?.chart.querySelector(`.radar-track[data-track="${id}"]`)?.focus({preventScroll:true});
   }
   function openQuickFire(id,event,marker){
     if(contacts.find(c=>c.id===id)?.type==='friendly'){openFriendlyPopup(id,event,marker);return;}
     if(!weaponControls)return;event.preventDefault();
     const bounds=marker.getBoundingClientRect(),x=event.clientX||bounds.right,y=event.clientY||bounds.top;
-    if(!lockedIds.includes(id)){askPriority(id,{toggle:true,quick:{x,y}});return;}
+    if(!lockedIds.includes(id)){askPriority(id,{sourceView:marker.closest('.tactical-view-surface')?'hud-context':undefined,toggle:true,quick:{x,y}});return;}
     activeId=id;finishLock(id,undefined,true,{x,y});
   }
   function detailRow(label, value, className = '') {
     const row = el('div', ''); row.append(el('dt', '', label), el('dd', className, value)); return row;
   }
   function renderTarget(contact, visible, mfd) {
+    mfd.security?.refresh();
     const {displayPanes,weaponControls}=mfd;
     if(weaponControls)weaponControls.refresh(contact||null,lockedContacts());
     if(flight){
@@ -547,9 +551,10 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     const name = el('h3', '', contact ? contact.name : 'No target locked'); name.tabIndex = -1;
     if (!contact) {
       mfd.targetDetails.replaceChildren(status,name,el('p','target-empty','Select a track above or click a radar contact to choose its priority. Ctrl + left-click adds or removes targets.'),el('div','target-empty-reticle','⌖'),el('p','target-fit-note',flight?.sector.encounter?`${contacts.length} local ship contacts. Radar detects traffic within sensor coverage; use a wider radar range to inspect the sector.`:'12 ship types in the training catalog. Radar detects contacts within 200 km.'),catalogLink());
-      for(const key of ['ship','systems'])displayPanes.left[key].replaceChildren(el('h3','','No target locked'),el('p','target-empty','Select a radar contact to view its '+(key==='ship'?'ship information':'systems and facilities')+'.'));
+      displayPanes.left.ship.replaceChildren(el('h3','','No target locked'),el('p','target-empty','Select a radar or HUD contact to view ship information.'));
+      mfd.systemsDetails.replaceChildren(el('h3','','TARGET SYSTEMS & FACILITIES'),el('p','target-empty','Select a radar or HUD contact to inspect its systems and facilities.'));
       displayPanes.left.ship.append(catalogLink());
-      if(weaponControls)displayPanes.left.systems.append(weaponControls.targetDetails);
+      if(weaponControls)mfd.systemsDetails.append(weaponControls.targetDetails);
       return;
     }
     const lockedList = el('div', 'target-lock-list'); lockedList.setAttribute('role', 'group'); lockedList.setAttribute('aria-label', 'Locked targets');
@@ -578,16 +583,21 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     const countermeasures=el('section','target-equipment');countermeasures.setAttribute('aria-label','Ship countermeasures');countermeasures.append(el('h4','','COUNTERMEASURES'));
     if(contact.identified&&Array.isArray(ship.countermeasures))countermeasures.append(countermeasureList(ship));else countermeasures.append(el('p','',contact.identified?'Not specified':'Unknown'));
     const hangar=el('section','target-equipment');hangar.setAttribute('aria-label','Ship shuttle facilities');hangar.append(el('h4','','SHUTTLE FACILITIES'),el('p','',contact.identified?hangarText(ship):'Unknown'));
-    const boarding=el('section','target-equipment');boarding.setAttribute('aria-label','Ship boarding and defense force');boarding.append(el('h4','','BOARDING / DEFENSE FORCE'),el('p','',contact.identified?boardingText(ship):'Unknown'));
-    const crew=el('section','target-equipment');crew.setAttribute('aria-label','Ship crew and automation');crew.append(el('h4','','CREW / AUTOMATION'),el('p','',contact.identified?crewText(ship):'Unknown'));
+    const boarding=el('section','target-equipment');boarding.setAttribute('aria-label','Ship boarding and defense force');
+    const boardingHeading=el('h4','','BOARDING / DEFENSE FORCE'),force=ship.boarding;
+    boardingHeading.append(facilityInfo(`${mfd.id}-${contact.id}-boarding-info`,'Boarding force',contact.identified?boardingText(ship):'Unknown'));
+    boarding.append(boardingHeading,el('p','',contact.identified?force?`${force.personnel} ${force.unit.toLowerCase()}${force.platoons?` · ${force.platoons} ${force.platoons===1?'platoon':'platoons'}`:''} · up to ${Math.floor(force.personnel*crewDoctrine.maxAndroidFraction)} androids`:'Not specified':'Unknown'));
+    const crew=el('section','target-equipment target-crew');crew.setAttribute('aria-label','Ship crew and automation');const crewHeading=el('h4','','CREW / AUTOMATION');
+    crewHeading.append(facilityInfo(`${mfd.id}-${contact.id}-crew-info`,'Crew and automation',contact.identified?crewText(ship):'Unknown'));
+    crew.append(crewHeading,el('p','',contact.identified?`Small automated crew · ${ship.crew?.androids==='included'?'androids included · 30% cap per complement':'android complement not specified'}`:'Unknown'));
     const engines = el('section', 'target-equipment'); engines.append(el('h4', '', 'ENGINES'), el('p', '', ship.engines));
     const changePriority=el('button','target-priority-change',`Change priority · ${priorities[contact.id]}`);changePriority.setAttribute('aria-label','Change target priority');changePriority.onclick=()=>askPriority(contact.id,{edit:true});
     const release = el('button', 'target-release', 'Release all target locks'); release.onclick = () => { lockedIds = [];priorities={}; activeId = null; render();onChange(); hideTooltip(); mfd.picker.focus({ preventScroll: true }); };
     mfd.targetDetails.replaceChildren(status,lockedList,name,telemetry,changePriority,release);
     displayPanes.left.ship.replaceChildren(shipClass,identity,armaments,countermeasures,engines,el('p','target-fit-note',contact.identified?ship.fitConfirmed?'CONFIRMED EQUIPMENT & ENGINE COUNTS · PROVISIONAL ENGINE MODELS & SIZE':ship.boarding?'CONFIRMED RAIDERS & ASSAULT SHUTTLES · OTHER FITTINGS PROVISIONAL':'TRAINING DATA · PROVISIONAL SHIP FIT & SIZE':'Identity, type, size, and equipment unconfirmed.'));
-    displayPanes.left.systems.replaceChildren();
-    if(weaponControls)displayPanes.left.systems.append(weaponControls.targetDetails);
-    displayPanes.left.systems.append(hangar,boarding,crew);
+    mfd.systemsDetails.replaceChildren(el('h3','','TARGET SYSTEMS & FACILITIES'));
+    if(weaponControls)mfd.systemsDetails.append(weaponControls.targetDetails);
+    const facilities=el('div','target-facility-grid');facilities.append(hangar,boarding,crew);mfd.systemsDetails.append(facilities);
   }
 
   function renderProjectiles(chart,view){
@@ -605,10 +615,9 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
         const offset=(shot.roundIndex-(shot.roundCount-1)/2)*2.5;
         point.x-=direction.y*offset;point.y+=direction.x*offset;
       }
-      const outgoing=shot.sourceId==='own',incoming=shot.targetId==='own';
+      const outgoing=shot.sourceId==='own';
       const sourceTrack=contacts.find(c=>c.id===shot.sourceId)||flight.sector.memory[shot.sourceId]?.observed;
-      const hostile=sourceTrack?.type==='enemy'||flight.combat.hostiles.includes(shot.sourceId);
-      const friendly=sourceTrack?.type==='friendly'&&!hostile;
+      const affiliation=projectileAffiliation(shot,flight.combat,sourceTrack),style=projectileStyles[affiliation];
       if(missile){
         // Separate the launcher from the ship glyph, blending into the live
         // flight track as the missile clears the ship's starboard side.
@@ -618,10 +627,9 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
           point.x+=6*Math.exp(-clearance/8);
         }
       }
-      const color=outgoing?'#7cffff':incoming||hostile?contactTypes.enemy.color:friendly?contactTypes.friendly.color:'#ffd166';
-      const marker=svg('g',{class:`radar-projectile ${missile?'missile':'cannon'} ${outgoing?'outgoing':incoming?'incoming':hostile?'hostile':friendly?'friendly':'other'}`,'data-shot':shot.id,transform:`translate(${point.x} ${point.y}) rotate(${Math.atan2(direction.y,direction.x)*180/Math.PI})`});
-      marker.append(svg('title',{},`${outgoing?'Outgoing':incoming?'Incoming':hostile?'Hostile':friendly?'Friendly':'Other'} ${missile?'missile':'cannon round'} · ${armamentTypes[shot.weapon]?.name??shot.weapon} · ${contactDistance(relative).toFixed(1)} km`));
-      marker.append(projectileSymbol(missile,color));
+      const marker=svg('g',{class:`radar-projectile ${missile?'missile':'cannon'} ${affiliation}`,'data-shot':shot.id,transform:`translate(${point.x} ${point.y}) rotate(${Math.atan2(direction.y,direction.x)*180/Math.PI})`});
+      marker.append(svg('title',{},`${style.title} ${missile?'missile':'cannon round'} · ${armamentTypes[shot.weapon]?.name??shot.weapon} · ${contactDistance(relative).toFixed(1)} km`));
+      marker.append(projectileSymbol(missile,style.color));
       markers.push(marker);
     }
     const tender=flight?.combat.support;
@@ -643,6 +651,13 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     layer.replaceChildren(...markers);
   }
 
+  function renderFlightTracks({chart,view,shuttles,glyphScale}){
+    renderProjectiles(chart,view);
+    if(shuttles.root.parentNode!==chart)chart.append(shuttles.root);
+    const tracks=flight&&!flight.inTransit()?relativeShuttleTracks(flight.combat,flight.sector,range):[];
+    shuttles.update(tracks.map(track=>({...track,...projectContact(track,view,range)})),glyphScale);
+  }
+
   function render() {
     hideTooltip();
     refreshEncounterReport();
@@ -661,7 +676,9 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     for(const mfd of displays)renderTarget(contact,visible,mfd);
     refreshManeuverPopup();
     refreshFriendlyPopup();
-    for (const { view, chart, id:radarId } of charts) {
+    for (const radar of charts) {
+      const {view,chart,id:radarId}=radar;
+      const scale=radar.glyphScale=markerScale(chart);
       chart.replaceChildren(svg('circle', { r: 148, class: 'radar-field' }));
       for (const distance of rangeRings(range)) {
         const radius = distance / range * 148;
@@ -681,7 +698,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
       for (const target of [...visible].sort((a,b)=>Number(!!priorities[a.id])-Number(!!priorities[b.id])||(priorities[b.id]||0)-(priorities[a.id]||0))) {
         const point = projectContact(target, view, range), isLocked = lockedIds.includes(target.id);
         const marker = svg('g', { transform: `translate(${point.x} ${point.y})`, class: `radar-track${isLocked ? ' selected' : ''}${target.id === activeId ? ' active-target' : ''}`, role: 'button', tabindex: 0, 'aria-pressed': String(isLocked), 'aria-label':radarLabel(target) });
-        const scale=markerScale(chart),glyph=svg('g',{class:`radar-contact-glyph${isLocked?' numbered':''}`,transform:`scale(${scale})`});
+        const glyph=svg('g',{class:`radar-contact-glyph${isLocked?' numbered':''}`,transform:`scale(${scale})`});
         glyph.append(svg('circle', { r: 14, class: 'radar-track-hit' }), svg('path', { d: 'M-4.5-9H-9V-4.5M4.5-9H9V-4.5M-9 4.5V9H-4.5M9 4.5V9H4.5', class: 'radar-selection' }), symbol(target.type,4.5));
         if(target.jammerEmitting)glyph.append(svg('circle',{r:11,fill:'none',stroke:'#e7b85e','stroke-width':1,'stroke-dasharray':'2 2','aria-hidden':'true'}));
         if(isLocked){marker.dataset.priority=String(priorities[target.id]);glyph.append(svg('text',{x:0,y:target.type==='neutral'?1.5:0,class:'radar-priority-number','aria-hidden':'true'},String(priorities[target.id])));}marker.append(glyph);
@@ -703,8 +720,10 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
       ship.oncontextmenu=event=>openManeuverPopup(event,ship);
       ship.onkeydown=event=>{if(['Enter',' ','ContextMenu'].includes(event.key)||event.key==='F10'&&event.shiftKey)openManeuverPopup(event,ship);};
       ship.append(svg('circle',{r:14,class:'radar-own-hit'}),svg('circle', { r: 9 }), svg('path', { d: view === 'top' ? 'M0-6 4 4 0 2-4 4Z' : 'M-6 2-3-3H3L6 2H-6M-9 0H9' })); chart.append(ship);
-      renderProjectiles(chart,view);
+      renderFlightTracks(radar);
     }
+    for(const mfd of displays)mfd.hud.refresh();
+    for(const listener of targetListeners)listener();
   }
   let signature='';
   function refresh(){
@@ -713,19 +732,23 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     const emitting=contacts.filter(contact=>contact.jammerEmitting&&!contact.stale),lost=emitting.filter(contact=>contact.precisionTrack===false);
     ewReadout.textContent=emitting.length?`${emitting.length} JAMMER EMISSION${emitting.length===1?'':'S'} · ${lost.length} PRECISION TRACK${lost.length===1?'':'S'} LOST`:'NO JAMMER EMISSIONS';
     refreshEncounterReport();
-    for(const mfd of displays)mfd.weaponControls?.refresh(contacts.find(c=>c.id===activeId)||null,lockedContacts());
+    for(const mfd of displays){mfd.security?.refresh();mfd.weaponControls?.refresh(contacts.find(c=>c.id===activeId)||null,lockedContacts());}
     // Retain locked tracks as stale sensor records without exposing unseen motion.
     if(flight)for(const id of lockedIds)if(!contacts.some(c=>c.id===id)&&flight.sector.memory[id])contacts.push({...flight.sector.memory[id].observed,stale:true});
     refreshManeuverPopup();
     refreshFriendlyPopup();
     const visible=contactsInRange(contacts.filter(c=>!c.stale),range),currentSignature=contacts.map(c=>`${c.id}:${c.identified}:${c.stale||false}:${c.jammerEmitting}:${c.trackingStatus}:${c.behavior}`).join('|')+`/${visible.map(c=>c.id).join(',')}`;
-    flightStatus.textContent=flight?`${flight.inTransit()?'EPD IN TRANSIT · LOCAL FLIGHT SUSPENDED':flightReadout(flight)}${flight.sector.running?'':' · PAUSED'}`:'TRAINING SNAPSHOT';
+    note.hidden=!flight||flight.inTransit();
+    if(flight&&!note.hidden){
+      const {vx,vy,vz}=flight.sector.own;
+      flightStatus.textContent=`Ship speed ${Math.round(Math.hypot(vx,vy,vz)).toLocaleString('en-US')} KPH`;
+    }
     if(currentSignature!==signature){
       signature=currentSignature;const scrolls=displays.map(mfd=>[mfd.targetPanel.scrollTop,mfd.combatPanel.scrollTop]);render();
       displays.forEach((mfd,i)=>{mfd.targetPanel.scrollTop=scrolls[i][0];mfd.combatPanel.scrollTop=scrolls[i][1];});return;
     }
-    for(const {chart,view} of charts){
-      renderProjectiles(chart,view);
+    for(const radar of charts){
+      const {chart,view}=radar;renderFlightTracks(radar);
       for(const marker of chart.querySelectorAll('.radar-track')){
         const target=contacts.find(c=>c.id===marker.dataset.track);if(!target)continue;
         const point=projectContact(target,view,range);marker.setAttribute('transform',`translate(${point.x} ${point.y})`);
@@ -746,9 +769,25 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
       if(hoverMarker.dataset.track==='own')showOwnTooltip(hoverMarker);
       else {const target=contacts.find(c=>c.id===hoverMarker.dataset.track);if(target)showTooltip(target,hoverMarker);}
     }
+    for(const mfd of displays)mfd.hud.refresh();
   }
   openDisplay(displays[0],'left','radar');openDisplay(displays[1],'left','targets');render();refresh();
-  return {refresh,refreshProjectiles:()=>{for(const {chart,view} of charts)renderProjectiles(chart,view);},
+  return {refresh,openDefense:()=>openDisplay(displays[1],'right','defense'),refreshFlightTracks:()=>{for(const radar of charts)renderFlightTracks(radar);for(const mfd of displays)mfd.hud.refreshFlightTracks();},
+    focusContact(id){
+      if(flight)contacts=flight.contacts();
+      if(!contacts.some(contact=>contact.id===id&&!contact.stale))return false;
+      if(!lockedIds.includes(id)){
+        const used=new Set(Object.values(priorities));
+        const priority=Array.from({length:MAX_TARGET_PRIORITY},(_,index)=>index+1).find(value=>!used.has(value));
+        if(!priority)return false;
+        ({lockedIds,priorities}=prioritizeTargets(lockedIds,priorities,id,priority,true));
+      }
+      activeId=id;render();onChange();return true;
+    },
+    hudTargeting:{getContacts:()=>flight?flight.contacts():contacts,getLockState:()=>({lockedIds,priorities,activeId}),
+      lock(id,toggle){if(flight)contacts=flight.contacts();lock(id,'hud-popup',toggle);},
+      onHover:showTooltip,onLeave:hideTooltip,onContextMenu:openQuickFire,contactLabel:radarLabel,tooltip,
+      subscribe(listener){targetListeners.add(listener);return ()=>targetListeners.delete(listener);}},
     exportState:()=>({lockedIds:[...lockedIds],activeId,priorities:{...priorities}}),
     restoreState(saved,savedRange=range){closeQuickFireControls();closeFriendlyPopup();if(maneuverPopup.matches(':popover-open'))maneuverPopup.hidePopover();if(priorityDialog.open)priorityDialog.close();lockedIds=[...saved.lockedIds];priorities=restoreTargetPriorities(lockedIds,saved.priorities);activeId=saved.activeId;range=savedRange;signature='';hideTooltip();render();refresh();},
     reset(){closeQuickFireControls();closeFriendlyPopup();if(maneuverPopup.matches(':popover-open'))maneuverPopup.hidePopover();if(priorityDialog.open)priorityDialog.close();lockedIds=[];priorities={};activeId=null;signature='';refresh();}};

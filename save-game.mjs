@@ -4,6 +4,7 @@ import { createSector, LOCAL_SIMULATION_RATES } from './sector-model.mjs';
 import { trainingContacts, observeContact, restoreTargetPriorities } from './tactical-model.mjs';
 import { createCombat,stationSupport } from './combat-model.mjs';
 import { restoreCombat } from './combat-save.mjs';
+import {hasDeployedShuttles} from './boarding-model.mjs';
 import { restoreCommunications } from './communications-model.mjs';
 import { generateEncounter, ENCOUNTER_VERSIONS, MAX_ENCOUNTER_CONTACTS } from './encounter-model.mjs';
 
@@ -103,6 +104,7 @@ function validateSave(value,pause){
   requireValue(!combat.support||combat.support.location===sector.location,'Support rendezvous is in another sector.');
   requireValue(!nav.active||(!combat.firing&&!combat.shots.length&&!combat.docked&&!combat.support&&!Object.keys(combat.alliedOrders).length),'Combat cannot run during EPD transit.');
   requireValue(!nav.active||!combat.own.mounts.some(m=>m.burst),'Cannon bursts cannot continue during EPD transit.');
+  requireValue(!nav.active||!hasDeployedShuttles(combat),'Recover deployed shuttles before EPD transit.');
   requireValue(!nav.active||(!sector.running && !sector.order),'EPD transit cannot run alongside local flight orders.');
   const tactical=value.bridge.tactical;
   requireValue(record(tactical),'Missing tactical state.');

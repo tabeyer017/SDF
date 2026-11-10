@@ -22,6 +22,13 @@ test('JSON save preserves strategic progress, bridge settings, selection, logs, 
   assert.deepEqual(saved.bridge.tactical,original.bridge.tactical);assert.deepEqual(original,before);
 });
 
+test('legacy Security saves reopen in Tactical without changing the watch, patrol, or locks',()=>{
+  const saved=createSave(game());saved.bridge.settings.selected='security';
+  const loaded=parseSave(JSON.stringify(saved));
+  assert.equal(loaded.bridge.settings.selected,'tactical');assert.equal(loaded.bridge.settings.watch,'heightened');
+  assert.deepEqual(loaded.navigation,saved.navigation);assert.deepEqual(loaded.bridge.tactical,saved.bridge.tactical);
+});
+
 test('half and three-quarter local speeds survive saves while unsupported rates are rejected',()=>{
   for(const rate of [.5,.75]){
     const original=game();original.bridge.sector.rate=rate;original.bridge.sector.running=true;

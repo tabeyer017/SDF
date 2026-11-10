@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="bridge.css">
   <link rel="stylesheet" href="start-screen.css">
 </head>
-<body data-view="map" data-screen="map" data-menu="open">
+<body data-view="map" data-screen="bridge" data-menu="open">
   <section id="start-screen" class="start-screen" aria-labelledby="start-title">
     <div class="start-art">
       <div class="start-orbits" aria-hidden="true"><i></i><i></i><i></i><span>✧</span></div>
@@ -32,14 +32,32 @@
     <footer class="start-footer"><span><i class="status-dot"></i> FOR SOL. FOR ALL.</span><span>PHASE 01 <b>/</b> PROTOTYPE v0.1</span></footer>
   </section>
   <header class="topbar" inert aria-hidden="true">
-    <a class="brand" href="/" aria-label="Sol Defense Force home"><span class="insignia">✧</span><span class="brand-name">SDF<span>SOL DEFENSE FORCE</span></span></a>
-    <nav aria-label="Command navigation"><button id="menu-button">Menu</button><button class="nav-active" id="map-tab"><span>⌖</span> Strategic map</button><button id="bridge-button"><span>✧</span> Bridge</button><button id="briefing-button"><span>▤</span> Mission briefing</button><button id="saves-button">Saves</button></nav>
-    <div class="command-status"><i class="status-dot"></i> SOL COMMAND <span class="connection">LINK ESTABLISHED</span></div>
+    <div class="bridge-top-row">
+      <a class="brand" href="/" aria-label="Sol Defense Force home"><span class="insignia">✧</span><span class="brand-name">SDF<span>SOL DEFENSE FORCE</span></span></a>
+      <nav class="station-nav" aria-label="Bridge stations">
+        <button id="bridge-button" type="button" data-station-area="command">Command</button>
+        <button type="button" data-station-area="flight">Flight Control</button>
+        <button type="button" data-station-area="tactical-security">Tactical / Security</button>
+        <button id="messages-button" class="messages-button" type="button" data-station-area="communications" aria-label="Open Comms · all messages read"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></svg>Comms<span id="messages-count" class="messages-count" aria-hidden="true" hidden>0</span></button>
+        <button type="button" data-station-area="engineering-support">Engineering</button>
+      </nav>
+      <div class="bridge-utilities"><button id="menu-button" type="button">Menu</button><button id="briefing-button" type="button">Briefing</button><button id="saves-button" type="button">Saves</button></div>
+    </div>
+    <div class="ship-watch-bar" role="region" aria-label="Ship status and simulation controls">
+      <div class="ship-watch-context"><strong id="watch-location">Earth</strong><span id="watch-order">Holding position</span></div>
+      <button id="watch-alert" type="button" hidden></button>
+      <div class="ship-watch-clock"><time id="watch-time" aria-label="Shipboard time in UTC"></time><span id="watch-mode"></span><button id="pause-button" type="button">Run</button><select id="watch-rate" aria-label="Simulation speed"></select></div>
+    </div>
   </header>
 
-  <main inert aria-hidden="true">
-    <section class="page-heading"><div><div class="eyebrow">SOL SECTOR / NAVIGATION</div><h1>The watch begins.</h1><p>One system. Our home. Your command.</p></div><div class="date-block"><span class="eyebrow">SHIPBOARD TIME · UTC</span><strong id="stardate">01 JAN 2250 <span>00:00</span></strong><div><i class="status-dot"></i> <span id="clock-state">AWAITING ORDERS</span></div></div></section>
+  <section id="communication-alert" class="communication-alert" role="region" aria-labelledby="communication-alert-title" hidden>
+    <button id="dismiss-communication-alert" class="dialog-close" type="button" aria-label="Close new message notification">×</button>
+    <div class="eyebrow">INCOMING COMMUNICATION</div>
+    <div aria-live="polite" aria-atomic="true"><h2 id="communication-alert-title">New message received</h2><p id="communication-alert-detail"></p></div>
+    <button id="open-communication-alert" class="primary-button" type="button">Open Comms <span aria-hidden="true">↗</span></button>
+  </section>
 
+  <main inert aria-hidden="true">
     <div class="console-tabs" role="group" aria-label="Console views">
       <button data-view="map" aria-pressed="true" aria-controls="map-panel">⌖ Map</button>
       <button data-view="ship" aria-pressed="false" aria-controls="ship-panel">✧ Ship & system</button>
@@ -47,8 +65,7 @@
     </div>
     <section class="command-layout" aria-label="Strategic navigation console">
       <aside class="left-panel" id="ship-panel" aria-label="Ship and system directory">
-        <div class="panel-label">YOUR COMMAND <span>01</span></div>
-        <div class="ship-card"><div class="ship-illustration"><img src="images/sdf-frigate-side-view-transparent.png" alt="Side profile of an SDF frigate" width="2172" height="724" decoding="async"><span>SDF — 07</span></div><div class="ship-title"><h2 data-player-ship-name>SDF Andes</h2><span class="badge">FRIGATE</span></div><p class="muted">Vanguard-class patrol vessel</p><div class="ship-state"><i class="status-dot"></i><span id="ship-status">Holding at Earth</span></div><div class="readiness"><span>VESSEL READINESS</span><strong>100<span>%</span></strong></div><div class="readiness-bar"><span></span></div><div class="systems"><span><i></i> Fusion core</span><b>NOMINAL</b><span><i></i> EPD propulsion</span><b>ONLINE</b><span><i></i> Inertial dampeners</span><b>ACTIVE</b><span><i></i> Radiation shielding</span><b>SECURE</b></div></div>
+        <details class="ship-card map-ship-details"><summary data-player-ship-name>SDF Andes</summary><div class="ship-illustration"><img src="images/sdf-frigate-side-view-transparent.png" alt="Side profile of an SDF frigate" width="2172" height="724" decoding="async"></div><p class="muted">Vanguard-class patrol vessel</p><div class="readiness"><span>HULL INTEGRITY</span><strong>100<span>%</span></strong></div><div class="readiness-bar"><span></span></div><div class="systems"><span><i></i> Fusion core</span><b>ONLINE</b><span><i></i> EPD propulsion</span><b>AVAILABLE</b></div></details>
         <div class="sector-header panel-label"><div class="directory-tabs" role="group" aria-label="System directory"><button id="directory-planets" aria-pressed="true">Planets</button><button id="directory-settlements" aria-pressed="false">Settlements</button><button id="directory-mining" aria-pressed="false">Mining</button></div><span id="directory-count">08</span></div>
         <div id="mining-filter" hidden><label for="company-filter">MINING OPERATOR</label><select id="company-filter"><option value="all">All four companies</option></select></div>
         <div id="planet-directory" class="planet-directory"></div>
@@ -74,23 +91,22 @@
             <g id="bodies"></g><g id="settlements"></g><g id="target-marker"></g><g id="ship-marker"></g></g>
           </svg>
           <div class="map-coordinate"><span>HELIOCENTRIC NAVIGATION GRID</span><span id="cursor-coord">X +0.00 / Y +0.00 AU</span></div>
-          <div class="map-controls"><button id="zoom-in" aria-label="Zoom in" title="Zoom in">+</button><button id="zoom-out" aria-label="Zoom out" title="Zoom out">−</button><span></span><button id="recenter" aria-label="Center map on Sun" title="Center on Sol">⌖</button></div>
+          <div class="map-controls"><button id="zoom-in" aria-label="Zoom in" title="Zoom in">+</button><button id="zoom-out" aria-label="Zoom out" title="Zoom out">−</button><span></span><button id="recenter" aria-label="Reset map view" title="Reset zoom and center on Sol">⌖</button></div>
           <div class="scale-label"><span></span> COMPRESSED SCALE · SITE CALLOUTS OFFSET</div>
           <div class="map-hint" id="map-hint">Select a destination to begin your patrol</div>
         </div>
-        <div class="map-bottom"><div class="legend"><span><i class="legend-ship"></i>Your vessel</span><span><i class="legend-planet"></i>Planet</span><span><i class="legend-site"></i>Settlements</span><span><i class="legend-mine"></i>Mining</span><span><i class="legend-route"></i>Planned course</span></div><button id="reset-view">RESET VIEW ↗</button></div>
-        <div class="time-controls"><div><span class="eyebrow">SIMULATION</span><span id="simulation-status">Standby</span></div><div class="time-buttons"><button id="pause-button" aria-label="Pause or resume simulation">Ⅱ</button><button class="speed active" data-speed="1">1×</button><button class="speed" data-speed="10">10×</button><button class="speed" data-speed="100">100×</button></div><span class="phase-label">PHASE 01 <span>/ STRATEGIC NAVIGATION</span></span></div>
+        <div class="map-bottom"><div class="legend"><span><i class="legend-ship"></i>Your vessel</span><span><i class="legend-planet"></i>Planet</span><span><i class="legend-site"></i>Settlements</span><span><i class="legend-mine"></i>Mining</span><span><i class="legend-route"></i>Planned course</span></div></div>
       </section>
 
       <aside class="right-panel" id="navigation-panel" aria-label="Navigation and flight plan">
         <div class="panel-label">NAVIGATION <span>⌁</span></div>
         <section class="destination-card"><div class="destination-caption"><div class="eyebrow">SELECTED DESTINATION</div><button id="contract-info" class="contract-button" aria-label="View mining contract" hidden>Contract ↗</button></div><div class="destination-heading"><span class="destination-orb" id="destination-orb"></span><div><h2 id="destination-name">Earth</h2><span id="destination-type">TERRESTRIAL PLANET</span></div></div><p id="destination-description">Home of Sol Command. The starting point of your first system patrol.</p><dl><div><dt>Distance from Sol</dt><dd id="destination-au">1.00 AU</dd></div><div><dt>From your vessel</dt><dd id="destination-distance">0.00 AU</dd></div><div><dt>EPD transit estimate</dt><dd id="destination-eta">At destination</dd></div></dl><button class="secondary-button" id="add-waypoint">+ Add to course</button><p class="selection-note" id="selection-note">Choose another destination to plot a course.</p></section>
         <section class="course-section"><div class="panel-label">FLIGHT PLAN <span id="waypoint-count">00 WAYPOINTS</span></div><div id="waypoint-list" class="waypoint-list"></div><div id="waypoint-pagination" class="waypoint-pagination" hidden><button id="previous-waypoints" aria-label="Previous waypoints">←</button><span id="waypoint-page" aria-live="polite"></span><button id="next-waypoints" aria-label="Next waypoints">→</button></div><div id="empty-course" class="empty-course"><span>⌁</span><p>The system is yours to explore.</p><small>Select a planet or any point on the grid, then add it to your course.</small></div><div class="course-totals"><div><span>TOTAL DISTANCE</span><strong id="total-distance">0.00 <small>AU</small></strong></div><div><span>EST. TRAVEL TIME</span><strong id="total-eta">—</strong></div></div><button class="primary-button" id="engage-button" disabled><span>Engage EPD</span><span>↗</span></button><button class="text-button" id="clear-course" disabled>Clear flight plan</button><p class="safety-message" id="safety-message" role="status"></p></section>
-        <section class="activity-section"><div class="panel-label">COMMAND LOG <span class="live-text">LIVE</span></div><ol id="command-log"></ol></section>
+        <details class="activity-section map-command-log"><summary>Command log</summary><ol id="command-log"></ol></details>
       </aside>
     </section>
     <section id="bridge-console" class="bridge-console" data-view="deck" aria-label="Ship bridge areas">
-      <header class="bridge-area-bar"><h1 id="bridge-area-name">Command</h1><div id="bridge-area-tabs" class="bridge-area-tabs" role="tablist" aria-label="Command controls"></div><button id="bridge-view-toggle">Command overview ↗</button><div class="bridge-area-clock"><span>SHIPBOARD TIME · UTC</span><time id="bridge-area-time"></time></div></header>
+      <header class="bridge-area-bar"><h1 id="bridge-area-name">Command</h1><div id="bridge-area-tabs" class="bridge-area-tabs" role="tablist" aria-label="Command controls"></div><button id="bridge-view-toggle">Command overview ↗</button></header>
       <section class="bridge-deck-panel" aria-label="Main bridge perspective view">
         <div class="bridge-deck-header"><span data-player-ship-name data-ship-case="upper" data-ship-suffix=" / MAIN BRIDGE">SDF MARIE CURIE / MAIN BRIDGE</span><span id="bridge-watch">ROUTINE WATCH</span></div>
         <div class="bridge-scene-status"><span class="bridge-scene-indicator" aria-hidden="true"></span><span id="bridge-main-display">SOL SYSTEM / PATROL WATCH</span><span class="bridge-scene-caption">BRIDGE / AFT CUTAWAY</span></div>
@@ -99,22 +115,24 @@
       </section>
       <section id="tactical-console" class="tactical-console" aria-label="Tactical weapons interface"></section>
       <section id="bridge-station-detail" class="bridge-station-detail" aria-label="Selected bridge station">
-        <div id="bridge-station-group"></div><h2 id="bridge-station-name"></h2><p id="bridge-station-summary"></p>
-        <section id="bridge-command-reference" class="bridge-command-reference" aria-labelledby="bridge-reference-title" hidden>
-          <h3 id="bridge-reference-title">Game guide &amp; information</h3>
-          <div class="bridge-reference-actions">
-            <button id="bridge-game-guide" class="bridge-action">How to Play ↗</button>
-            <button id="bridge-game-history" class="bridge-action">History ↗</button>
-            <button id="bridge-game-mission" class="bridge-action">Mission briefing ↗</button>
-            <button id="bridge-game-details" class="bridge-action">Prototype details ↗</button>
-          </div>
+        <h2 id="bridge-station-name"></h2><p id="bridge-station-summary"></p>
+        <section id="bridge-command-watch" class="bridge-command-watch" aria-label="Current watch" hidden>
+          <h3>Active alerts</h3><div id="command-alerts"></div>
+          <h3>Shuttles</h3><div id="command-shuttles"></div>
         </section>
         <dl id="bridge-readouts" class="bridge-readouts"></dl>
         <div id="bridge-actions" class="bridge-actions"></div>
+        <details id="bridge-command-reference" class="bridge-command-reference" hidden>
+          <summary>Game guide &amp; information</summary>
+          <div class="bridge-reference-actions">
+            <button id="bridge-game-guide" class="bridge-action">How to Play ↗</button>
+            <button id="bridge-game-history" class="bridge-action">History ↗</button>
+          </div>
+        </details>
         <div class="bridge-report"><span>LATEST BRIDGE REPORT</span><p id="bridge-last-report" role="status" aria-live="polite"></p></div>
       </section>
     </section>
-    <footer class="page-footer"><span><i class="status-dot"></i> ALL SYSTEMS OPERATIONAL</span><span>SOL DEFENSE FORCE <b> / </b> STRATEGIC COMMAND INTERFACE <b> / </b> 2250</span><button id="about-button">PROTOTYPE v0.1 <span>↗</span></button></footer>
+    <footer class="page-footer"><button id="about-button">About <span>↗</span></button></footer>
   </main>
   <dialog id="new-mission-dialog" aria-labelledby="new-mission-title">
     <button class="dialog-close" data-close-menu-dialog aria-label="Close new mission">×</button>
@@ -162,7 +180,7 @@
     <h2>Welcome to the watch, Captain.</h2>
     <div class="briefing-tabs" role="group" aria-label="Briefing pages"><button data-briefing="mission" aria-pressed="true">Your mission</button><button data-briefing="details" aria-pressed="false">Prototype details</button></div>
     <div id="briefing-mission"><p>It is 2250. A century after the cold fusion breakthrough, humanity can cross its home system in a little over a month. Electromagnetic Pulse Drives, inertial dampeners, and advanced shielding have opened the frontier.</p><p>Your mission: patrol the Solar System. Select a planet or a point on the grid, add waypoints to your flight plan, and engage your EPD. Use the simulation controls to accelerate your journey.</p></div>
-    <div id="briefing-details" class="briefing-note" hidden><strong>First-look assumptions</strong><p>The Vanguard class and the heliopause station are provisional. The outer patrol boundary is set at 120 AU; a nominal 3.8 AU/day makes a radial crossing approximately 32 days. The map uses a compressed radial scale and illustrative planet positions, held fixed during this prototype. Travel uses distances in AU, with straight legs and a safety exclusion around Sol. Complete patrol progress is autosaved in this browser. Use Saves to download or load a JSON save file. Strategic and local flight resume paused after reload.</p></div>
+    <div id="briefing-details" class="briefing-note" hidden><strong>SDF prototype v0.1</strong><p>The Vanguard class and the heliopause station are provisional. The outer patrol boundary is set at 120 AU; a nominal 3.8 AU/day makes a radial crossing approximately 32 days. The map uses a compressed radial scale and illustrative planet positions, held fixed during this prototype. Travel uses distances in AU, with straight legs and a safety exclusion around Sol. Complete patrol progress is autosaved in this browser. Use Saves to download or load a JSON save file. Strategic and local flight resume paused after reload.</p></div>
     <button id="begin-button" class="primary-button">Take command <span>↗</span></button>
     <button id="restart-patrol" class="text-button">Restart patrol at Earth · resets route and shipboard time</button>
   </dialog>

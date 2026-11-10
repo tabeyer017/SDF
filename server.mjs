@@ -13,6 +13,7 @@ allowed.add('sector-bodies.mjs');
 allowed.add('save-game.mjs');
 allowed.add('save-ui.mjs');
 allowed.add('combat-model.mjs');
+allowed.add('boarding-model.mjs');
 allowed.add('combat-console.mjs');
 allowed.add('combat-save.mjs');
 allowed.add('communications-model.mjs');
@@ -21,6 +22,9 @@ allowed.add('start-screen.css');
 allowed.add('start-menu.mjs');
 allowed.add('ship-names.mjs');
 allowed.add('bridge-deck.mjs');
+allowed.add('radar-symbol.mjs');
+allowed.add('tactical-view-model.mjs');
+allowed.add('tactical-view.mjs');
 for (const image of Object.values(shipFiveViews)) allowed.add(image);
 allowed.add('images/sdf-frigate-side-view-transparent.png');
 http.createServer(async (req, res) => {

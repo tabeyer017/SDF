@@ -67,15 +67,15 @@ function furniture(parent,x,z,angle,color,commander=false) {
   for(const item of faces)polygon(parent,item.vertices,item.fill,{'stroke':'#0c151d','stroke-width':.65,'stroke-linejoin':'round',...item.attrs});
 }
 
-export function mountBridgeDeck({root,areas,onSelect}) {
+export function mountBridgeDeck({root,areas,onSelect,onTacticalOpen}) {
   root.replaceChildren();
-  root.setAttribute('viewBox','0 0 1000 675');
-  root.setAttribute('aria-label','Perspective view of the bridge with forward, port, and starboard windows, nine seated crew consoles, and a central commander chair. Select a station to open its controls.');
+  root.setAttribute('viewBox','0 -55 1000 730');
+  root.setAttribute('aria-label','Perspective view of the bridge with forward, port, and starboard tactical screen panels above the windows, nine seated crew consoles, and a central commander chair. Select a station to open its controls or a screen to open the tactical view.');
   const defs=node('defs');
   const floor=node('linearGradient',{id:'bridge-deck-floor',x2:'0',y2:'1'});
   floor.append(node('stop',{'stop-color':'#263a48'}),node('stop',{offset:'1','stop-color':'#101e2a'}));
   defs.append(floor);root.append(defs);
-  const room=node('g',{'aria-hidden':'true'});root.append(room);
+  const room=node('g',{'aria-hidden':'true'}),tacticalScreens=node('g');root.append(room,tacticalScreens);
   const hull=[[-4.4,0,-5],[4.4,0,-5],[6,0,-3],[6,0,5.4],[4.8,0,6.1],[-4.8,0,6.1],[-6,0,5.4],[-6,0,-3]];
   // Visible hull thickness makes the open aft edge read as a cutaway.
   for(let i=0;i<hull.length;i++){
@@ -92,19 +92,21 @@ export function mountBridgeDeck({root,areas,onSelect}) {
   let windowIndex=0;
   for(const [a,b] of walls){
     const at=(t,y)=>[a[0]+(b[0]-a[0])*t,y,a[2]+(b[2]-a[2])*t];
-    polygon(room,[at(0,0),at(1,0),at(1,3.7),at(0,3.7)],'#253541',{stroke:'#667a86','stroke-width':1.2});
+    polygon(room,[at(0,0),at(1,0),at(1,4.95),at(0,4.95)],'#253541',{stroke:'#667a86','stroke-width':1.2});
     polygon(room,[at(0,.13),at(1,.13),at(1,1.25),at(0,1.25)],'#1a2935',{stroke:'#3e5260','stroke-width':.8});
     line(room,[at(.015,3.72),at(.985,3.72)],'#b5cfda',3,{opacity:.62});
     line(room,[at(.02,1.1),at(.98,1.1)],'#79b4bd',2,{opacity:.75});
     const windowShape=[at(.025,1.4),at(.975,1.4),at(.975,3.38),at(.025,3.38)];
     const clip=node('clipPath',{id:`bridge-window-${windowIndex++}`});clip.append(node('polygon',{points:points(windowShape)}));defs.append(clip);
     polygon(room,windowShape,'#000000',{stroke:'#0b151d','stroke-width':8});
-    const sky=node('g',{'clip-path':`url(#${clip.id})`});room.append(sky);
+    const sky=node('g',{'clip-path':`url(#${clip.id})`,class:'bridge-window-stars'});room.append(sky);
     // A fixed, sparse star field continues across all three sides of the glass.
     for(let i=0;i<100;i++){
       const sx=(i*137.508+31)%1000,sy=(i*73.19+19)%470;
       sky.append(node('circle',{cx:sx,cy:sy,r:i%11===0?1.25:.7,fill:'#eef3ff',opacity:.4+(i%5)*.13}));
     }
+    const shield=polygon(room,windowShape,'#9bb6c4',{class:'bridge-window-blast-shield',stroke:'#d2e1e8','stroke-width':1});
+    shield.append(node('title',{},'Blast shield down · tactical screens provide the external view'));
     const panes=Math.hypot(b[0]-a[0],b[2]-a[2])>5?5:2;
     for(let i=1;i<panes;i++)line(room,[at(i/panes,1.37),at(i/panes,3.43)],'#657985',5);
     for(const t of [0,1]){
@@ -112,6 +114,15 @@ export function mountBridgeDeck({root,areas,onSelect}) {
       line(room,[at(t,.2),at(t,3.6)],'#20303e',4);
     }
     line(room,[at(.02,1.35),at(.98,1.35)],'#718b96',3);
+    const direction=windowIndex===1?'port':windowIndex===3?'forward':windowIndex===5?'starboard':null;
+    if(direction){
+      const start=project(at(.08,4.78)),right=project(at(.92,4.78)),bottom=project(at(.08,3.58));
+      const matrix=[(right[0]-start[0])/640,(right[1]-start[1])/640,(bottom[0]-start[0])/160,(bottom[1]-start[1])/160,...start];
+      const screen=node('g',{transform:`matrix(${matrix.join(' ')})`,class:'bridge-tactical-screen','data-tactical-direction':direction,role:'button',tabindex:0,'aria-label':`Open ${direction} HUD`});
+      screen.append(node('rect',{x:0,y:0,width:640,height:160,rx:5,fill:'#07131d',stroke:'#6b99a9','stroke-width':4}),node('text',{x:22,y:38,fill:'#8cabb9','font-size':24,'font-family':'monospace'},`${direction.toUpperCase()} / HUD`),node('circle',{cx:610,cy:132,r:4,fill:'#74b4c5'}));
+      screen.onclick=()=>onTacticalOpen(direction);screen.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();onTacticalOpen(direction);}};
+      tacticalScreens.append(screen);
+    }
   }
   // Inset walkways and a raised command island with two shallow aft steps.
   for(const x of [-2.1,2.1])line(room,[[x,.015,-1.1],[x,.015,5.5]],'#7dbfc6',2,{opacity:.45});
@@ -127,8 +138,8 @@ export function mountBridgeDeck({root,areas,onSelect}) {
   const layouts={
     flight:{label:[500,180],positions:[[-1.35,-3.2,0],[1.35,-3.2,0]],names:['System navigation','Local flight']},
     'tactical-security':{label:[195,453],positions:[[-4.8,-.8,90],[-4.8,2.05,90]],names:['Tactical','Security']},
-    'science-comms':{label:[805,453],positions:[[4.8,-.8,-90],[4.8,2.05,-90]],names:['Science','Communications']},
-    'engineering-support':{label:[500,611],positions:[[-2.8,4.55,180],[0,4.55,180],[2.8,4.55,180]],names:['Engineering','Operations','Life support']},
+    communications:{label:[805,453],positions:[[4.8,.65,-90]],names:['Communications']},
+    'engineering-support':{label:[500,611],positions:[[-3.75,4.55,180],[-1.25,4.55,180],[1.25,4.55,180],[3.75,4.55,180]],names:['Engineering','Science','Operations','Life support']},
     command:{label:[500,273],positions:[[0,.8,0]],names:['Commander']}
   };
   // Each console bank is one accessible control, matching the existing areas.
@@ -156,5 +167,5 @@ export function mountBridgeDeck({root,areas,onSelect}) {
     label.onclick=activate;labels.append(label);
     group.append(node('desc',{id:`bridge-deck-description-${area.id}`},area.summary));
   }
-  for(const [text,x,y] of [['FORWARD',500,30],['PORT',111,240],['STARBOARD',889,240],['AFT ACCESS',500,656]])root.append(node('text',{x,y,'text-anchor':'middle',class:'bridge-room-direction','aria-hidden':'true'},text));
+  for(const [text,x,y] of [['FORWARD',500,-39],['PORT',111,240],['STARBOARD',889,240],['AFT ACCESS',500,656]])root.append(node('text',{x,y,'text-anchor':'middle',class:'bridge-room-direction','aria-hidden':'true'},text));
 }

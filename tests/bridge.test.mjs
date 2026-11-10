@@ -18,14 +18,16 @@ test('helm engagement requires a valid plotted safe route and holds cannot start
   assert.deepEqual(flightControlState({active:true,routeCount:2,unsafe:false}),{canEngage:false,canPause:true,canAbort:true});
 });
 
-test('existing station selections reopen within the four areas without losing saved preferences',()=>{
-  const memberships={command:'command',helm:'flight',navigation:'flight',tactical:'tactical-security',security:'tactical-security',science:'science-comms',communications:'science-comms',engineering:'engineering-support',ops:'engineering-support',environment:'engineering-support'};
+test('existing station selections reopen in their assigned areas without losing saved preferences',()=>{
+  const memberships={command:'command',helm:'flight',navigation:'flight',tactical:'tactical-security',security:'tactical-security',science:'engineering-support',communications:'communications',engineering:'engineering-support',ops:'engineering-support',environment:'engineering-support'};
   for(const [selected,area] of Object.entries(memberships)){
     const restored=restoreBridgeState({selected,temperature:23,seat:'first-officer',watch:'heightened',ops:'engineering',sensor:'planetary',radarRange:200});
-    assert.equal(restored.selected,selected==='helm'?'navigation':selected);assert.equal(bridgeAreaFor(restored.selected).id,area);
+    assert.equal(restored.selected,selected==='helm'?'navigation':selected==='security'?'tactical':selected);assert.equal(bridgeAreaFor(restored.selected).id,area);
     assert.equal(restored.temperature,23);assert.equal(restored.watch,'heightened');assert.equal(restored.radarRange,200);
   }
   assert.equal(bridgeAreas.length,5);assert.equal(bridgeAreaFor('missing').id,'command');
+  assert.deepEqual(bridgeAreas.find(area=>area.id==='tactical-security').tabs,[['tactical','Tactical']]);
+  assert.equal(bridgeAreaFor('security').id,'tactical-security');
 });
 
 test('Flight Control offers System Map and one Local Flight tab, including legacy Helm selections',()=>{

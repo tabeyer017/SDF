@@ -2,10 +2,12 @@ import { settlementDefinitions } from './settlements.mjs';
 import { miningStations } from './mining.mjs';
 import { shipPerformance, standDownAgainst, surrenderShip, orderAlliedSupport, requestSupportShip, supportStatus } from './combat-model.mjs';
 import {playerShipName,defaultShipName} from './ship-names.mjs';
+import {shuttleStatus} from './boarding-model.mjs';
 
 export const MAX_MESSAGES=200;
 export const communicationChannels=[
   {id:'hq',name:'Earth HQ · Sol Command',kind:'hq',description:'Secure command relay · Earth'},
+  {id:'shuttles',name:'Shuttle control',kind:'hq',description:'Shipboard shuttle and marine operations'},
   ...settlementDefinitions.map(s=>({id:s.id,name:s.name,kind:'station',description:s.type})),
   {id:'heliopause-station',name:'Heliopause station',kind:'station',description:'Outer patrol station'},
   ...miningStations.map(s=>({id:s.id,name:s.name,kind:'station',description:s.companyName}))
@@ -32,15 +34,20 @@ export function restoreCommunications(saved){
     for(const [key,max] of [['channelId',100],['channelName',160],['subject',100],['body',1600],['location',120]])check(typeof m[key]==='string'&&m[key].length<=max);
     check(['hq','station','ship'].includes(m.kind)&&['sent','received'].includes(m.direction)&&typeof m.read==='boolean'&&Number.isFinite(m.time)&&m.time>=0&&m.time<=365000*86400);
     check(communicationChannels.some(c=>c.id===m.channelId&&c.kind===m.kind)||(m.kind==='ship'&&/^ship:\d+:[\w-]+$/.test(m.channelId)));
-    return {id:m.id,channelId:m.channelId,channelName:m.channelName,kind:m.kind,direction:m.direction,subject:m.subject,body:m.body,time:m.time,location:m.location,read:m.read};
+    if(m.contactChannelId!==undefined)check(m.channelId==='shuttles'&&typeof m.contactChannelId==='string'&&m.contactChannelId.length<=100&&/^ship:\d+:[\w-]+$/.test(m.contactChannelId));
+    return {id:m.id,channelId:m.channelId,channelName:m.channelName,kind:m.kind,direction:m.direction,subject:m.subject,body:m.body,time:m.time,location:m.location,read:m.read,...(m.contactChannelId?{contactChannelId:m.contactChannelId}:{})};
   });
   const alerts=saved.alerts.map(id=>{check(typeof id==='string'&&/^ship:\d+:[\w-]+$/.test(id));return id;});
   check(new Set(alerts).size===alerts.length);
   return {nextId:saved.nextId,selectedId:saved.selectedId,filter:saved.filter,encounter:saved.encounter,alerts,messages};
 }
 export function unreadCommunications(state){return state.messages.filter(m=>m.direction==='received'&&!m.read).length;}
-function addMessage(state,recipient,direction,subject,body,context){
-  state.messages.push({id:state.nextId++,channelId:recipient.id,channelName:recipient.name,kind:recipient.kind,direction,subject,body,time:stamp(context),location:context.sector.location,read:direction==='sent'});
+export function channelContactId(channelId,encounter){
+  const match=/^ship:(\d+):([\w-]+)$/.exec(channelId);
+  return match&&match[1]===String(encounter)?match[2]:null;
+}
+function addMessage(state,recipient,direction,subject,body,context,contactChannelId){
+  state.messages.push({id:state.nextId++,channelId:recipient.id,channelName:recipient.name,kind:recipient.kind,direction,subject,body,time:stamp(context),location:context.sector.location,read:direction==='sent',...(contactChannelId?{contactChannelId}:{})});
   if(state.messages.length>MAX_MESSAGES)state.messages.splice(0,state.messages.length-MAX_MESSAGES);
 }
 export function communicationsRecipients(state,context){
@@ -55,6 +62,7 @@ export function communicationsRecipients(state,context){
   return recipients;
 }
 export function communicationRequests(recipient){
+  if(recipient?.id==='shuttles')return ['status','acknowledge'].map(id=>({id,label:requestLabels[id]}));
   if(!recipient)return [];
   const ids=['hail','status','report','assistance'];
   if(recipient.kind==='hq')ids.push('orders','escort','threat','support');
@@ -75,6 +83,7 @@ function ceaseEngagement(combat,id){
   standDownAgainst(combat,id);
 }
 function respond(recipient,request,context){
+  if(recipient.id==='shuttles')return request==='status'?(context.combat.boarding?.shuttles.map(shuttle=>`Shuttle ${shuttle.number}: ${shuttleStatus(shuttle)}`).join('\n')||'No boarding shuttles assigned.'):'Shuttle control: acknowledged.';
   const {combat,sector}=context,ship=recipient.kind==='ship'?combat.contacts[recipient.contactId]:null;
   const ownName=playerShipName(combat);
   const weak=ship&&(ship.systems.hull.hp/ship.systems.hull.max<=.4||ship.mounts.every(m=>ship.systems[m.id].hp===0));
@@ -130,6 +139,11 @@ export function sendCommunication(state,context,recipientId,request,detail=''){
 export function pollCommunications(state,context){
   if(communicationLink(context,{available:true}))return false;
   let changed=false;
+  for(const notice of context.combat.boarding?.reports??[]){
+    if(notice.reported)continue;
+    const contactChannelId=notice.targetId?`ship:${state.encounter}:${notice.targetId}`:undefined;
+    addMessage(state,communicationChannels.find(channel=>channel.id==='shuttles'),'received',notice.subject,notice.body,context,contactChannelId);notice.reported=true;changed=true;
+  }
   for(const [id,ship] of Object.entries(context.combat.contacts))for(const notice of ship.combatResponse?.notices??[]){
     if(notice.reported)continue;
     if(ship.surrendered&&notice.type!=='surrender'){notice.reported=true;changed=true;continue;}

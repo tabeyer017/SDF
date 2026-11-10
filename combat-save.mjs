@@ -1,5 +1,6 @@
 import { createCombat,createDamageShip,weapons,missileOptions,missileVolleySizes,cannonBurstSizes,ciwsFiringTime,radarBurnThrough,weaponAimOptions } from './combat-model.mjs';
 import {migratePlayerShipName} from './ship-names.mjs';
+import {restoreBoarding} from './boarding-model.mjs';
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 function check(ok){if(!ok)throw new Error('Invalid damage / combat data in save file.');}
 function num(v,min=0,max=1e12){check(Number.isFinite(v)&&v>=min&&v<=max);return v;}
@@ -182,5 +183,6 @@ export function restoreCombat(saved,contacts){
   }
   check(result.support?.phase!=='servicing'||result.service?.provider==='tender');
   check(!result.own.jobs.some(j=>j.station)||!!result.service);
+  result.boarding=restoreBoarding(saved.boarding,result,contacts);
   result.log=array(saved.log,8).map(line=>text(line));return result;
 }

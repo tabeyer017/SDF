@@ -10,7 +10,7 @@ function setup(){const sector=createSector(),combat=createCombat(sector.contacts
 
 test('directory includes HQ, every station and settlement, and only live ships in Tactical range',()=>{
   const {state,context}=setup(),recipients=communicationsRecipients(state,context);
-  assert.equal(communicationChannels.length,25);assert.equal(new Set(communicationChannels.map(r=>r.id)).size,25);
+  assert.equal(communicationChannels.length,26);assert.equal(new Set(communicationChannels.map(r=>r.id)).size,26);
   for(const id of ['hq','moon-station','mars-colony','heliopause-station','mine-alpha','mine-omega'])assert.ok(recipients.some(r=>r.id===id));
   assert.ok(recipients.some(r=>r.contactId==='E-04'));assert.ok(!recipients.some(r=>r.contactId==='E-06'));
   assert.match(recipients.find(r=>r.contactId==='U-01').name,/Unknown/);

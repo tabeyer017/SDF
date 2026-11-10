@@ -1,8 +1,9 @@
-import { contactTypes } from './tactical-model.mjs';
+import { contactTypes, contactClosureRate, contactDistance } from './tactical-model.mjs';
 import {playerShipName} from './ship-names.mjs';
-import { maneuverNames, maneuverTelemetry, predictedPath, sectorHazards, SENSOR_RANGE, isHardTurn, LOCAL_SIMULATION_RATES } from './sector-model.mjs';
+import { maneuverNames, maneuverTelemetry, predictedPath, sectorHazards, SENSOR_RANGE, isHardTurn } from './sector-model.mjs';
 import { flightControlState } from './bridge-model.mjs';
 import { sectorBodies, planetaryOverview } from './sector-bodies.mjs';
+import { boardingBalance } from './boarding-model.mjs';
 
 const el=(tag,cls,text)=>{const n=document.createElement(tag);n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 const svg=(tag,attrs={},text)=>{const n=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);if(text!==undefined)n.textContent=text;return n;};
@@ -29,11 +30,9 @@ export function mountManeuverControls({flight,targetId,onNavigate,canExecute=()=
   wrap.append(form,el('p','target-fit-note','Target maneuvers use autopilot and bow tracking. Hard turns rotate the bow 40° without a target and retain current flight motion.'),button('View Local Flight ↗',onNavigate));choice.onchange();return wrap;
 }
 
-export function mountSectorConsole({root,flight,openSystem,strategic}) {
+export function mountSectorConsole({root,flight,strategic,getContactId,openDefense,interceptUnavailable}) {
   let radius=220,plane='top',camera=null,chartedSector=null,bodies=[];
   root.dataset.mode='navigation';
-  const heading=el('header','sector-heading'), title=el('div','');title.append(el('span','tactical-eyebrow','LOCAL FLIGHT'));
-  heading.append(title,button('Solar System / EPD ↗',openSystem));
   const toolbar=el('div','sector-toolbar'),ranges=el('div','sector-ranges');ranges.setAttribute('role','group');ranges.setAttribute('aria-label','Sector map radius');
   for(const value of [100,200,220,250,500,1000,2500]){const b=button(`${value.toLocaleString()} km`,()=>{radius=value;camera=null;refresh();});b.dataset.radius=value;ranges.append(b);}
   const view=el('select','');view.setAttribute('aria-label','Sector projection');view.append(Object.assign(el('option','','Top · X / Y'),{value:'top'}),Object.assign(el('option','','Rear · X / Z'),{value:'rear'}));view.onchange=()=>{plane=view.value;if(camera)fitBodies();refresh();};
@@ -49,8 +48,13 @@ export function mountSectorConsole({root,flight,openSystem,strategic}) {
   const caption=el('p','sector-map-caption','Click chart to append a waypoint · fixed sector axes · Z can be set below');mapArea.append(chart,caption);
   const side=el('aside','sector-controls');side.setAttribute('aria-label','Local flight controls');
   const status=el('p','sector-status');status.setAttribute('role','status');const readout=el('p','sector-readout'),safety=el('p','sector-safety');
-  const clock=el('div','sector-clock');const pause=button('Run local simulation',()=>{flight.toggle();refresh();});const rate=el('select','');rate.setAttribute('aria-label','Local simulation speed');for(const value of LOCAL_SIMULATION_RATES)rate.append(Object.assign(el('option','',`${value}× local time`),{value}));rate.onchange=()=>flight.setRate(Number(rate.value));clock.append(pause,rate);
-  const nav=el('section','sector-navigation');nav.append(el('h3','','ROUTE PLANNING'),el('p','sector-help','Click the chart to add stops, then fly the route. Autopilot handles thrust and braking and stops if the known debris field blocks the course.'));
+  const contactPanel=el('section','flight-contact');contactPanel.hidden=true;
+  const contactName=el('h3','','Selected contact');contactName.tabIndex=-1;
+  const contactDetail=el('p',''),contactActions=el('div','sector-primary-actions');
+  const intercept=button('Intercept',()=>flight.command('intercept',getContactId(),5));
+  const defense=button('Defense / Systems ↗',openDefense);
+  contactActions.append(intercept,defense);contactPanel.append(contactName,contactDetail,contactActions);
+  const nav=el('section','sector-navigation');nav.append(el('h3','','ROUTE PLANNING'));
   const waypointForm=el('form','sector-waypoint-form');const x=field(waypointForm,'Waypoint X · km',0,-100000,100000,.1),y=field(waypointForm,'Waypoint Y · km',100,-100000,100000,.1),z=field(waypointForm,'Waypoint Z · km',0,-100000,100000,.1);
   const add=el('button','bridge-action','Add waypoint');add.type='submit';waypointForm.append(add);waypointForm.onsubmit=e=>{e.preventDefault();flight.add({x:Number(x.value),y:Number(y.value),z:Number(z.value)});refresh();};
   const route=el('ol','sector-route');const routeActions=el('div','sector-route-actions'),fly=button('Fly route',()=>{flight.patrol();refresh();});routeActions.append(button('Clear patrol route',()=>{flight.clearRoute();refresh();}));
@@ -60,14 +64,14 @@ export function mountSectorConsole({root,flight,openSystem,strategic}) {
   const helmForm=el('form','sector-helm-form');const thrust=field(helmForm,'Thrust · %',0,-100,100),bearing=field(helmForm,'Thrust bearing · °',0,0,360),elevation=field(helmForm,'Thrust elevation · °',0,-90,90),bow=field(helmForm,'Bow bearing · °',0,0,360);
   const apply=el('button','bridge-action','Apply manual controls');apply.type='submit';helmForm.append(apply);helmForm.onsubmit=e=>{e.preventDefault();flight.manual({thrust:Number(thrust.value),bearing:Number(bearing.value),elevation:Number(elevation.value),bow:Number(bow.value)});refresh();};helm.append(helmForm);
   const transitControls=el('details','sector-advanced'),epd=el('section','sector-epd');transitControls.append(el('summary','','EPD transit controls'),epd);
-  const epdEngage=button('Engage plotted EPD course',strategic.engage),epdPause=button('Pause EPD transit',strategic.pause),epdAbort=button('Abort EPD transit',strategic.abort);
-  epd.append(epdEngage,epdPause,epdAbort);
+  const epdEngage=button('Engage plotted EPD course',strategic.engage),epdAbort=button('Abort EPD transit',strategic.abort);
+  epd.append(epdEngage,epdAbort);
   const coast=button('Cancel maneuver / coast',()=>{flight.coast();refresh();}),brake=button('Stop ship',()=>{flight.brake();refresh();});brake.classList.add('sector-stop');helm.append(coast);const position=el('p','sector-position');
   const tracks=el('details','sector-track-list');tracks.append(el('summary','','Sensor tracks / last known'));const trackList=el('ul','');tracks.append(trackList);
   const bodySection=el('details','sector-body-list sector-advanced');bodySection.append(el('summary','','Planets & moons'));const bodyList=el('ul',''),bodyNote=el('p','','Fixed chart positions · guidance avoids training debris only.');bodySection.append(bodyList,bodyNote);
   const primary=el('div','sector-primary-actions');primary.append(fly,brake);
-  side.append(el('span','tactical-eyebrow','FLIGHT STATUS'),status,readout,safety,clock,primary,nav,helm,transitControls,bodySection,position,tracks);
-  workspace.append(mapArea,side);root.append(heading,toolbar,tabs,workspace);
+  side.append(contactPanel,readout,status,safety,primary,nav,helm,transitControls,bodySection,position,tracks);
+  workspace.append(mapArea,side);root.append(toolbar,tabs,workspace);
   new ResizeObserver(entries=>{const {width,height}=entries[0].contentRect;if(width&&height)chart.style.setProperty('--sector-font',`${Math.max(10,8.5/Math.min(width/660,height/540))}px`);}).observe(chart);
   chart.onclick=event=>{
     const p=chart.createSVGPoint();p.x=event.clientX;p.y=event.clientY;const local=p.matrixTransform(chart.getScreenCTM().inverse());
@@ -81,20 +85,41 @@ export function mountSectorConsole({root,flight,openSystem,strategic}) {
     const s=flight.sector;
     if(chartedSector!==s){chartedSector=s;bodies=sectorBodies(s.location);camera=null;radius=220;helm.open=false;coordinates.open=false;transitControls.open=false;thrust.value=String(s.manual.thrust);bearing.value=String(s.manual.bearing);elevation.value=String(s.manual.elevation);bow.value=String(Math.round((Math.atan2(s.facing.x,s.facing.y)*180/Math.PI+360)%360));}
     const live=flight.contacts(),origin=camera||s.own,axis=plane==='top'?'y':'z';
+    const contactId=getContactId(),contact=live.find(item=>item.id===contactId&&!item.stale);
+    contactPanel.hidden=!contactId;
+    if(contactId){
+      const error=interceptUnavailable(contact);
+      contactName.textContent=contact?.name??s.memory[contactId]?.observed.name??'Selected contact';
+      if(contact){
+        const distance=contactDistance(contact),closure=contactClosureRate(contact);
+        const shuttleRange=distance<=boardingBalance.range?'Within shuttle range':`Shuttle range ${boardingBalance.range} km`;
+        const closing=closure===null?'':` · Closure ${signed(closure)} KPH`;
+        contactDetail.textContent=`${distance.toFixed(1)} km${closing} · ${shuttleRange}${error?` · ${error}`:''}`;
+      }else contactDetail.textContent=error;
+      intercept.disabled=!!error;intercept.title=error||'Approach and hold at 5 km';
+      defense.disabled=!contact||flight.inTransit();
+    }
     const px=p=>(p.x-origin.x)/radius*250,py=p=>-(p[axis]-origin[axis])/radius*250;
-    status.textContent=flight.inTransit()?'EPD in transit · local controls unavailable':s.status;
-    readout.textContent=flightReadout(flight);safety.textContent=`Navigation safety: ${s.safety}`;
+    const speed=Math.hypot(s.own.vx,s.own.vy,s.own.vz);
+    const requested=s.order&&['maintain','open'].includes(s.order.mode)?` · Requested range ${s.order.range} km`:'';
+    readout.textContent=`Ship speed ${number(speed)} KPH${requested}`;
+    readout.hidden=flight.inTransit();
+    const repeatedStatus=/^(Local simulation|Vector Drive ready|EPD transit|Navigation braking|Braking to rest|Holding zero velocity)|(?:Navigation calculating|autopilot executing|autopilot engaged)$/.test(s.status);
+    status.textContent=flight.inTransit()?'Local controls unavailable during transit':repeatedStatus?'':s.status;
+    status.hidden=!status.textContent;
+    const blocked=s.safety.startsWith('Blocked: ');
+    safety.textContent=blocked?`Navigation braking · ${s.safety.slice(9)} · Plot a waypoint around the hazard.`:s.safety;
+    safety.hidden=flight.inTransit()||!blocked&&!s.safety.startsWith('Manual control');
     overview.disabled=!bodies.length;
     bodyList.replaceChildren(...bodies.map(b=>el('li','',`${b.name} · ${b.kind} · ${number(Math.max(0,Math.hypot(b.x-s.own.x,b.y-s.own.y,b.z-s.own.z)-b.radius))} km to surface`)));
     if(!bodies.length)bodyList.append(el('li','','No planetary chart at this deep-space location.'));
-    pause.textContent=s.running?'Pause local simulation':'Run local simulation';pause.disabled=flight.inTransit();rate.value=String(s.rate);
     ranges.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(Number(b.dataset.radius)===radius)));
     route.replaceChildren(...s.route.map(p=>{const li=el('li','',`${p.name} · X ${p.x.toFixed(1)} / Y ${p.y.toFixed(1)} / Z ${p.z.toFixed(1)} km`);return li;}));
     if(!s.route.length)route.append(el('li','','No patrol waypoints plotted.'));
     routeActions.querySelectorAll('button').forEach(b=>{b.disabled=!s.route.length||flight.inTransit();});
     fly.disabled=!s.route.length||flight.inTransit();
     add.disabled=flight.inTransit()||s.route.length>=8;apply.disabled=flight.inTransit();coast.disabled=brake.disabled=flight.inTransit();
-    const transit=strategic.snapshot(),availability=flightControlState(transit);epdEngage.disabled=!availability.canEngage;epdPause.disabled=!availability.canPause;epdAbort.disabled=!availability.canAbort;epdPause.textContent=transit.paused?'Resume EPD transit':'Pause EPD transit';
+    const availability=flightControlState(strategic.snapshot());epdEngage.disabled=!availability.canEngage;epdAbort.disabled=!availability.canAbort;
     position.textContent=`${s.location} sector · T+${s.time.toFixed(0)} s · Ship X ${s.own.x.toFixed(1)} / Y ${s.own.y.toFixed(1)} / Z ${s.own.z.toFixed(1)} km`;
     chart.replaceChildren(svg('rect',{x:-250,y:-250,width:500,height:500,fill:'#091a21',stroke:'#38535f'}));
     for(let i=-2;i<=2;i++)chart.append(svg('path',{d:`M${i*100} -250V250M-250 ${i*100}H250`,stroke:i===0?'#729ba8':'#476976','stroke-width':i===0?1.4:1,'vector-effect':'non-scaling-stroke'}));
@@ -133,5 +158,5 @@ export function mountSectorConsole({root,flight,openSystem,strategic}) {
     const ship=svg('g',{transform:`translate(${px(s.own)} ${py(s.own)})`});ship.append(svg('circle',{r:7,fill:'#091a21',stroke:'#b3eff0'}),svg('path',{d:`M0 0L${s.facing.x*18} ${-s.facing[axis]*18}`,stroke:'#b3eff0','stroke-width':2}),svg('text',{x:11,y:16,fill:'#b3eff0','font-size':11},playerShipName(flight.combat).toUpperCase()));layer.append(ship);
     chart.append(svg('text',{x:-250,y:267,fill:'#9fbfc9','font-size':11},`CYAN: ${Math.round(s.sensorRange??SENSOR_RANGE)} KM SENSORS / PREDICTION · GOLD: PATROL · HOLLOW: LAST KNOWN`));
   }
-  return {refresh};
+  return {refresh,focusContact(){setView('controls');contactName.focus();}};
 }

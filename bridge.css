@@ -38,7 +38,6 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 .command-chairs { fill: #526372; stroke: #9babba; stroke-width: 1.2; }
 .bridge-deck-station.selected .command-platform, .bridge-deck-station:focus-visible .command-platform { stroke: #d5b77c; stroke-width: 2; }
 .bridge-station-detail { min-width: 0; min-height: 0; padding: 22px; border-left: 1px solid var(--line); display: flex; flex-direction: column; }
-#bridge-station-group { font: var(--font-small) var(--mono); letter-spacing: 1px; text-transform: uppercase; color: var(--station-color); }
 #bridge-station-name { font-size: 32px; line-height: 1.1; margin: 12px 0; }
 #bridge-station-summary { font-size: 11px; color: #92a2b4; line-height: 1.7; margin: 0 0 15px; }
 .bridge-readouts { margin: 0; display: grid; gap: 0; }
@@ -112,7 +111,6 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
   .bridge-deck-footer { padding: 7px 10px; }
   .bridge-station-detail { padding: 8px 12px; }
   #bridge-station-name { font-size: 22px; margin: 4px 0 7px; }
-  #bridge-station-group { font-size: var(--font-small); }
   .bridge-readouts > div { padding: 5px 0; }
   .bridge-readouts dt { font-size: var(--font-small); margin-bottom: 3px; }
   .bridge-readouts dd { font-size: var(--font-small); }
@@ -419,6 +417,44 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 }
 
 /* Perspective bridge cutaway: projected furniture stays separate from the HUD. */
+.bridge-window-blast-shield { display: none; }
+.blast-shields-down .bridge-window-blast-shield { display: block; }
+.blast-shields-down .bridge-window-stars { visibility: hidden; }
+.bridge-tactical-screen { cursor: pointer; }
+.bridge-tactical-screen:is(:hover,:focus-visible) { filter: brightness(1.3); outline: none; }
+.tactical-view-surface { display: block; width: 100%; height: auto; font-family: var(--mono); }
+.tactical-view-label { fill: #d4edf2; font-size: max(16px,var(--tactical-view-font,11px)); letter-spacing: 2px; }
+.tactical-view-readout,.tactical-view-tick { fill: #8cabb9; font-size: var(--tactical-view-font,11px); }
+.tactical-view-glyph { transform: scale(var(--tactical-view-symbol-scale,1)); }
+.hud-contact-glyph { transform: scale(var(--hud-contact-scale,1)); }
+.tactical-view-contact { cursor: help; outline: none; }
+.tactical-view-contact[role="button"] { cursor: pointer; }
+.hud-priority-number { fill: #07131d; font: 700 11px var(--mono); pointer-events: none; }
+.tactical-view-contact.active-target .tactical-view-glyph { filter: drop-shadow(0 0 3px #f3dfaa77); }
+.tactical-view-contact:focus-visible .tactical-view-glyph { filter: drop-shadow(0 0 4px #fff); }
+.tactical-view-dialog { box-sizing: border-box; width: min(1100px,calc(100vw - 24px)); max-width: none; max-height: calc(100dvh - 24px); overflow: auto; padding: 20px; background: #0b1722; border: 1px solid #5c8293; }
+.tactical-view-dialog::backdrop { background: #020810bb; }
+.tactical-view-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.tactical-view-header h2 { margin: 0; font: 22px var(--body); color: #dfedf2; }
+.tactical-view-close { flex-shrink: 0; width: 38px; height: 38px; border: 1px solid #557180; background: #142734; color: #e1eef2; font-size: 26px; cursor: pointer; }
+.tactical-view-nav { display: flex; flex-wrap: wrap; height: auto; gap: 8px; margin-top: 16px; }
+.tactical-view-nav button { flex: 1; min-height: 38px; padding: 8px 12px; border: 1px solid #3d5b6b; background: #101e2b; color: #a6becb; font: 12px var(--mono); cursor: pointer; }
+.tactical-view-nav button[aria-pressed="true"] { background: #28414e; border-color: #95c8d3; color: #ebf8fa; }
+.tactical-view-dialog .tactical-view-surface { max-height: 55dvh; }
+.tactical-view-status { color: #91afbe; font: 11px/1.6 var(--mono); margin: 12px 0; }
+.tactical-view-legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px 24px; margin-top: 12px; color: #afc3cd; font: 11px var(--mono); }
+.tactical-view-legend span { display: flex; align-items: center; gap: 6px; }
+.tactical-view-legend svg { width: 16px; height: 16px; flex-shrink: 0; }
+.tactical-view-legend svg.radar-fire-key { width: 24px; }
+.tactical-view-tooltip { z-index: 30; }
+.tactical-view-tooltip[hidden] { display: none; }
+.bridge-deck-footer:has(button) { flex-wrap: wrap; gap: 8px; }
+.bridge-deck-footer .bridge-action { margin-left: auto; padding: 5px 9px; }
+@media (max-width: 650px) {
+  .tactical-view-dialog { padding: 12px; }
+  .tactical-view-header h2 { font-size: 18px; }
+  .tactical-view-nav button { flex-basis: 40%; }
+}
 .bridge-deck-panel:has(.bridge-perspective) {
   background: radial-gradient(ellipse at 50% 43%,#21384655,transparent 65%),#080f18;
   overflow: hidden;
@@ -470,16 +506,13 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 .sector-console { display: none; min-width: 0; min-height: 0; }
 .sector-view-tabs { display: none; }
 .bridge-console:is([data-station="navigation"],[data-station="helm"]) > :is(.bridge-deck-panel,.bridge-station-detail) { display: none; }
-.bridge-console:is([data-station="navigation"],[data-station="helm"]) > .sector-console { display: grid; grid-column: 2/-1; grid-row: 1; grid-template-rows: auto auto minmax(0,1fr); background: #080f19; }
-.sector-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 17px 20px 10px; }
-.sector-heading .bridge-action { font: var(--font-small) var(--mono); }
+.bridge-console:is([data-station="navigation"],[data-station="helm"]) > .sector-console { display: grid; grid-column: 2/-1; grid-row: 1; grid-template-rows: auto minmax(0,1fr); background: #080f19; }
 @media (min-width: 651px) and (max-height: 850px) {
   body[data-screen="bridge"]:has(.bridge-console[data-station="navigation"]) .page-heading { display: none; }
   body[data-screen="bridge"]:has(.bridge-console[data-station="navigation"]) main { grid-template-rows: minmax(0,1fr) auto; }
-  .sector-console[data-mode="navigation"] .sector-heading { padding: 7px 20px; }
   .sector-console[data-mode="navigation"] .sector-map-caption { padding-block: 5px; }
 }
-.sector-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 20px 12px; }
+.sector-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 20px; }
 .sector-ranges { display: flex; gap: 4px; flex-wrap: wrap; }
 .sector-toolbar button { font: var(--font-small) var(--mono); padding: 7px; }
 .sector-ranges button[aria-pressed="true"] { border-color: #84d2d7; color: #a5edf0; background: #84d2d714; }
@@ -561,15 +594,13 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 @media (max-width: 800px) {
   .sector-workspace { grid-template-columns: minmax(0,1fr) 250px; }
   .sector-controls { padding: 13px; }
-  .sector-heading,.sector-toolbar { padding-inline: 12px; }
+  .sector-toolbar { padding-inline: 12px; }
 }
 @media (max-width: 650px) {
   .bridge-console:is([data-station="navigation"],[data-station="helm"])[data-view="deck"] > .bridge-deck-panel { display: flex; }
   .bridge-console:is([data-station="navigation"],[data-station="helm"])[data-view="deck"] > .sector-console { display: none; }
-  .sector-heading { padding-block: 9px; }
-  .sector-heading .bridge-action { font-size: var(--font-small); padding: 7px; }
   .sector-workspace { grid-template-columns: minmax(0,1fr); grid-template-rows: minmax(150px,42%) minmax(0,1fr); }
-  .bridge-console:is([data-station="navigation"],[data-station="helm"]) > .sector-console { grid-template-rows: auto auto auto minmax(0,1fr); }
+  .bridge-console:is([data-station="navigation"],[data-station="helm"]) > .sector-console { grid-template-rows: auto auto minmax(0,1fr); }
   .sector-view-tabs { display: flex; gap: 6px; padding: 0 12px 8px; }
   .sector-view-tabs button { flex: 1; font: var(--font-small) var(--mono); padding: 8px; border: 1px solid #3b515e; color: #a5bac6; }
   .sector-view-tabs button[aria-pressed="true"] { border-color: #84d2d7; color: #a5edf0; background: #84d2d710; }
@@ -581,9 +612,7 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
   .sector-toolbar button { padding: 6px; font-size: var(--font-small); }
 }
 @media (max-height: 480px) {
-  .sector-heading { display: none; }
   .sector-toolbar { padding-block: 5px; }
-  .bridge-console:is([data-station="navigation"],[data-station="helm"]) > .sector-console { grid-template-rows: auto minmax(0,1fr); }
   .sector-workspace { grid-template-columns: minmax(0,1fr) 240px; grid-template-rows: minmax(0,1fr); }
 }
 @media (max-height: 480px) and (max-width: 650px) {
@@ -671,9 +700,9 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 .tactical-combat-panel .combat-maneuvers .target-fit-note { margin: 0; }
 .damage-console { display: none; min-width: 0; min-height: 0; padding: 18px; gap: 8px; background: #09121c; }
 .bridge-console[data-station="engineering"] > :is(.bridge-deck-panel,.bridge-station-detail) { display: none; }
-.bridge-console[data-station="engineering"] > .damage-console { display: grid; grid-column: 2/-1; grid-row: 1; grid-template-rows: auto auto auto auto minmax(0,1fr); }
+.bridge-console[data-station="engineering"] > .damage-console { display: grid; grid-column: 2/-1; grid-row: 1; grid-template-rows: auto auto auto minmax(0,1fr); }
 .damage-console > p { margin: 0; }
-.damage-workspace { display: grid; grid-template-columns: minmax(0,1fr) 280px; gap: 18px; min-height: 0; }
+.damage-workspace { display: grid; grid-row: 4; grid-template-columns: minmax(0,1fr) 280px; gap: 18px; min-height: 0; }
 .damage-equipment { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; min-width: 0; min-height: 0; }
 .damage-systems,.damage-weapons,.damage-controls { overflow: auto; min-width: 0; min-height: 0; scrollbar-width: thin; padding-right: 8px; }
 .damage-workspace h3 { color: #b8c8d4; font: 11px var(--mono); margin: 14px 0; }
@@ -688,7 +717,7 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 .damage-system progress::-webkit-progress-value { background: var(--integrity-color); }
 .damage-system progress::-moz-progress-bar { background: var(--integrity-color); }
 .damage-system button { grid-column: 2; grid-row: 2; padding: 6px; font: var(--font-small) var(--mono); }
-.damage-controls > button { display: block; width: 100%; margin-bottom: 8px; }
+.damage-controls > button, .damage-service-actions > button { display: block; width: 100%; margin-bottom: 8px; }
 .repair-queue { color: #b4c9d3; padding-left: 18px; font: var(--font-small)/1.7 var(--mono); }
 .repair-queue button { margin-left: 8px; padding: 3px; font-size: var(--font-small); }
 @media (max-width: 1100px), (max-height: 760px) { .bridge-console[data-station="engineering"] > .damage-console { grid-column: 1/-1; grid-row: 2; } }
@@ -699,8 +728,18 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 .communications-console { display: none; min-width: 0; min-height: 0; background: #09121c; }
 .bridge-console[data-station="communications"] > :is(.bridge-deck-panel,.bridge-station-detail) { display: none; }
 .bridge-console[data-station="communications"] > .communications-console { display: grid; grid-column: 2/-1; grid-row: 1; grid-template-rows: auto minmax(0,1fr); }
-.comms-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px; border-bottom: 1px solid #2b3e4b; }
-.comms-unread { color: #a9c7c9; font: var(--font-small) var(--mono); }
+.topbar .messages-button { position: relative; display: grid; place-items: center; flex: 0 0 38px; width: 38px; height: 38px; margin-left: auto; color: #8295a6; border: 1px solid #334154; border-radius: 4px; }
+.messages-button svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+.topbar .messages-button.has-unread { color: #f2cb81; background: #3a2d18; border-color: #b99655; }
+.messages-count { position: absolute; top: -7px; right: -7px; min-width: 19px; padding: 2px 4px; border-radius: 10px; color: #101925; background: #f2cb81; font: 600 var(--font-small) var(--mono); text-align: center; }
+.topbar .messages-button + .command-status { margin-left: 0; }
+.communication-alert { position: fixed; z-index: 10; top: calc(clamp(48px,7vh,68px) + 12px); right: clamp(12px,2vw,32px); width: min(380px,calc(100vw - 24px)); max-height: calc(100dvh - 92px); overflow: auto; padding: 23px; color: var(--text); background: #101d29; border: 1px solid #b99655; border-radius: 5px; box-shadow: 0 16px 60px #0009; }
+.communication-alert .eyebrow { padding-right: 24px; color: #f2cb81; font-size: var(--font-small); }
+.communication-alert h2 { margin: 13px 0 8px; font-size: 27px; }
+.communication-alert p { margin: 0 0 18px; color: #b9ccd7; font-size: 12px; overflow-wrap: anywhere; }
+.communication-alert .dialog-close { width: 32px; height: 32px; right: 8px; top: 7px; }
+body[data-menu="open"] .communication-alert { display: none; }
+@media (max-width: 650px) { .topbar .messages-button { margin-left: 0; flex-basis: 32px; width: 32px; height: 32px; } }
 .comms-workspace { display: grid; grid-template-columns: 230px minmax(0,1fr); min-width: 0; min-height: 0; }
 .comms-directory { display: grid; grid-template-rows: auto auto minmax(0,1fr); gap: 10px; min-height: 0; min-width: 0; padding: 14px; border-right: 1px solid #2b3e4b; }
 .comms-directory .bridge-setting { margin: 0; }
@@ -734,10 +773,10 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 .comms-compose-actions { display: flex; flex-wrap: wrap; gap: 7px; }
 .comms-compose-actions button { padding: 7px 10px; font-size: var(--font-small); }
 @media (max-width: 1100px), (max-height: 760px) { .bridge-console[data-station="communications"] > .communications-console { grid-column: 1/-1; grid-row: 2; } }
-@media (max-width: 750px) { .comms-workspace { grid-template-columns: 185px minmax(0,1fr); } .comms-channel-heading,.comms-messages,.comms-composer { padding: 12px; } .comms-heading { padding: 14px; } }
+@media (max-width: 750px) { .comms-workspace { grid-template-columns: 185px minmax(0,1fr); } .comms-channel-heading,.comms-messages,.comms-composer { padding: 12px; } }
 @media (max-width: 550px) { .comms-workspace { grid-template-columns: minmax(0,1fr); grid-template-rows: 150px minmax(0,1fr); } .comms-directory { grid-template-columns: 1fr 1fr; grid-template-rows: auto minmax(0,1fr); gap: 6px; padding: 8px; border-right: 0; border-bottom: 1px solid #2b3e4b; } .comms-channel-list { grid-column: 1/-1; } .comms-channel-list h3 { display: none; } .comms-recipient { padding: 5px; } .comms-conversation { overflow: auto; grid-template-rows: auto minmax(100px,1fr) auto; } .comms-message.is-sent { margin-left: 10px; } .comms-channel-description { display: none; } }
 
-/* Four bridge areas share their original consoles and simulation state. */
+/* Bridge areas share their original consoles and simulation state. */
 body[data-screen="bridge"] .page-heading { display: none; }
 body[data-screen="bridge"] main { grid-template-rows: minmax(0,1fr) auto; }
 body[data-screen="bridge"] .bridge-console { grid-template-columns: minmax(0,1fr) 320px; grid-template-rows: auto minmax(0,1fr); }
@@ -758,8 +797,6 @@ body[data-screen="bridge"] .bridge-console { grid-template-columns: minmax(0,1fr
 .bridge-console[data-area]:not([data-area="command"]) .bridge-station-detail > * { width: 100%; max-width: 850px; }
 .bridge-console[data-area]:not([data-area="command"]) .bridge-readouts { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 30px; }
 .bridge-console[data-area]:not([data-area="command"]) .bridge-actions { grid-template-columns: repeat(2,minmax(0,1fr)); }
-.bridge-console[data-area="command"] #bridge-station-summary { font-size: var(--font-small); }
-.bridge-console[data-area="command"] .bridge-readouts { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 12px; }
 .bridge-console[data-area="command"] .bridge-actions { gap: 7px; }
 .bridge-console[data-area="command"] .bridge-deck-label { font: 500 11.5px var(--body); fill: #d9e4ea; }
 .bridge-deck-area-icon { font: 24px var(--body); fill: var(--station-color); }
@@ -798,7 +835,6 @@ body[data-screen="bridge"] .bridge-system-map > .command-layout { display: grid;
   .bridge-area-bar > #bridge-view-toggle { grid-column: 2; grid-row: 2; justify-self: end; }
   .bridge-area-clock span { font-size: var(--font-small); }.bridge-area-clock time { font-size: var(--font-small); }
   .bridge-console[data-area]:not([data-area="command"]) .bridge-actions { grid-template-columns: minmax(0,1fr); }
-  .bridge-console[data-area="command"] #bridge-station-summary { display: block; }
   .bridge-deck { display: none; }
   .bridge-mobile-areas { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; padding: 12px; overflow: auto; min-height: 0; align-content: start; flex: 1; }
   .bridge-mobile-areas button { min-width: 0; display: grid; gap: 8px; padding: 14px 10px; text-align: center; border: 1px solid #3b4d60; border-radius: 8px; background: #172433; }
@@ -832,23 +868,28 @@ body[data-screen="bridge"] .bridge-system-map > .command-layout { display: grid;
 .tactical-mfd-rail[data-side="left"] { border-right: 1px solid #2b3e4b; }
 .tactical-mfd-rail[data-side="right"] { border-left: 1px solid #2b3e4b; }
 .tactical-mfd-button { position: relative; display: grid; align-content: center; justify-items: center; gap: 3px; width: 100%; height: 100%; min-width: 0; min-height: 0; padding: 4px 2px; border: 1px solid #48616d; border-radius: 4px; background: linear-gradient(#172732,#101d27); color: #c4d5dd; box-shadow: inset 0 1px #8aa3ad22,0 2px 0 #02080c; }
-.mfd-button-index { font: var(--font-small) var(--mono); line-height: 1; letter-spacing: .6px; color: #6f929f; }
 .mfd-button-icon { display: block; width: 19px; height: 19px; }
 .mfd-button-tooltip { position: absolute; z-index: 20; left: calc(100% + 9px); top: 50%; transform: translateY(-50%); visibility: hidden; opacity: 0; padding: 7px 9px; border: 1px solid #63818d; border-radius: 3px; background: #142431; color: #e0ebf1; box-shadow: 0 4px 15px #0008; font: var(--font-small)/1.3 var(--mono); white-space: nowrap; pointer-events: none; }
 .tactical-mfd-rail[data-side="right"] .mfd-button-tooltip { left: auto; right: calc(100% + 9px); }
 .tactical-mfd-button:is(:hover,:focus-visible) .mfd-button-tooltip { visibility: visible; opacity: 1; }
 .tactical-mfd-button:hover, .tactical-mfd-button[aria-pressed="true"] { border-color: #c6aa70; color: #f0d89e; background: #243039; }
-.tactical-mfd-button[aria-pressed="true"] .mfd-button-index { color: #d5b77c; }
 .tactical-mfd-button:focus-visible { outline: 2px solid #84d2d7; outline-offset: 3px; }
 .tactical-mfd-screen { display: grid; grid-template-rows: auto minmax(0,1fr); min-width: 0; min-height: 0; overflow: hidden; background: #0d1723; color: #c5d5df; container: tactical-display / inline-size; }
 .tactical-mfd-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid #2b3e4b; background: #101f2b; }
 .tactical-mfd-header > div { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .tactical-mfd-header .tactical-eyebrow { flex-shrink: 0; border-right: 1px solid #39515e; padding-right: 8px; font-size: var(--font-small); letter-spacing: .5px; }
 .tactical-mfd-header h2 { margin: 0; font: 500 20px/1.1 var(--display); color: #e2eaf0; }
-.mfd-screen-index { flex-shrink: 0; color: #7896a6; font: var(--font-small) var(--mono); white-space: nowrap; }
 .tactical-mfd-screen > :is(.tactical-target-panel,.tactical-combat-panel) { grid-row: 2; grid-column: 1; border: 0; padding: 14px; overflow: auto; overscroll-behavior: contain; }
 .tactical-mfd-screen [hidden] { display: none !important; }
 .tactical-mfd-pane { min-width: 0; overflow-wrap: anywhere; }
+.tactical-mfd-hud { grid-row: 2; grid-column: 1; min-height: 0; padding: 10px; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.tactical-mfd-hud:focus-visible { outline: 1px solid #84d2d7; outline-offset: -2px; }
+.tactical-mfd-hud .tactical-view-nav { gap: 4px; margin-top: 8px; }
+.tactical-mfd-hud .tactical-view-nav button { padding: 6px; min-width: 0; font-size: 11px; }
+.tactical-mfd-hud .tactical-view-status { margin: 8px 0; }
+.tactical-mfd-hud .tactical-view-legend { gap: 8px 12px; }
+.tactical-combined-systems { margin-top: 18px; padding-top: 14px; border-top: 1px solid #344b59; }
+.tactical-combined-systems > h3 { margin: 0 0 12px; font: 12px var(--mono); color: #b9d1dc; }
 .tactical-mfd-screen .weapon-mount-columns { grid-template-columns: minmax(0,1fr); gap: 0; }
 .tactical-mfd-screen .weapon-command-bar { top: -14px; }
 .tactical-mfd-pane .target-telemetry { gap: 12px 18px; padding: 12px 0; }
@@ -876,7 +917,6 @@ body[data-screen="bridge"] .bridge-system-map > .command-layout { display: grid;
   .tactical-mfd-header { padding: 8px; }
   .tactical-mfd-header .tactical-eyebrow { font-size: var(--font-small); }
   .tactical-mfd-header h2 { font-size: 18px; }
-  .mfd-screen-index { display: none; }
   .tactical-mfd-screen > :is(.tactical-target-panel,.tactical-combat-panel) { padding: 10px; }
   .tactical-mfd-screen .weapon-command-bar { top: -10px; }
   .tactical-mfd-screen .target-telemetry { grid-template-columns: minmax(0,1fr); }
@@ -916,4 +956,173 @@ body[data-screen="bridge"] .bridge-system-map > .command-layout { display: grid;
 @media (max-width: 650px) {
   .topbar nav { flex: 1; min-width: 0; height: auto; flex-wrap: wrap; justify-content: flex-end; align-content: center; gap: 2px 10px; }
   .topbar nav button { flex: 0 0 auto; min-height: 22px; white-space: nowrap; }
+}
+
+/* Security shares the defense display; compact spacing preserves readable text. */
+.bridge-console[data-area="tactical-security"] .bridge-area-bar { padding: 6px 12px 0; gap: 6px 22px; }
+.bridge-console[data-area="tactical-security"] .bridge-area-bar h1 { margin-bottom: 6px; }
+.bridge-console[data-area="tactical-security"] .bridge-area-tabs button { padding: 6px 10px 7px; }
+.bridge-console[data-area="tactical-security"] .bridge-area-clock { margin-bottom: 6px; }
+.tactical-console > .tactical-heading { padding: 5px 10px; row-gap: 4px; }
+.tactical-console .tactical-workspace { padding: 8px; gap: 8px; }
+.tactical-console > .tactical-note { padding: 4px 10px; }
+.tactical-mfd-header { padding-block: 6px; }
+.tactical-mfd-screen[data-display="defense"] > .tactical-combat-panel { padding: 8px 10px; }
+.tactical-mfd-pane[id$="-display-defense"] .weapons-control { margin: 0; padding-bottom: 7px; gap: 5px; }
+.tactical-mfd-pane[id$="-display-defense"] .combat-actions { gap: 4px; }
+.tactical-mfd-pane[id$="-display-defense"] .combat-actions button { padding: 5px 7px; min-height: 28px; }
+.tactical-mfd-pane[id$="-display-defense"] .combat-note { margin: 2px 0; line-height: 1.4; }
+.tactical-security { padding-block: 5px; border-bottom: 1px solid #344b59; }
+.tactical-security h3 { margin: 0 0 5px; color: #d5b77c; font: var(--font-small)/1.4 var(--mono); letter-spacing: .5px; }
+.security-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px; margin-bottom: 3px; }
+.security-heading h3 { margin: 0; }
+.security-readouts { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 3px 10px; margin: 0 0 3px; }
+.security-readouts > div { min-width: 0; }
+.security-readouts dt { color: #90a9ba; font: var(--font-small)/1.4 var(--body); }
+.security-readouts dd { margin: 0; color: #d7e4ea; font: var(--font-small)/1.4 var(--body); overflow-wrap: anywhere; }
+.security-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.security-actions .bridge-action { margin: 0; padding: 5px 7px; min-height: 28px; font-size: var(--font-small); }
+.security-actions .security-action-icon, .tactical-mfd-pane[id$="-display-defense"] .combat-actions .defense-action-icon { position: relative; display: inline-grid; place-items: center; width: 30px; height: 28px; min-height: 28px; padding: 4px; }
+.security-action-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.defense-action-icon[aria-pressed="true"], .security-action-icon[aria-pressed="true"] { color: #f2cb81; background: #30291b; border-color: #a58b57; }
+.defense-action-tooltip { position: absolute; z-index: 15; top: calc(100% + 5px); right: 0; width: max-content; max-width: 250px; padding: 6px 8px; color: #e0ebf1; background: #142431; border: 1px solid #63818d; border-radius: 3px; box-shadow: 0 4px 15px #0008; font: var(--font-small)/1.4 var(--body); text-align: left; visibility: hidden; opacity: 0; pointer-events: none; }
+:is(.security-action-icon,.defense-action-icon):is(:hover,:focus-visible) > .defense-action-tooltip { visibility: visible; opacity: 1; }
+.security-doctrine { margin: 6px 0 0; color: #9fb7c4; font: var(--font-small)/1.4 var(--body); }
+.tactical-mfd-pane[id$="-display-defense"] .tactical-combined-systems { margin-top: 7px; padding-top: 0; border-top: 0; }
+.tactical-combined-systems > h3 { margin-bottom: 5px; font-size: var(--font-small); line-height: 1.4; }
+.tactical-combined-systems .combat-readout { margin: 4px 0; font: var(--font-small)/1.4 var(--mono); }
+.tactical-combined-systems .target-combat-details { padding-bottom: 3px; margin-bottom: 3px; }
+.tactical-combined-systems .target-empty { margin: 4px 0; line-height: 1.4; }
+.tactical-combined-systems .target-integrity-list { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 3px 12px; margin-top: 4px; }
+.tactical-combined-systems .target-integrity-row { grid-template-columns: minmax(0,1fr) 38px; gap: 4px; }
+.tactical-combined-systems .target-integrity-value { padding: 1px 2px; }
+.tactical-combined-systems .target-equipment { padding: 4px 0 0; }
+.tactical-combined-systems .target-equipment h4 { margin-bottom: 2px; line-height: 1.4; }
+.tactical-combined-systems .target-equipment p { line-height: 1.4; }
+@container tactical-display (min-width: 500px) {
+  .tactical-mfd-pane[id$="-display-defense"] > .weapons-control { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  .tactical-mfd-pane[id$="-display-defense"] > .weapons-control > h4 { margin-right: auto; }
+  .tactical-mfd-pane[id$="-display-defense"] > .weapons-control > .combat-note { flex-basis: 100%; }
+  .tactical-mfd-pane[id$="-display-defense"] > .weapons-control > .combat-actions { display: contents; }
+  .tactical-combined-systems .target-integrity-list { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 2px 8px; }
+  .target-facility-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 3px 10px; }
+  .target-facility-grid .target-crew { grid-column: 1/-1; }
+}
+@container tactical-display (max-width: 380px) {
+  .security-readouts { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .tactical-combined-systems .target-integrity-list { grid-template-columns: minmax(0,1fr); }
+}
+
+/* Orders precede each numbered shuttle launch; deployed craft stay unavailable. */
+.boarding-shuttles { border-top: 1px solid #344b59; margin-top: 3px; padding-top: 3px; }
+.boarding-shuttles h4 { margin: 0; color: #b9d1dc; font: var(--font-small)/1.4 var(--mono); }
+.boarding-target { margin: 2px 0 3px; color: #a8c1d0; font: var(--font-small)/1.4 var(--body); }
+.boarding-shuttle-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 5px 10px; }
+.boarding-shuttle-row { display: grid; grid-template-columns: minmax(0,1fr) 42px; align-items: center; gap: 3px 5px; min-width: 0; }
+.boarding-shuttle-row select { min-width: 0; width: 100%; height: 28px; padding: 3px 5px; border: 1px solid #48616d; border-radius: 2px; background: #101d27; color: #d7e4ea; font: var(--font-small) var(--body); }
+.boarding-shuttle-row select:disabled { opacity: .5; }
+.boarding-shuttle-row .shuttle-launch { position: relative; display: flex; align-items: center; justify-content: center; gap: 3px; min-width: 0; width: 42px; height: 28px; padding: 3px; }
+.shuttle-launch svg { width: 17px; height: 17px; }
+.shuttle-launch b { font: 600 12px var(--mono); }
+.boarding-shuttle-status { grid-column: 1/-1; color: #96b0c0; font: var(--font-small)/1.4 var(--body); overflow-wrap: anywhere; }
+.shuttle-launch:is(:hover,:focus-visible) > .defense-action-tooltip { visibility: visible; opacity: 1; }
+.comms-workspace { grid-row: 2; }
+.comms-shuttle-control { padding: 8px 14px; border-bottom: 1px solid #344b59; background: #101d27; }
+.comms-shuttle-control h3 { margin: 0; color: #b9d1dc; font: var(--font-small)/1.4 var(--mono); }
+.comms-shuttle-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+.comms-shuttle-heading h3 { margin: 0; }
+.comms-shuttle-heading button { padding: 4px 7px; font-size: var(--font-small); }
+.comms-shuttle-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px 16px; margin-top: 5px; }
+.comms-shuttle-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.comms-shuttle-row > span { color: #b9d1dc; font: var(--font-small)/1.4 var(--body); overflow-wrap: anywhere; }
+.comms-shuttle-row button { flex-shrink: 0; padding: 5px 8px; min-height: 28px; font-size: var(--font-small); }
+@container tactical-display (max-width: 380px) { .boarding-shuttle-list { grid-template-columns: minmax(0,1fr); } }
+@media (max-width: 550px) { .comms-shuttle-list { grid-template-columns: minmax(0,1fr); } }
+.target-facility-grid .target-equipment h4 { display: flex; align-items: center; gap: 4px; }
+.facility-info { position: relative; display: inline-grid; place-items: center; flex: 0 0 20px; width: 20px; height: 20px; padding: 0; color: #b5cbd4; border: 1px solid #48616d; border-radius: 3px; }
+.facility-info svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.facility-info:is(:hover,:focus-visible) > .defense-action-tooltip { visibility: visible; opacity: 1; }
+.facility-info > .defense-action-tooltip { top: auto; bottom: calc(100% + 5px); left: 0; right: auto; }
+.target-facility-grid > :nth-child(2) .facility-info > .defense-action-tooltip { left: auto; right: 0; }
+
+/* Every station shares the watch and simulation controls. */
+body[data-screen="bridge"] { grid-template-rows: auto minmax(0,1fr); }
+body[data-screen="bridge"] > main { grid-area: 2 / 1; }
+.topbar { display: block; padding: 0; }
+.bridge-top-row { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 24px; min-height: 55px; padding: 0 clamp(12px,2vw,32px); }
+.bridge-top-row .brand { width: auto; }
+.topbar .station-nav { height: auto; margin: 0; justify-content: center; align-self: stretch; gap: 3px; flex-wrap: nowrap; }
+.station-nav button, .bridge-utilities button { min-height: 36px; padding: 6px 11px; color: #b1bfce; font: 13px var(--body); }
+.station-nav button[aria-current="page"] { color: var(--gold); background: #d5b77c0d; box-shadow: inset 0 -2px var(--gold); }
+.station-nav button:focus-visible { outline-offset: -3px; }
+.topbar .station-nav .messages-button { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; width: auto; height: auto; margin: 0; border: 0; border-radius: 0; }
+.station-nav .messages-button svg { width: 17px; height: 17px; }
+.station-nav .messages-count { position: static; min-width: 17px; padding: 1px 4px; margin: 0; display: inline-block; }
+.bridge-utilities { display: flex; gap: 2px; }
+.bridge-utilities button { font-size: 12px; }
+.ship-watch-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; min-height: 38px; padding: 4px clamp(12px,2vw,32px); border-top: 1px solid var(--line); background: #101b28; color: #bccdd8; font: 12px/1.35 var(--body); }
+.ship-watch-context { display: flex; flex: 1 1 270px; align-items: center; gap: 10px; min-width: 0; }
+.ship-watch-context strong { flex-shrink: 0; color: var(--text); }
+#watch-order { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ship-watch-clock { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ship-watch-clock time, #watch-mode { font: var(--font-small) var(--mono); }
+.ship-watch-clock time { color: #9fb2c0; }
+.ship-watch-clock :is(button, select), #watch-alert { min-height: 27px; padding: 3px 8px; border: 1px solid #455a6a; border-radius: 3px; color: #e0edf2; background: #142332; font: 12px var(--body); }
+#watch-alert { color: #ffd18a; border-color: #886942; background: #37281a; }
+.communication-alert { position: relative; grid-area: 2 / 1; top: auto; right: auto; align-self: start; justify-self: end; margin: 10px clamp(12px,2vw,32px); }
+.bridge-area-bar, .bridge-console[data-area="tactical-security"] .bridge-area-bar { padding: 0 14px; min-height: 42px; gap: 5px 18px; }
+.bridge-area-bar h1, .bridge-console[data-area="tactical-security"] .bridge-area-bar h1 { margin: 5px 0; }
+.bridge-area-tabs button { padding: 8px 10px; }
+.bridge-command-watch { padding: 0 0 10px; }
+.bridge-command-watch h3 { color: var(--gold); margin: 0 0 4px; font: 11px var(--mono); text-transform: uppercase; }
+.bridge-command-watch h3:not(:first-child) { margin-top: 12px; }
+.bridge-command-watch > div { display: flex; flex-wrap: wrap; gap: 5px; font-size: 12px; color: #b9ccd7; }
+.bridge-command-watch button { padding: 4px 6px; text-align: left; }
+.bridge-command-reference summary, .command-settings summary, .healthy-systems summary, .repair-guide summary, .damage-service summary, .damage-log summary, .map-ship-details summary, .map-command-log summary { cursor: pointer; color: #c4d5df; font-size: 12px; }
+.command-settings-fields { display: grid; gap: 7px; margin-top: 8px; }
+.command-settings-fields .combat-note { margin: 0; }
+.bridge-command-reference { margin: 12px 0; }
+.bridge-command-reference .bridge-reference-actions { margin-top: 8px; }
+.flight-contact { border: 1px solid #455a6a; border-radius: 4px; background: #132231; padding: 10px; margin-bottom: 14px; }
+.flight-contact h3 { margin: 0; color: #e0edf2; font: 500 20px var(--display); }
+.flight-contact p { color: #bdcfdb; margin: 4px 0 8px; font: 12px/1.4 var(--body); }
+.flight-contact .sector-primary-actions { margin: 0; }
+.comms-contact-action { margin-top: 7px; padding: 5px 8px; }
+.damage-workspace { overflow: auto; align-items: start; }
+.damage-equipment { display: block; }
+.damage-systems, .damage-controls { overflow: visible; }
+.damage-system .damage-repair-status { grid-column: 2; grid-row: 2; align-self: center; font: 11px var(--body); color: #c8ad84; }
+.healthy-systems, .repair-guide, .damage-service, .damage-log { margin: 10px 0; padding: 8px; border: 1px solid var(--line); }
+.damage-service-actions > :last-child { margin-bottom: 0; }
+.page-footer { justify-content: end; }
+.left-panel .map-ship-details { align-self: start; margin: 0; padding: 6px 0; }
+.map-ship-details .ship-illustration { margin-top: 8px; }
+.right-panel .map-command-log { margin-top: 0; display: block; }
+.map-command-log[open] ol { max-height: 90px; overflow: auto; }
+.map-command-log[open] li:nth-child(n+2) { display: flex; }
+.radar-iff-info { position: relative; color: #b8d5df; text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
+.radar-iff-info > .mfd-button-tooltip { top: calc(100% + 6px); left: auto; right: 0; transform: none; }
+.radar-iff-info:is(:hover,:focus-visible) > .mfd-button-tooltip { visibility: visible; opacity: 1; }
+.tactical-console > .tactical-heading { justify-content: flex-end; overflow: visible; z-index: 1; }
+@media (max-width: 980px) and (min-width: 600px), (max-height: 620px) and (min-width: 600px) {
+  .left-panel .map-ship-details { grid-row: 1/-1; }
+}
+@media (max-width: 880px) {
+  .bridge-top-row { grid-template-columns: minmax(0,1fr) auto; gap: 0 8px; }
+  .bridge-utilities { grid-area: 1 / 2; }
+  .topbar .station-nav { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); }
+  .topbar .station-nav button { min-width: 0; white-space: normal; line-height: 1.15; justify-content: center; padding: 5px 2px; }
+  .ship-watch-context { flex-basis: 100%; }
+}
+@media (max-width: 650px) {
+  .bridge-top-row .brand-name > span { display: none; }
+  .bridge-area-bar, .bridge-console[data-area="tactical-security"] .bridge-area-bar { display: flex; padding-inline: 8px; gap: 4px 9px; }
+  .bridge-area-bar h1 { font-size: 20px; }
+  #bridge-view-toggle { margin-left: auto; }
+  .ship-watch-bar { gap: 5px 8px; }
+  .ship-watch-clock { gap: 6px; }
+  .topbar .station-nav .messages-button { gap: 2px; }
+  .station-nav .messages-button svg { flex: 0 0 12px; width: 12px; height: 12px; }
+  .damage-console { overflow: hidden; }
+  .damage-workspace { display: block; }
 }
