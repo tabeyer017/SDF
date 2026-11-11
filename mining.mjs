@@ -1,4 +1,4 @@
-import { at } from './navigation.mjs';
+import { at, GAME_YEAR } from './navigation.mjs';
 
 export const CONTRACT_AUTHORITY = 'United Nations of Earth';
 export const MINING_SYMBOL_PATH = 'M-8-5 0-10 8-5V5L0 10-8 5ZM-5 5 4-4M-4-5Q2-8 6-1';
@@ -18,7 +18,7 @@ export const miningStations = names.map((letter,index)=>{
     id:`mine-${letter.toLowerCase()}`, name:`${letter} station`, letter, kind:'mining',
     companyId:company.id, companyName:company.name, companyCode:company.code,
     color:company.color, au, ...at(au,8+index*22.5), type:'MINING STATION · UNE CONTRACT',
-    contract:{ id:`UNE-MIN-2250-${String(index+1).padStart(3,'0')}`, issuer:CONTRACT_AUTHORITY, status:'Active' },
+    contract:{ id:`UNE-MIN-${GAME_YEAR}-${String(index+1).padStart(3,'0')}`, issuer:CONTRACT_AUTHORITY, status:'Active' },
     description:`An asteroid-belt mining station owned by ${company.name}, operating under a mining contract issued by the ${CONTRACT_AUTHORITY} government.`
   };
 });

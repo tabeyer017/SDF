@@ -351,6 +351,15 @@ dialog p { font-size: 11px; line-height: 1.65; }
 .planet-group.selected .selection-ring { opacity: 1; }
 .planet-group.selected .planet-label { fill: #bac5d1; }
 .legend-site { border: 1px solid var(--gold); transform: rotate(45deg); }
+.legend { flex-wrap: wrap; }
+.legend i.legend-mission { width: auto; height: auto; color: #ff686c; font: 700 15px/1 var(--mono); }
+.mission-group { cursor: pointer; }
+.mission-hit { fill: transparent; }
+.mission-cross { stroke: #ff686c; stroke-width: 2.8; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.mission-leader { stroke: #ff686c; stroke-width: 1; stroke-dasharray: 2 3; pointer-events: none; }
+.mission-group.selected .selection-ring, .mission-group:hover .selection-ring { opacity: 1; stroke: #ff686c; }
+.mission-label { visibility: hidden; pointer-events: none; fill: #ffb1b4; font: var(--chart-label-size, 18px) var(--body); paint-order: stroke; stroke: #080f19; stroke-width: 4px; }
+.mission-group:hover + .mission-label, .mission-group:focus-visible + .mission-label, .mission-group.selected + .mission-label { visibility: visible; }
 @media (max-width: 1200px) { .legend > span:nth-child(2) { display: none; } }
 @media (max-width: 980px), (max-height: 620px) {
   .settlement-directory .site-item { font-size: var(--font-small); }

@@ -1,10 +1,11 @@
 import { communicationsRecipients,communicationRequests,communicationLink,sendCommunication,markChannelRead,channelContactId } from './communications-model.mjs';
+import { gameDate } from './navigation.mjs';
 import {playerShipName} from './ship-names.mjs';
 import {shuttleStatus} from './boarding-model.mjs';
 const el=(tag,cls,text)=>{const node=document.createElement(tag);node.className=cls;if(text!==undefined)node.textContent=text;return node;};
 const button=(text,fn)=>{const node=el('button','bridge-action',text);node.type='button';node.onclick=fn;return node;};
 function field(label,input){const wrap=el('label','bridge-setting');wrap.append(el('span','',label),input);input.setAttribute('aria-label',label);return wrap;}
-function date(seconds){return new Date(Date.UTC(2250,0,1)+seconds*1000).toISOString().slice(0,16).replace('T',' ')+' UTC';}
+function date(seconds){return gameDate(seconds).toISOString().slice(0,16).replace('T',' ')+' UTC';}
 
 export function mountCommunicationAlerts({getState,onOpen}){
   const $=id=>document.getElementById(id),icon=$('messages-button'),countLabel=$('messages-count'),popup=$('communication-alert');
@@ -14,7 +15,10 @@ export function mountCommunicationAlerts({getState,onOpen}){
   $('dismiss-communication-alert').onclick=()=>{dismiss();icon.focus();};
   $('open-communication-alert').onclick=()=>open(pending.at(-1)?.channelId);
   popup.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();dismiss();icon.focus();}});
-  icon.onclick=()=>open(getState().messages.find(message=>message.direction==='received'&&!message.read)?.channelId);
+  icon.onclick=()=>{
+    const state=getState(),unread=state.messages.filter(message=>message.direction==='received'&&!message.read);
+    open((unread.find(message=>message.id===state.mission?.id)??unread[0])?.channelId);
+  };
   function refresh(){
     const state=getState();
     // Loading a patrol updates its badge without replaying old notifications.
@@ -36,7 +40,7 @@ export function mountCommunicationAlerts({getState,onOpen}){
   refresh();return {refresh};
 }
 
-export function mountCommunications({root,getState,getContext,onChange,onRecall=()=>({ok:false,message:'Shuttle recall unavailable.'}),onOpenContact=()=>false}){
+export function mountCommunications({root,getState,getContext,onChange,onRecall=()=>({ok:false,message:'Shuttle recall unavailable.'}),onOpenContact=()=>false,onOpenMission,onDeclineMission}){
   root.className='communications-console';root.setAttribute('aria-label','Communications console');
   const shuttleControl=el('section','comms-shuttle-control');shuttleControl.setAttribute('aria-label','Shuttle recall control');
   const shuttleLabel=el('h3','','SHUTTLE CONTROL'),shuttleRows=el('div','comms-shuttle-list'),recallStatus=el('p','comms-result');
@@ -114,7 +118,8 @@ export function mountCommunications({root,getState,getContext,onChange,onRecall=
     request.disabled=!!error;detail.disabled=!!error;send.disabled=!!error;
     preview.textContent=`Includes your location (${context.sector.location}) and hull integrity (${Math.round(context.combat.own.systems.hull.hp/context.combat.own.systems.hull.max*100)}%).`;
     const ownName=playerShipName(context.combat).toUpperCase();
-    const messages=state.messages.filter(m=>m.channelId===selected.id),newThreadKey=`${ownName}:${selected.id}:${messages.map(m=>m.id).join(',')}`;
+    const messages=state.messages.filter(m=>m.channelId===selected.id);
+    const newThreadKey=`${ownName}:${selected.id}:${messages.map(m=>m.id).join(',')}:${state.mission?.id}:${state.mission?.arrived}`;
     if(newThreadKey!==threadKey){
       reportLinks.clear();
       thread.replaceChildren(...messages.map(message=>{
@@ -123,6 +128,12 @@ export function mountCommunications({root,getState,getContext,onChange,onRecall=
         if(message.contactChannelId){
           const control=button('Open contact in Flight Control ↗',()=>inspect(message.contactChannelId));
           control.classList.add('comms-contact-action');reportLinks.set(control,message.contactChannelId);row.append(control);
+        }
+        if(message.id===state.mission?.id){
+          const missionActions=el('div','comms-mission-actions');
+          missionActions.append(button('Show on System Map ↗',onOpenMission));
+          if(!state.mission.arrived)missionActions.append(button('Decline assignment',onDeclineMission));
+          row.append(missionActions);
         }
         return row;
       }));

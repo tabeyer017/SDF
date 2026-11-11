@@ -1,4 +1,4 @@
-import { EPD_AU_PER_DAY, EDGE_AU, distance, at, mapPoint, unmapPoint, nearSol, routeDistance, advance } from './navigation.mjs';
+import { EPD_AU_PER_DAY, EDGE_AU, distance, at, mapPoint, unmapPoint, nearSol, routeDistance, advance, gameDate } from './navigation.mjs';
 import { createSettlements, settlementCallout, formatDistance, ARRIVAL_EPSILON_AU, STATION_SYMBOL_PATH } from './settlements.mjs';
 import { miningCompanies, miningStations, MINING_SYMBOL_PATH } from './mining.mjs';
 import { mountBridge } from './bridge.mjs';
@@ -6,6 +6,7 @@ import { createSave, parseSave, SAVE_STORAGE_KEY, LEGACY_SAVE_STORAGE_KEY } from
 import { mountSaves } from './save-ui.mjs';
 import { mountStartMenu } from './start-menu.mjs';
 import {defaultShipName} from './ship-names.mjs';
+import {missionBriefings} from './encounter-model.mjs';
 
 const $ = id => document.getElementById(id);
 const NS = 'http://www.w3.org/2000/svg';
@@ -21,6 +22,7 @@ const bodies = [
   { id:'heliopause', name:'Heliopause station', au:120, angle:143, color:'#a6b9c5', radius:5, type:'OUTER PATROL OUTPOST · PROVISIONAL', description:'A provisional outpost at the 120 AU patrol boundary. A radial EPD journey from Sol takes about 32 days.' }
 ].map(body => ({ ...body, ...at(body.au, body.angle) }));
 const settlements=createSettlements(bodies);
+const missionStations=[...miningStations,...settlements.filter(site=>site.kind==='station'&&site.parentId!=='earth'),bodies.at(-1)];
 let directoryMode='planets';
 let miningPage=0, miningCompany='all';
 let bridgeConsole;
@@ -38,7 +40,7 @@ try {
     state = { ...state, ship:saved.ship, location:typeof saved.location === 'string' ? saved.location : 'Deep space', route:saved.route, days:saved.days, active:!!saved.active && saved.route.length > 0, paused:!!saved.active, speed:[1,10,100].includes(saved.speed) ? saved.speed : 1 };
   }
 } catch { /* Storage may be disabled; the session remains fully playable. */ }
-let selected = earth, zoom = 1, pan = {x:0,y:0}, logs = [], lastSave = 0, lastTime = 0, toastTimer, routePage = 0;
+let selected = earth, zoom = 1, pan = {x:0,y:0}, logs = [], lastSave = 0, lastTime = 0, lastMissionCheck = 0, toastTimer, routePage = 0;
 const pageSize = () => innerWidth < 600 && innerHeight < 640 ? 1 : 2;
 let waypointsPerPage = pageSize();
 const focusedConsole = matchMedia('(max-width: 980px), (max-height: 620px)');
@@ -48,7 +50,7 @@ function node(tag, attrs={}, text) { const el=document.createElementNS(NS,tag); 
 function captureSave(){return createSave({navigation:state,bridge:bridgeConsole.exportState(),selection:selected,logs});}
 function save() { if(!bridgeConsole||!missionStarted)return;try { localStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(captureSave())); } catch { /* JSON downloads remain available when browser storage is disabled. */ } }
 function toast(message) { $('toast').textContent=message; $('toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>$('toast').classList.remove('visible'),3500); }
-function date() { return new Date(Date.UTC(2250,0,1)+state.days*86400000); }
+function date() { return gameDate(state.days*86400); }
 function log(message) { logs.unshift({time:date().toISOString().slice(11,16),message}); logs=logs.slice(0,3); $('command-log').replaceChildren(...logs.map(item=>{const li=document.createElement('li');const time=document.createElement('time');time.textContent=item.time;const text=document.createElement('span');text.textContent=item.message;li.append(time,text);return li;})); }
 function showView(view) {
   document.body.dataset.view=view;
@@ -56,13 +58,50 @@ function showView(view) {
 }
 function select(body, navigate=true) {
   selected=body;
-  document.querySelectorAll('.planet-item,.planet-group,.facility-group').forEach(el=>{
+  document.querySelectorAll('.planet-item,.planet-group,.facility-group,.mission-group').forEach(el=>{
     const isSelected=el.dataset.id===body.id;
     el.classList.toggle('selected',isSelected);
     el.setAttribute('aria-pressed',String(isSelected));
   });
   updateSelection(); renderTarget();
   if(navigate && focusedConsole.matches){showView('navigation');$('destination-name').setAttribute('tabindex','-1');$('destination-name').focus({preventScroll:true});}
+}
+function missionDestination(mission){
+  const {name,x,y}=mission.destination;
+  const {title,objective}=missionBriefings[mission.kind];
+  return {id:`mission-${mission.id}`,name,x,y,type:title,color:'#ff686c',description:objective};
+}
+let missionMarkerKey='';
+function renderMissionMarker(){
+  const mission=bridgeConsole?.revealedMission(),destination=mission&&missionDestination(mission);
+  const key=destination?JSON.stringify(destination):'';
+  if(key===missionMarkerKey)return;
+  missionMarkerKey=key;
+  const layer=$('mission-markers');layer.replaceChildren();
+  $('mission-legend').hidden=!destination;
+  if(selected.id?.startsWith('mission-')&&selected.id!==destination?.id)select(earth,false);
+  if(!destination)return;
+  const site=settlements.find(site=>site.id===mission.destination.siteId);
+  const anchor=site?settlementCallout(site,bodies):mapPoint(destination);
+  const scale=mission.destination.siteId?1+25/Math.hypot(anchor.x,anchor.y):1;
+  const x=anchor.x*scale,y=anchor.y*scale;
+  if(scale!==1)layer.append(node('line',{x1:anchor.x,y1:anchor.y,x2:x,y2:y,class:'mission-leader'}));
+  const marker=node('g',{class:`mission-group${selected.id===destination.id?' selected':''}`,'data-id':destination.id,
+    transform:`translate(${x} ${y})`,role:'button',tabindex:0,'aria-pressed':String(selected.id===destination.id),
+    'aria-label':`Select ${destination.name}, ${destination.type}`});
+  marker.append(node('title',{},`${destination.type} · ${destination.name}`),node('circle',{r:19,class:'mission-hit'}),
+    node('circle',{r:16,class:'selection-ring'}),node('path',{d:'M-10 -10L10 10 M10 -10L-10 10',class:'mission-cross'}));
+  marker.onclick=event=>{event.stopPropagation();if(!moved)select(destination);};
+  marker.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();select(destination);}};
+  layer.append(marker,node('text',{x:x+20,y:y+4,class:'mission-label','aria-hidden':'true'},destination.name));
+}
+function openMissionMap(){
+  const mission=bridgeConsole.revealedMission();
+  if(!mission)return;
+  bridgeConsole.selectStation('system-map');
+  renderMissionMarker();select(missionDestination(mission),false);showView('map');resetView();
+  $('mission-markers').querySelector('.mission-group')?.focus({preventScroll:true});
+  save();
 }
 function updateSelection() {
   $('destination-name').textContent=selected.name;
@@ -91,6 +130,7 @@ function renderRoutes() {
   const p=mapPoint(state.ship);$('ship-marker').setAttribute('transform',`translate(${p.x} ${p.y})`);
 }
 function renderPlan() {
+  renderMissionMarker();
   const list=$('waypoint-list');list.replaceChildren();
   const pages=Math.max(1,Math.ceil(state.route.length/waypointsPerPage));
   routePage=Math.max(0,Math.min(routePage,pages-1));
@@ -227,7 +267,7 @@ svg.addEventListener('pointermove',e=>{
   if(dragging){const dx=e.clientX-dragging.x,dy=e.clientY-dragging.y;if(Math.hypot(dx,dy)>5){moved=true;const matrix=svg.getScreenCTM();pan={x:dragging.pan.x+dx/matrix.a,y:dragging.pan.y+dy/matrix.d};updateView();}}
 });
 window.addEventListener('pointerup',()=>{dragging=null;});
-svg.addEventListener('click',e=>{if(moved||e.target.closest('.planet-group,.facility-group'))return;const p=unmapPoint(mapCoords(e));const au=Math.hypot(p.x,p.y);if(au>EDGE_AU){toast('Choose a point within the 120 AU patrol boundary.');return;}if(au<.18){toast('Sol safety exclusion: choose a point farther from the Sun.');return;}select({id:`grid-${p.x.toFixed(3)}-${p.y.toFixed(3)}`,name:`Grid ${p.x>=0?'+':''}${p.x.toFixed(1)}, ${p.y<=0?'+':''}${(-p.y).toFixed(1)}`,type:'CUSTOM PATROL WAYPOINT',description:'An open-space navigation fix. Add this point to build a patrol route or steer safely around Sol.',color:'#cdb27e',...p});});
+svg.addEventListener('click',e=>{if(moved||e.target.closest('.planet-group,.facility-group,.mission-group'))return;const p=unmapPoint(mapCoords(e));const au=Math.hypot(p.x,p.y);if(au>EDGE_AU){toast('Choose a point within the 120 AU patrol boundary.');return;}if(au<.18){toast('Sol safety exclusion: choose a point farther from the Sun.');return;}select({id:`grid-${p.x.toFixed(3)}-${p.y.toFixed(3)}`,name:`Grid ${p.x>=0?'+':''}${p.x.toFixed(1)}, ${p.y<=0?'+':''}${(-p.y).toFixed(1)}`,type:'CUSTOM PATROL WAYPOINT',description:'An open-space navigation fix. Add this point to build a patrol route or steer safely around Sol.',color:'#cdb27e',...p});});
 svg.addEventListener('wheel',e=>{e.preventDefault();zoomBy(e.deltaY<0?1.1:1/1.1);},{passive:false});
 $('zoom-in').onclick=()=>zoomBy(1.25);$('zoom-out').onclick=()=>zoomBy(.8);$('recenter').onclick=resetView;
 $('edge-button').onclick=()=>select(bodies.at(-1));
@@ -261,7 +301,7 @@ $('add-waypoint').onclick=()=>{
 $('clear-course').onclick=()=>{if(state.active)return;state.route=[];log('Flight plan cleared.');renderPlan();save();};
 $('engage-button').onclick=()=>{
   if(state.active){state.active=false;state.paused=false;state.location='deep space';bridgeConsole?.arrive(state.location);log('EPD disengaged. Vector Drive ready.');toast('Transit aborted. Remaining waypoints retained.');}
-  else {if(!state.route.length||routeUnsafe())return;if(bridgeConsole?.localStatus().canEPD===false){toast('EPD unavailable: recover deployed shuttles, check Engineering or undock.');return;}bridgeConsole?.suspendLocal();state.active=true;state.paused=false;log(`EPD engaged. Destination: ${state.route[0].name}.`);toast('Course confirmed. Electromagnetic Pulse Drive engaged.');}
+  else {if(!state.route.length||routeUnsafe())return;if(bridgeConsole?.localStatus().canEPD===false){toast('EPD unavailable: recover deployed shuttles, check Engineering or undock.');return;}bridgeConsole?.suspendLocal(state.route.at(-1).id===earth.id);state.active=true;state.paused=false;log(`EPD engaged. Destination: ${state.route[0].name}.`);toast('Course confirmed. Electromagnetic Pulse Drive engaged.');}
   renderPlan();save();
   if(state.active && focusedConsole.matches && document.querySelector('#bridge-console').dataset.station==='system-map'){showView('map');svg.focus({preventScroll:true});}
 };
@@ -303,13 +343,25 @@ function frame(time){
   if(startMenu?.isOpen()){requestAnimationFrame(frame);return;}
   if(state.active&&!state.paused&&elapsed){
     const available=elapsed*.08*state.speed;
-    const days=Math.min(available,routeDistance(state.ship,state.route)/EPD_AU_PER_DAY);
+    const missionStop=state.route.findIndex(bridgeConsole.isMissionWaypoint);
+    const leg=missionStop<0?state.route:state.route.slice(0,missionStop+1);
+    const days=Math.min(available,routeDistance(state.ship,leg)/EPD_AU_PER_DAY);
     if(bridgeConsole?.advanceTransit(days*86400)===false){state.active=false;state.paused=false;state.location='deep space';bridgeConsole.arrive(state.location);renderPlan();save();toast('Ship lost during transit. Load a save or restart patrol.');requestAnimationFrame(frame);return;}
-    const result=advance(state.ship,state.route,days*EPD_AU_PER_DAY);state.ship={x:result.position.x,y:result.position.y};state.days+=days;
-    if(result.reached){const reached=state.route.splice(0,result.reached);for(const point of reached)log(`Arrived: ${point.name}.`);state.location=reached.at(-1).name;if(!state.route.length){state.active=false;state.paused=false;bridgeConsole?.arrive(state.location);toast(`Patrol leg complete. Vector Drive ready at ${state.location}.`);}renderPlan();save();}
+    const result=advance(state.ship,leg,days*EPD_AU_PER_DAY);state.ship={x:result.position.x,y:result.position.y};state.days+=days;
+    if(result.reached){
+      const reached=state.route.splice(0,result.reached),stop=reached.at(-1);
+      for(const point of reached)log(`Arrived: ${point.name}.`);
+      state.location=stop.name;
+      if(!state.route.length||bridgeConsole.isMissionWaypoint(stop)){
+        state.active=false;state.paused=false;bridgeConsole.arrive(state.location,stop);
+        toast(`Patrol leg complete. Vector Drive ready at ${state.location}.`);
+      }
+      renderPlan();save();
+    }
     else if(time-lastSave>120){updateTelemetry();updateSelection();renderRoutes();lastSave=time;}
   }
   if(!state.active&&elapsed){const seconds=bridgeConsole?.tick(elapsed)||0;if(seconds){state.days+=seconds/86400;if(time-lastSave>350){updateTelemetry();lastSave=time;}}}
+  if(!document.hidden&&time-lastMissionCheck>=250){lastMissionCheck=time;bridgeConsole.updateMissions();}
   if(time-lastAutosave>=2000){save();lastAutosave=time;}
   requestAnimationFrame(frame);
 }
@@ -321,10 +373,11 @@ new ResizeObserver(entries=>{
   svg.style.setProperty('--chart-small-size',`${Math.max(8,6/scale)}px`);
 }).observe($('map-surface'));
 bridgeConsole=mountBridge({
-  snapshot:()=>({shipName:currentShipName(),location:state.location,days:state.days,canEPD:bridgeConsole?.localStatus().canEPD!==false,active:state.active,paused:state.paused,speed:state.speed,routeCount:state.route.length,nextWaypoint:state.route[0]?.name||'',unsafe:routeUnsafe(),distance:formatDistance(routeDistance(state.ship,state.route)),eta:state.route.length?formatETA(routeDistance(state.ship,state.route)/EPD_AU_PER_DAY):'Awaiting course',targetName:selected.name}),
+  snapshot:()=>({shipName:currentShipName(),location:state.location,position:state.ship,days:state.days,canEPD:bridgeConsole?.localStatus().canEPD!==false,active:state.active,paused:state.paused,speed:state.speed,routeCount:state.route.length,nextWaypoint:state.route[0]?.name||'',unsafe:routeUnsafe(),distance:formatDistance(routeDistance(state.ship,state.route)),eta:state.route.length?formatETA(routeDistance(state.ship,state.route)/EPD_AU_PER_DAY):'Awaiting course',targetName:selected.name}),
   engage:()=>{if(!state.active)$('engage-button').click();},
   abort:()=>{if(state.active)$('engage-button').click();},
-  log,onLocalChange:()=>{updateTelemetry();save();},onSave:save,savedGame:savedGame?.bridge
+  log,missionStations,onOpenMission:openMissionMap,onMissionChange:renderMissionMarker,
+  onLocalChange:()=>{updateTelemetry();save();},onSave:save,savedGame:savedGame?.bridge
 });
 function restoredSelection(point){return [...bodies,...settlements,...miningStations].find(body=>body.id===point?.id)||point||earth;}
 function restoreSave(game){
@@ -351,9 +404,12 @@ window.addEventListener('keydown',event=>{
   if(event.defaultPrevented||event.repeat||event.isComposing||event.ctrlKey||event.altKey||event.metaKey)return;
   if(startMenu?.isOpen()||document.querySelector('dialog[open]'))return;
   if(event.target instanceof Element&&(event.target.closest('input,textarea,select,[role="textbox"]')||event.target.isContentEditable))return;
-  const station={f:'navigation',t:'tactical',s:'science',e:'engineering',c:'communications'}[event.key.toLowerCase()];
-  if(event.key.toLowerCase()!=='b'&&!station)return;
+  const key=event.key.toLowerCase();
+  const station={t:'tactical',s:'science',e:'engineering',c:'communications'}[key];
+  if(key!=='b'&&key!=='f'&&!station)return;
   event.preventDefault();
-  if(station)bridgeConsole.selectStation(station);else bridgeConsole.openBridge();
+  if(key==='b')bridgeConsole.openBridge();
+  else if(key==='f')bridgeConsole.selectArea('flight');
+  else bridgeConsole.selectStation(station);
 });
 requestAnimationFrame(frame);

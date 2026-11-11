@@ -1,10 +1,18 @@
 import { settlementDefinitions } from './settlements.mjs';
 import { miningStations } from './mining.mjs';
-import { shipPerformance, standDownAgainst, surrenderShip, orderAlliedSupport, requestSupportShip, supportStatus } from './combat-model.mjs';
+import { shipPerformance, canContinueAttack, standDownAgainst, surrenderShip, orderAlliedSupport, requestSupportShip, supportStatus } from './combat-model.mjs';
 import {playerShipName,defaultShipName} from './ship-names.mjs';
 import {shuttleStatus} from './boarding-model.mjs';
+import {generatePatrolMission,missionBriefings,updateLegacyPatrolBriefing} from './encounter-model.mjs';
+import {distance,EDGE_AU,SOL_EXCLUSION_AU} from './navigation.mjs';
+import {ARRIVAL_EPSILON_AU} from './settlements.mjs';
 
 export const MAX_MESSAGES=200;
+const MISSION_INTERVAL=1800;
+const PATROL_CHECK_IN=180;
+const PATROL_EXTENSION=120;
+const TIME_EPSILON=1e-6;
+const EARTH_ORDERS='Proceed to Earth. Plot your return course on the System Map.';
 export const communicationChannels=[
   {id:'hq',name:'Earth HQ · Sol Command',kind:'hq',description:'Secure command relay · Earth'},
   {id:'shuttles',name:'Shuttle control',kind:'hq',description:'Shipboard shuttle and marine operations'},
@@ -21,7 +29,7 @@ const check=ok=>{if(!ok)throw new Error('Invalid communications data in save fil
 const percent=s=>Math.round(s.hp/s.max*100);
 const stamp=context=>Math.max(0,context.days??0)*86400;
 export function createCommunications(shipName=defaultShipName('sdf-frigate')){
-  return {nextId:2,selectedId:'hq',filter:'all',encounter:0,alerts:[],messages:[{id:1,channelId:'hq',channelName:communicationChannels[0].name,kind:'hq',direction:'received',subject:'Patrol orders',body:`${shipName}, Sol Command. Maintain the patrol watch, assist vessels in distress, and report hostile activity. Use this channel for situation reports and requests. Sol Command standing by.`,time:0,location:'Earth',read:false}]};
+  return {nextId:2,selectedId:'hq',filter:'all',encounter:0,alerts:[],mission:null,nextMissionAt:0,returningToEarth:false,messages:[{id:1,channelId:'hq',channelName:communicationChannels[0].name,kind:'hq',direction:'received',subject:'Patrol orders',body:`${shipName}, Sol Command. Maintain the patrol watch, assist vessels in distress, and report hostile activity. Use this channel for situation reports and requests. Sol Command standing by.`,time:0,location:'Earth',read:false}]};
 }
 export function restoreCommunications(saved){
   if(saved===undefined)return createCommunications();
@@ -35,11 +43,144 @@ export function restoreCommunications(saved){
     check(['hq','station','ship'].includes(m.kind)&&['sent','received'].includes(m.direction)&&typeof m.read==='boolean'&&Number.isFinite(m.time)&&m.time>=0&&m.time<=365000*86400);
     check(communicationChannels.some(c=>c.id===m.channelId&&c.kind===m.kind)||(m.kind==='ship'&&/^ship:\d+:[\w-]+$/.test(m.channelId)));
     if(m.contactChannelId!==undefined)check(m.channelId==='shuttles'&&typeof m.contactChannelId==='string'&&m.contactChannelId.length<=100&&/^ship:\d+:[\w-]+$/.test(m.contactChannelId));
-    return {id:m.id,channelId:m.channelId,channelName:m.channelName,kind:m.kind,direction:m.direction,subject:m.subject,body:m.body,time:m.time,location:m.location,read:m.read,...(m.contactChannelId?{contactChannelId:m.contactChannelId}:{})};
+    const body=m.channelId==='hq'&&m.direction==='received'&&m.subject===missionBriefings.patrol.title
+      ?updateLegacyPatrolBriefing(m.body):m.body;
+    return {id:m.id,channelId:m.channelId,channelName:m.channelName,kind:m.kind,direction:m.direction,subject:m.subject,body,time:m.time,location:m.location,read:m.read,...(m.contactChannelId?{contactChannelId:m.contactChannelId}:{})};
   });
   const alerts=saved.alerts.map(id=>{check(typeof id==='string'&&/^ship:\d+:[\w-]+$/.test(id));return id;});
   check(new Set(alerts).size===alerts.length);
-  return {nextId:saved.nextId,selectedId:saved.selectedId,filter:saved.filter,encounter:saved.encounter,alerts,messages};
+  const nextMissionAt=saved.nextMissionAt??0;
+  check(Number.isFinite(nextMissionAt)&&nextMissionAt>=0&&nextMissionAt<=365000*86400+MISSION_INTERVAL);
+  const mission=saved.mission==null?null:restoreMission(saved.mission,messages);
+  const returningToEarth=saved.returningToEarth??false;
+  check(typeof returningToEarth==='boolean'&&(!returningToEarth||!mission));
+  return {nextId:saved.nextId,selectedId:saved.selectedId,filter:saved.filter,encounter:saved.encounter,alerts,messages,mission,nextMissionAt,returningToEarth};
+}
+
+function restoreMission(mission,messages){
+  check(object(mission)&&typeof mission.kind==='string'&&Object.hasOwn(missionBriefings,mission.kind)&&typeof mission.arrived==='boolean');
+  check(Number.isInteger(mission.seed)&&mission.seed>=0&&mission.seed<=0xFFFFFFFF);
+  const {id,kind,seed,arrived,destination}=mission;
+  check(object(destination)&&typeof destination.name==='string'&&destination.name.length>0&&destination.name.length<=120);
+  const {name,x,y,siteId}=destination;
+  const radius=Math.hypot(x,y);
+  check(Number.isFinite(x)&&Number.isFinite(y)&&radius>=SOL_EXCLUSION_AU&&radius<=EDGE_AU+.01);
+  if(kind==='station-attack')check(communicationChannels.some(channel=>channel.kind==='station'&&channel.id===siteId&&channel.name===name&&channel.id!=='moon-station'));
+  else check(siteId===undefined);
+  const message=messages.find(item=>item.id===id);
+  check(message?.direction==='received'&&message.channelId===(siteId??'hq')&&message.subject===missionBriefings[kind].title&&(!arrived||message.read));
+  const result={id,kind,seed,arrived,destination:{name,x,y,...(siteId?{siteId}:{})}};
+  const {sweepSeconds,clearedToReturnAt}=mission;
+  if(sweepSeconds!==undefined){
+    check(kind==='patrol'&&arrived&&Number.isFinite(sweepSeconds)&&sweepSeconds>=0&&sweepSeconds<=365000*86400);
+    result.sweepSeconds=sweepSeconds;
+  }
+  if(clearedToReturnAt!==undefined){
+    check(Number.isFinite(clearedToReturnAt)&&clearedToReturnAt>=PATROL_CHECK_IN-TIME_EPSILON&&clearedToReturnAt<=sweepSeconds);
+    result.clearedToReturnAt=clearedToReturnAt;
+  }
+  return result;
+}
+
+export function revealedPatrolMission(state){
+  const mission=state.mission;
+  return mission&&state.messages.some(message=>message.id===mission.id&&message.read)?mission:null;
+}
+
+export function missionMatchesWaypoint(mission,waypoint){
+  return !!mission&&!mission.arrived&&waypoint?.name===mission.destination.name&&distance(mission.destination,waypoint)<ARRIVAL_EPSILON_AU;
+}
+
+function missionChannel(mission){return communicationChannels.find(channel=>channel.id===(mission.destination.siteId??'hq'));}
+
+export function finishPatrolMission(state,context,result,detail){
+  const mission=state.mission;
+  state.mission=null;
+  state.nextMissionAt=stamp(context)+MISSION_INTERVAL;
+  addMessage(state,missionChannel(mission),'received',`Mission ${result}`,`${missionBriefings[mission.kind].title} · ${mission.destination.name}. ${detail}`,context);
+}
+
+export function recordPatrolSweep(state,sector,radarOperational,seconds){
+  const {mission}=state;
+  if(mission?.kind!=='patrol'||!mission.arrived||sector.encounter.event!=='patrol'||!radarOperational||seconds<=0)return;
+  const {vx,vy,vz}=sector.own;
+  if(Math.hypot(vx,vy,vz)>1e-6)mission.sweepSeconds=(mission.sweepSeconds??0)+seconds;
+}
+
+function dispatchPatrolMission(state,context,stations,random){
+  const dispatch=generatePatrolMission(state.nextId,context.position,stations,random);
+  const briefing=missionBriefings[dispatch.kind];
+  state.mission=dispatch;
+  addMessage(state,missionChannel(dispatch),'received',briefing.title,`${playerShipName(context.combat)}, proceed to ${dispatch.destination.name}. ${briefing.objective} Coordinates relayed to the System Map.`,context);
+}
+
+function pollQuietPatrol(state,context,stations,random){
+  const {mission}=state;
+  const elapsed=mission.sweepSeconds??0;
+  const clearedAt=mission.clearedToReturnAt;
+  const due=clearedAt===undefined?PATROL_CHECK_IN:clearedAt+PATROL_EXTENSION;
+  if(elapsed+TIME_EPSILON<due||communicationLink(context,{available:true}))return false;
+  if(clearedAt===undefined){
+    mission.clearedToReturnAt=elapsed;
+    addMessage(state,missionChannel(mission),'received','Patrol update','No unusual activity has been reported. You may continue sweeping this sector or return to Earth.',context);
+  }else if(random()<.5){
+    finishPatrolMission(state,context,'complete','Sector clear. Stand by for a new assignment.');
+    dispatchPatrolMission(state,context,stations,random);
+  }else{
+    finishPatrolMission(state,context,'complete',`Sector clear. ${EARTH_ORDERS}`);
+    state.returningToEarth=true;
+  }
+  return true;
+}
+
+export function leavePatrolMission(state,context,stations,headingToEarth){
+  const {mission}=state;
+  if(!mission?.arrived)return false;
+  if(headingToEarth&&mission.clearedToReturnAt!==undefined){
+    finishPatrolMission(state,context,'complete','Sector clear. Returning to Earth as authorized.');
+    state.returningToEarth=true;
+    return true;
+  }
+  if(mission.kind!=='patrol'||context.sector.encounter.event!=='patrol')pollPatrolMission(state,context,stations);
+  if(state.mission===mission)finishPatrolMission(state,context,'failed','The sector was left before the objective was complete.');
+  return true;
+}
+
+export function pollPatrolMission(state,context,stations,random=Math.random){
+  const {mission}=state,{sector,combat}=context;
+  if(!mission){
+    if(state.returningToEarth){
+      if(context.inTransit||sector.location!=='Earth')return false;
+      state.returningToEarth=false;
+      state.nextMissionAt=stamp(context)+MISSION_INTERVAL;
+      return true;
+    }
+    if(stamp(context)<state.nextMissionAt||communicationLink(context,{available:true}))return false;
+    dispatchPatrolMission(state,context,stations,random);
+    return true;
+  }
+  if(!mission.arrived||context.inTransit)return false;
+  const {attackTargetId,distressId,hostileIds,event}=sector.encounter;
+  if(mission.kind==='patrol'&&event==='patrol')return pollQuietPatrol(state,context,stations,random);
+  const radar=combat.own.radar&&shipPerformance(combat.own).sensors>0;
+  if(attackTargetId&&combat.contacts[attackTargetId].systems.hull.hp<=0){
+    finishPatrolMission(state,context,'failed','The protected ship was lost.');
+    return true;
+  }
+  if(distressId&&combat.contacts[distressId].systems.hull.hp<=0){
+    finishPatrolMission(state,context,'failed',mission.kind==='patrol'?'The distressed vessel was lost.':'The missing freighter was destroyed.');
+    return true;
+  }
+  const freighter=distressId&&sector.contacts.find(contact=>contact.id===distressId);
+  const located=freighter&&radar&&Math.hypot(freighter.x-sector.own.x,freighter.y-sector.own.y,freighter.z-sector.own.z)<=10;
+  const defendedId=attackTargetId||(event==='raiders'?'own':null);
+  const repelled=defendedId&&!hostileIds.some(id=>combat.hostiles.includes(id)&&canContinueAttack(combat.contacts[id]))&&
+    !combat.shots.some(shot=>shot.targetId===defendedId&&hostileIds.includes(shot.sourceId));
+  if(!located&&!repelled)return false;
+  const detail=repelled?(attackTargetId?'Raiders repelled. The protected ship survived.':'Raiders repelled. Patrol report filed.'):
+    mission.kind==='patrol'?'Distressed vessel located. Its position has been relayed to Sol Command.':'Freighter located. Its position has been relayed to Sol Command.';
+  finishPatrolMission(state,context,'complete',detail);
+  return true;
 }
 export function unreadCommunications(state){return state.messages.filter(m=>m.direction==='received'&&!m.read).length;}
 export function channelContactId(channelId,encounter){
@@ -48,7 +189,7 @@ export function channelContactId(channelId,encounter){
 }
 function addMessage(state,recipient,direction,subject,body,context,contactChannelId){
   state.messages.push({id:state.nextId++,channelId:recipient.id,channelName:recipient.name,kind:recipient.kind,direction,subject,body,time:stamp(context),location:context.sector.location,read:direction==='sent',...(contactChannelId?{contactChannelId}:{})});
-  if(state.messages.length>MAX_MESSAGES)state.messages.splice(0,state.messages.length-MAX_MESSAGES);
+  if(state.messages.length>MAX_MESSAGES)state.messages.splice(state.messages[0].id===state.mission?.id?1:0,1);
 }
 export function communicationsRecipients(state,context){
   const recipients=communicationChannels.map(c=>({...c,available:true}));
@@ -132,8 +273,15 @@ export function sendCommunication(state,context,recipientId,request,detail=''){
     if(support.accepted&&request!=='stand-down')context.sector.running=true;
   }
   addMessage(state,recipient,'sent',subject,body,context);
-  const response=support?.message??respond(recipient,request,context);
+  const requestingMission=recipient.id==='hq'&&request==='orders'&&context.missionStations;
+  const returnPending=state.returningToEarth&&(context.inTransit||context.sector.location!=='Earth');
+  const response=requestingMission?(state.mission?'An assignment is already open. Review its message in Comms.':returnPending?EARTH_ORDERS:'Stand by for an assignment.'):(support?.message??respond(recipient,request,context));
   addMessage(state,recipient,'received',`Re: ${subject}`,response,context);
+  if(requestingMission&&!state.mission&&!returnPending){
+    state.returningToEarth=false;
+    state.nextMissionAt=stamp(context);
+    pollPatrolMission(state,context,context.missionStations);
+  }
   return {ok:true,message:`Reply received from ${recipient.name}.`,response,...(support?{accepted:support.accepted}:{})};
 }
 export function pollCommunications(state,context){

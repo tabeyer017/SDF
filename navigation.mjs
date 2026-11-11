@@ -1,3 +1,7 @@
+export const GAME_YEAR = 2100;
+const GAME_EPOCH = Date.UTC(GAME_YEAR, 0, 1);
+export const gameDate = seconds => new Date(GAME_EPOCH + seconds * 1000);
+
 export const EPD_AU_PER_DAY = 3.8;
 export const SOL_EXCLUSION_AU = 0.18;
 export const EDGE_AU = 120;

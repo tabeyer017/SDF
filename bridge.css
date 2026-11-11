@@ -737,7 +737,8 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 .communication-alert .eyebrow { padding-right: 24px; color: #f2cb81; font-size: var(--font-small); }
 .communication-alert h2 { margin: 13px 0 8px; font-size: 27px; }
 .communication-alert p { margin: 0 0 18px; color: #b9ccd7; font-size: 12px; overflow-wrap: anywhere; }
-.communication-alert .dialog-close { width: 32px; height: 32px; right: 8px; top: 7px; }
+.communication-alert-actions { display: flex; gap: 8px; }
+.communication-alert-actions button { flex: 1; width: auto; }
 body[data-menu="open"] .communication-alert { display: none; }
 @media (max-width: 650px) { .topbar .messages-button { margin-left: 0; flex-basis: 32px; width: 32px; height: 32px; } }
 .comms-workspace { display: grid; grid-template-columns: 230px minmax(0,1fr); min-width: 0; min-height: 0; }
@@ -763,6 +764,7 @@ body[data-menu="open"] .communication-alert { display: none; }
 .comms-message-meta { margin: 0 0 7px; font: var(--font-small)/1.5 var(--mono); color: #9fb7c4; }
 .comms-message h3 { margin: 0 0 5px; color: #d9e7e9; font: 12px/1.4 var(--body); }
 .comms-message-body { margin: 0; color: #bbced5; font: 12px/1.6 var(--body); white-space: pre-wrap; }
+.comms-mission-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
 .comms-empty { color: #9fb7c4; font: 11px/1.7 var(--body); }
 .comms-composer { display: grid; grid-template-columns: minmax(0,1fr); gap: 8px; padding: 12px 20px; border-top: 1px solid #38535f; background: #0d1723; }
 .comms-composer .bridge-setting { margin: 0; }

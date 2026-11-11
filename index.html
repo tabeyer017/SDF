@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#080e17">
-  <meta name="description" content="Sol Defense Force. Command your ship and chart a patrol through the Solar System in 2250.">
+  <meta name="description" content="Sol Defense Force. Command your ship and chart a patrol through the Solar System in 2100.">
   <title>SDF · Strategic Command</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="viewport.css">
@@ -17,7 +17,7 @@
       <div class="start-orbits" aria-hidden="true"><i></i><i></i><i></i><span>✧</span></div>
       <figure class="start-vessel"><img src="images/sdf-frigate-side-view-transparent.png" alt="Side profile of a Vanguard-class SDF frigate against the dark of space" width="2172" height="724"><figcaption><span data-player-ship-name data-ship-case="upper">SDF MARIE CURIE</span> VANGUARD-CLASS FRIGATE / YOUR FIRST COMMAND</figcaption></figure>
     </div>
-    <header class="start-masthead"><span>✧ &nbsp; SOL DEFENSE FORCE</span><span>SOL SYSTEM / 2250</span></header>
+    <header class="start-masthead"><span>✧ &nbsp; SOL DEFENSE FORCE</span><span>SOL SYSTEM / 2100</span></header>
     <div class="start-content">
       <div class="start-intro"><div class="eyebrow">STRATEGIC SPACE COMMAND</div><h1 id="start-title">SOL DEFENSE<br><span>FORCE</span></h1><p>A frontier to protect.<br>A ship to command.</p></div>
       <nav class="start-actions" aria-label="Main menu">
@@ -27,6 +27,7 @@
         <button id="menu-load-save"><span>Load Saved Game<small>Restore a patrol from a JSON file</small></span><b aria-hidden="true">03</b></button>
         <button id="menu-history"><span>History<small>The story of humanity in Sol</small></span><b aria-hidden="true">04</b></button>
         <button id="menu-how-to-play"><span>How to Play<small>Your first watch, explained</small></span><b aria-hidden="true">05</b></button>
+        <button id="menu-tutorial" type="button" disabled><span>Tutorial<small>Coming soon</small></span><b aria-hidden="true">06</b></button>
       </nav>
     </div>
     <footer class="start-footer"><span><i class="status-dot"></i> FOR SOL. FOR ALL.</span><span>PHASE 01 <b>/</b> PROTOTYPE v0.1</span></footer>
@@ -35,8 +36,8 @@
     <div class="bridge-top-row">
       <a class="brand" href="/" aria-label="Sol Defense Force home"><span class="insignia">✧</span><span class="brand-name">SDF<span>SOL DEFENSE FORCE</span></span></a>
       <nav class="station-nav" aria-label="Bridge stations">
-        <button id="bridge-button" type="button" data-station-area="command">Command</button>
-        <button type="button" data-station-area="flight">Flight Control</button>
+        <button id="bridge-button" type="button" data-station-area="command" aria-keyshortcuts="B">Bridge Command</button>
+        <button type="button" data-station-area="flight" aria-keyshortcuts="F">Flight Control</button>
         <button type="button" data-station-area="tactical-security">Tactical / Security</button>
         <button id="messages-button" class="messages-button" type="button" data-station-area="communications" aria-label="Open Comms · all messages read"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></svg>Comms<span id="messages-count" class="messages-count" aria-hidden="true" hidden>0</span></button>
         <button type="button" data-station-area="engineering-support">Engineering</button>
@@ -51,10 +52,12 @@
   </header>
 
   <section id="communication-alert" class="communication-alert" role="region" aria-labelledby="communication-alert-title" hidden>
-    <button id="dismiss-communication-alert" class="dialog-close" type="button" aria-label="Close new message notification">×</button>
     <div class="eyebrow">INCOMING COMMUNICATION</div>
     <div aria-live="polite" aria-atomic="true"><h2 id="communication-alert-title">New message received</h2><p id="communication-alert-detail"></p></div>
-    <button id="open-communication-alert" class="primary-button" type="button">Open Comms <span aria-hidden="true">↗</span></button>
+    <div class="communication-alert-actions">
+      <button id="dismiss-communication-alert" class="secondary-button" type="button">Dismiss</button>
+      <button id="open-communication-alert" class="primary-button" type="button">Open Comms <span aria-hidden="true">↗</span></button>
+    </div>
   </section>
 
   <main inert aria-hidden="true">
@@ -77,7 +80,7 @@
       <section class="map-panel" id="map-panel" aria-label="Solar System map">
         <div class="map-top"><div><span class="live-indicator"></span><strong>SOLAR SYSTEM</strong><span class="map-subtitle">TACTICAL OVERVIEW</span></div><span class="small-tag">SECTOR 001</span></div>
         <div class="map-surface" id="map-surface">
-          <svg id="solar-map" viewBox="-540 -500 1080 1000" role="group" tabindex="0" aria-label="Interactive Solar System navigation map. Select a planet or click empty space to choose a waypoint.">
+          <svg id="solar-map" viewBox="-540 -500 1080 1000" role="group" tabindex="0" aria-label="Interactive Solar System navigation map. Select a destination or click empty space to choose a waypoint.">
             <defs>
               <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse"><path d="M 50 0 L 0 0 0 50" fill="none" stroke="#526d85" stroke-width="1" opacity=".65" vector-effect="non-scaling-stroke"/></pattern>
               <radialGradient id="sun-aura"><stop stop-color="#ffc867" stop-opacity=".22"/><stop offset="1" stop-color="#ffc867" stop-opacity="0"/></radialGradient>
@@ -88,14 +91,14 @@
             <g id="stars"></g><path d="M-1000 0H1000M0-1000V1000" stroke="#bda16e" stroke-width="1.3" opacity=".7" vector-effect="non-scaling-stroke"/>
             <g id="orbits"></g><g id="asteroids"></g><g id="routes"></g><g id="mining-stations"></g>
             <circle r="65" fill="url(#sun-aura)"/><circle r="17" fill="#f1b45c" opacity=".35" filter="url(#soft-glow)"/><circle r="13" fill="url(#sun-fill)"/><path d="M-23 0h-5m51 0h5M0-23v-5m0 51v5" stroke="#ccab72" opacity=".65"/><text x="0" y="37" text-anchor="middle" class="sol-label">SOL</text>
-            <g id="bodies"></g><g id="settlements"></g><g id="target-marker"></g><g id="ship-marker"></g></g>
+            <g id="bodies"></g><g id="settlements"></g><g id="target-marker"></g><g id="ship-marker"></g><g id="mission-markers"></g></g>
           </svg>
           <div class="map-coordinate"><span>HELIOCENTRIC NAVIGATION GRID</span><span id="cursor-coord">X +0.00 / Y +0.00 AU</span></div>
           <div class="map-controls"><button id="zoom-in" aria-label="Zoom in" title="Zoom in">+</button><button id="zoom-out" aria-label="Zoom out" title="Zoom out">−</button><span></span><button id="recenter" aria-label="Reset map view" title="Reset zoom and center on Sol">⌖</button></div>
           <div class="scale-label"><span></span> COMPRESSED SCALE · SITE CALLOUTS OFFSET</div>
           <div class="map-hint" id="map-hint">Select a destination to begin your patrol</div>
         </div>
-        <div class="map-bottom"><div class="legend"><span><i class="legend-ship"></i>Your vessel</span><span><i class="legend-planet"></i>Planet</span><span><i class="legend-site"></i>Settlements</span><span><i class="legend-mine"></i>Mining</span><span><i class="legend-route"></i>Planned course</span></div></div>
+        <div class="map-bottom"><div class="legend"><span><i class="legend-ship"></i>Your vessel</span><span><i class="legend-planet"></i>Planet</span><span><i class="legend-site"></i>Settlements</span><span><i class="legend-mine"></i>Mining</span><span><i class="legend-route"></i>Planned course</span><span id="mission-legend" hidden><i class="legend-mission" aria-hidden="true">×</i>Mission</span></div></div>
       </section>
 
       <aside class="right-panel" id="navigation-panel" aria-label="Navigation and flight plan">
@@ -106,7 +109,7 @@
       </aside>
     </section>
     <section id="bridge-console" class="bridge-console" data-view="deck" aria-label="Ship bridge areas">
-      <header class="bridge-area-bar"><h1 id="bridge-area-name">Command</h1><div id="bridge-area-tabs" class="bridge-area-tabs" role="tablist" aria-label="Command controls"></div><button id="bridge-view-toggle">Command overview ↗</button></header>
+      <header class="bridge-area-bar"><h1 id="bridge-area-name">Bridge Command</h1><div id="bridge-area-tabs" class="bridge-area-tabs" role="tablist" aria-label="Bridge Command controls"></div><button id="bridge-view-toggle">Overview</button></header>
       <section class="bridge-deck-panel" aria-label="Main bridge perspective view">
         <div class="bridge-deck-header"><span data-player-ship-name data-ship-case="upper" data-ship-suffix=" / MAIN BRIDGE">SDF MARIE CURIE / MAIN BRIDGE</span><span id="bridge-watch">ROUTINE WATCH</span></div>
         <div class="bridge-scene-status"><span class="bridge-scene-indicator" aria-hidden="true"></span><span id="bridge-main-display">SOL SYSTEM / PATROL WATCH</span><span class="bridge-scene-caption">BRIDGE / AFT CUTAWAY</span></div>
@@ -138,11 +141,11 @@
     <button class="dialog-close" data-close-menu-dialog aria-label="Close new mission">×</button>
     <div class="eyebrow">MISSION 01 / SOL SYSTEM PATROL</div>
     <h2 id="new-mission-title">Your first watch.</h2>
-    <p>Name your Vanguard-class frigate and take command at Earth on 1 January 2250. Plot your own patrol through the Solar System, investigate local contacts, and manage your ship from the bridge.</p>
+    <p>Name your Vanguard-class frigate and take command at Earth on 1 January 2100. Plot your own patrol through the Solar System, investigate local contacts, and manage your ship from the bridge.</p>
     <label class="bridge-setting"><span>Ship name</span><select id="mission-ship-name" aria-label="New mission ship name"></select></label>
     <p id="mission-name-convention" class="combat-note"></p>
     <dl class="menu-facts"><div><dt>Vessel</dt><dd>Vanguard-class frigate</dd></div><div><dt>Departure</dt><dd>Earth / Sol sector</dd></div><div><dt>Assignment</dt><dd>Open patrol &amp; training</dd></div></dl>
-    <p id="new-mission-warning" class="menu-notice" hidden>Starting a new mission replaces your current browser autosave. Download your patrol first if you want to keep it.</p>
+    <p id="new-mission-warning" class="menu-notice" hidden>Starting a new mission replaces your current autosave. Export your patrol first if you want to keep it.</p>
     <button id="backup-before-mission" class="secondary-button" hidden>Download current patrol ↓</button>
     <p id="mission-backup-status" role="status" aria-live="polite"></p>
     <button id="launch-mission" class="primary-button">Launch mission <span>↗</span></button>
@@ -160,8 +163,8 @@
     <div class="eyebrow">SOL COMMAND ARCHIVE / SETTING &amp; BACKSTORY</div>
     <h2 id="history-title">Our home. Our watch.</h2>
     <ol class="history-timeline">
-      <li><span>c. 2150</span><div><h3>The cold fusion breakthrough</h3><p>Humanity achieves cold fusion. Over the following century, new propulsion, inertial dampeners, and advanced protective materials open the Solar System to travel.</p><p>As wars become less frequent, the United Nations gradually assumes a greater role in governing Earth. Many welcome the growing stability, but some communities refuse to live under UN authority. With space travel within reach, they leave Earth to build independent lives beyond its control.</p><p>Some call them Pirates, others Renegades, or simply the Free Peoples. Scattered through remote corners of the Solar System, they keep their settlements and refuges hidden, out of sight and out of mind. Their distance from Earth leaves much about their lives, loyalties, and intentions unknown.</p></div></li>
-      <li><span>2250</span><div><h3>A system within reach</h3><p>Electromagnetic Pulse Drives now carry ships across the system in a little over a month. Earth has a large station on the Moon; Mars has a surface colony and a station on Phobos.</p><p>As the United Nations of Earth expands its reach, new space stations, colonies, and mining outposts bring UNE authority closer to communities that left Earth to remain independent. Some among the Free Peoples feel their room to live beyond UNE control shrinking and begin to push back. Attacks on shipping and outposts are becoming more frequent, and piracy is a growing problem along the expanding trade routes.</p></div></li>
+      <li><span>c. 2050</span><div><h3>The cold fusion breakthrough</h3><p>Humanity achieves cold fusion. Over the next five decades, new propulsion, inertial dampeners, and advanced protective materials open the Solar System to travel.</p><p>As wars become less frequent, the United Nations gradually assumes a greater role in governing Earth. Many welcome the growing stability, but some communities refuse to live under UN authority. With space travel within reach, they leave Earth to build independent lives beyond its control.</p><p>Some call them Pirates, others Renegades, or simply the Free Peoples. Scattered through remote corners of the Solar System, they keep their settlements and refuges hidden, out of sight and out of mind. Their distance from Earth leaves much about their lives, loyalties, and intentions unknown.</p></div></li>
+      <li><span>2100</span><div><h3>A system within reach</h3><p>Electromagnetic Pulse Drives now carry ships across the system in a little over a month. Earth has a large station on the Moon; Mars has a surface colony and a station on Phobos.</p><p>As the United Nations of Earth expands its reach, new space stations, colonies, and mining outposts bring UNE authority closer to communities that left Earth to remain independent. Some among the Free Peoples feel their room to live beyond UNE control shrinking and begin to push back. Attacks on shipping and outposts are becoming more frequent, and piracy is a growing problem along the expanding trade routes.</p></div></li>
       <li><span>THE FRONTIER</span><div><h3>Beyond the inner worlds</h3><p>Stations on Ganymede, Titan, Titania, and Triton anchor humanity’s presence around the outer planets. Sixteen commercial mining stations operate in the asteroid belt under United Nations of Earth contracts.</p></div></li>
       <li><span>YOUR WATCH</span><div><h3>Sol Defense Force</h3><p>You are the captain of an SDF vessel patrolling our home system. Civilian traffic, commercial operators, privateers, and pirates share the frontier. From the bridge of your frigate, your watch begins.</p></div></li>
     </ol>
@@ -170,17 +173,21 @@
   <dialog id="how-to-play-dialog" aria-labelledby="how-to-play-title">
     <button class="dialog-close" data-close-menu-dialog aria-label="Close how to play">×</button>
     <div class="eyebrow">CAPTAIN’S ORIENTATION</div><h2 id="how-to-play-title">Take the conn.</h2>
-    <ol class="menu-instructions"><li><strong>Plot a patrol.</strong> Select a planet, settlement, mining station, or point on the strategic map. Add it to your course, then Engage EPD.</li><li><strong>Set the pace.</strong> Use pause and the 1×, 10×, or 100× controls during transit.</li><li><strong>Work the bridge.</strong> Local Flight plans routes and flies the ship automatically; advanced manual controls are optional. Tactical manages sensors, target locks, and weapons. Engineering handles damage and station service.</li><li><strong>Keep your progress.</strong> Browser autosave remembers your patrol. Saves downloads a portable JSON backup; Load Saved Game restores one.</li></ol>
+    <ol class="menu-instructions"><li><strong>Plot a patrol.</strong> Select a planet, settlement, mining station, or point on the strategic map. Add it to your course, then Engage EPD.</li><li><strong>Set the pace.</strong> Use pause and the 1×, 10×, or 100× controls during transit.</li><li><strong>Work the bridge.</strong> Local Flight plans routes and flies the ship automatically; advanced manual controls are optional. Tactical manages sensors, target locks, and weapons. Engineering handles damage and station service.</li><li><strong>Keep your progress.</strong> Autosave remembers your patrol on this device. Use Saves to export a JSON backup and Load Saved Game to restore it.</li></ol>
+    <p>During a patrol, press <kbd>B</kbd> for Bridge Command or <kbd>F</kbd> for Flight Control. Flight Control opens System Map by default and remembers the last tab you used.</p>
     <p>Returning to the menu pauses strategic and local flight. Continue returns to your patrol with flight paused so you can review your orders.</p>
-    <button class="secondary-button" data-close-menu-dialog>Close guide</button>
+    <div class="guide-actions">
+      <a class="primary-button" href="/docs/SDF-Game-Manual.pdf" target="_blank" rel="noopener">Open game manual (PDF) <span aria-hidden="true">↗</span></a>
+      <button class="secondary-button" data-close-menu-dialog>Close guide</button>
+    </div>
   </dialog>
   <dialog id="briefing-dialog">
     <button class="dialog-close" id="close-dialog" aria-label="Close briefing">×</button>
     <div class="eyebrow">SOL DEFENSE FORCE / PHASE 01</div>
     <h2>Welcome to the watch, Captain.</h2>
     <div class="briefing-tabs" role="group" aria-label="Briefing pages"><button data-briefing="mission" aria-pressed="true">Your mission</button><button data-briefing="details" aria-pressed="false">Prototype details</button></div>
-    <div id="briefing-mission"><p>It is 2250. A century after the cold fusion breakthrough, humanity can cross its home system in a little over a month. Electromagnetic Pulse Drives, inertial dampeners, and advanced shielding have opened the frontier.</p><p>Your mission: patrol the Solar System. Select a planet or a point on the grid, add waypoints to your flight plan, and engage your EPD. Use the simulation controls to accelerate your journey.</p></div>
-    <div id="briefing-details" class="briefing-note" hidden><strong>SDF prototype v0.1</strong><p>The Vanguard class and the heliopause station are provisional. The outer patrol boundary is set at 120 AU; a nominal 3.8 AU/day makes a radial crossing approximately 32 days. The map uses a compressed radial scale and illustrative planet positions, held fixed during this prototype. Travel uses distances in AU, with straight legs and a safety exclusion around Sol. Complete patrol progress is autosaved in this browser. Use Saves to download or load a JSON save file. Strategic and local flight resume paused after reload.</p></div>
+    <div id="briefing-mission"><p>It is 2100. Fifty years after the cold fusion breakthrough, humanity can cross its home system in a little over a month. Electromagnetic Pulse Drives, inertial dampeners, and advanced shielding have opened the frontier.</p><p>Your mission: patrol the Solar System. Select a planet or a point on the grid, add waypoints to your flight plan, and engage your EPD. Use the simulation controls to accelerate your journey.</p></div>
+    <div id="briefing-details" class="briefing-note" hidden><strong>SDF Beta</strong><p>The Vanguard class and the heliopause station are provisional. The outer patrol boundary is set at 120 AU; a nominal 3.8 AU/day makes a radial crossing approximately 32 days. The map uses a compressed radial scale and illustrative planet positions. Travel uses distances in AU, with straight legs and a safety exclusion around Sol. Patrol progress autosaves on this device. Use Saves to download or load a JSON save file. Strategic and local flight resume paused after reload.</p></div>
     <button id="begin-button" class="primary-button">Take command <span>↗</span></button>
     <button id="restart-patrol" class="text-button">Restart patrol at Earth · resets route and shipboard time</button>
   </dialog>

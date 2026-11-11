@@ -158,17 +158,19 @@ test('our ship hover uses current integrity and updates after damage and repair'
   assert.deepEqual(shipDamageSummary(undefined),[]);
 });
 
-test('enemy hover aggregates weapon and engine integrity by maximum points',()=>{
-  const ship=createDamageShip('sdf-frigate'),contact={type:'enemy',identified:true};
+test('identified ship hovers show integrity for every affiliation and aggregate weapons and engines by maximum points',()=>{
+  const ship=createDamageShip('sdf-frigate');
   ship.systems.hull.hp=200;ship.systems.sensors.hp=32;
   ship.systems['mp-missiles-1'].hp=0;
   ship.systems['engine-1'].hp=0;ship.systems['engine-2'].max=240;ship.systems['engine-2'].hp=240;
-  assert.deepEqual(radarDamageSummary(contact,ship),[
-    {label:'Hull',percent:20,status:'critical'},
-    {label:'Weapons',percent:78,status:'healthy'},
-    {label:'Sensors',percent:40,status:'damaged'},
-    {label:'Engines',percent:67,status:'damaged'}
-  ]);
+  for(const type of ['enemy','friendly','neutral']){
+    assert.deepEqual(radarDamageSummary({type,identified:true},ship),[
+      {label:'Hull',percent:20,status:'critical'},
+      {label:'Weapons',percent:78,status:'healthy'},
+      {label:'Sensors',percent:40,status:'damaged'},
+      {label:'Engines',percent:67,status:'damaged'}
+    ]);
+  }
 });
 
 test('enemy hover uses the existing green, yellow and red condition thresholds',()=>{
@@ -179,9 +181,13 @@ test('enemy hover uses the existing green, yellow and red condition thresholds',
   }
 });
 
-test('hover integrity is withheld for unidentified, stale and non-enemy tracks',()=>{
+test('hover integrity is withheld for unidentified and stale tracks',()=>{
   const ship=createDamageShip('pirate-frigate');
-  for(const contact of [{type:'unknown',identified:false},{type:'enemy',identified:false},{type:'enemy',identified:true,stale:true},{type:'friendly',identified:true},{type:'neutral',identified:true}])assert.deepEqual(radarDamageSummary(contact,ship),[]);
+  assert.deepEqual(radarDamageSummary({type:'unknown',identified:false},ship),[]);
+  for(const type of ['enemy','friendly','neutral']){
+    assert.deepEqual(radarDamageSummary({type,identified:false},ship),[]);
+    assert.deepEqual(radarDamageSummary({type,identified:true,stale:true},ship),[]);
+  }
   assert.deepEqual(radarDamageSummary({type:'enemy',identified:true},undefined),[]);
 });
 

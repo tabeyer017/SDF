@@ -174,6 +174,8 @@ export function updateElectronicWarfare(combat,sector){
     if(p&&q&&alive(first)&&alive(second)&&!first.surrendered&&!second.surrendered&&distance(p,q)<=200){engaged.add(a);engaged.add(b);}
   };
   for(const id of combat.hostiles)pair('own',id);
+  const raid=sector.encounter;
+  if(raid?.attackTargetId)for(const id of raid.hostileIds)if(combat.hostiles.includes(id))pair(raid.attackTargetId,id);
   for(const id of combat.engagement?.targetIds??[])pair('own',id);
   for(const order of combat.firing??[])pair('own',order.targetId);
   for(const [id,order] of Object.entries(combat.alliedOrders))for(const targetId of order.targetIds)pair(id,targetId);
@@ -455,6 +457,9 @@ function offensiveReadiness(ship){
   const stocked=[...new Set(mounts.map(m=>m.weapon))];
   return {weak:!working.length||working.length<=mounts.length/3||stocked.length>0&&stocked.every(w=>ship.ammo[w]<=ship.maxAmmo[w]*.1),
     power:working.reduce((sum,m)=>sum+weapons[m.weapon].damage*weapons[m.weapon].rpm*m.barrels*condition(ship.systems[m.id]),0)*shipPerformance(ship).power};
+}
+export function canContinueAttack(ship){
+  return alive(ship)&&!ship.surrendered&&ship.combatResponse?.mode!=='retreating'&&offensiveReadiness(ship).power>0;
 }
 function resolveNerve(id){let hash=0;for(const c of id)hash=(Math.imul(hash,31)+c.charCodeAt(0))>>>0;return (hash%11-5)/100;}
 export function updateEnemyResolve(combat,sector,seconds=0){
@@ -759,9 +764,14 @@ export function stepCombat(combat,sector,seconds,rng=Math.random){
   alliedSupport(combat,sector,rng);
   advanceCannonBursts(combat,sector,rng);
   const opponents=new Set([...combat.hostiles,...Object.values(combat.alliedOrders).flatMap(order=>order.targetIds)]);
+  const raid=sector.encounter,protectedShip=raid?.attackTargetId;
   for(const id of opponents){
     const ship=vessel(combat,id),source=position(sector,id);if(!alive(ship)||!source||ship.combatResponse?.mode==='retreating')continue;
-    const targetId=combat.hostiles.includes(id)&&alive(combat.own)?'own':Object.keys(combat.alliedOrders).find(allyId=>combat.alliedOrders[allyId].targetIds.includes(id)&&alive(combat.contacts[allyId]));
+    const attacksPlayer=combat.hostiles.includes(id)&&alive(combat.own);
+    const ally=Object.keys(combat.alliedOrders).find(allyId=>combat.alliedOrders[allyId].targetIds.includes(id)&&alive(combat.contacts[allyId]));
+    const raidTarget=protectedShip&&raid.hostileIds.includes(id)&&combat.hostiles.includes(id)&&alive(vessel(combat,protectedShip));
+    const playerEngaged=combat.engagement?.targetIds.includes(id)||combat.firing?.some(order=>order.targetId===id)||combat.shots.some(shot=>shot.sourceId==='own'&&shot.targetId===id);
+    const targetId=raidTarget&&!playerEngaged?(ally??protectedShip):attacksPlayer?'own':ally;
     if(!targetId)continue;
     for(const mount of ship.mounts){
       if(mount.weapon==='ciws-30')continue;
@@ -769,7 +779,7 @@ export function stepCombat(combat,sector,seconds,rng=Math.random){
       const aims=suppress??(mount.weapon==='mp-missiles'?['engines']:['hull']);
       let component=aims.find(aim=>!canFire(combat,sector,id,mount.id,targetId,aim));
       if(!component)continue;
-      if(!suppress&&!['mp-missiles','as-missiles'].includes(mount.weapon)){
+      if(targetId!==protectedShip&&!suppress&&!['mp-missiles','as-missiles'].includes(mount.weapon)){
         const aim=['weapons','engines','hull'][Math.min(2,Math.floor(rng()*3))];
         if(!canFire(combat,sector,id,mount.id,targetId,aim))component=aim;
       }
@@ -777,6 +787,7 @@ export function stepCombat(combat,sector,seconds,rng=Math.random){
     }
   }
   autoCIWS(combat,sector,'own',rng);for(const id of new Set([...opponents,...Object.keys(combat.alliedOrders)]))autoCIWS(combat,sector,id,rng);
+  if(protectedShip)autoCIWS(combat,sector,protectedShip,rng);
   resolveShots(combat,sector,seconds,rng);
   for(const ship of Object.values(combat.contacts))emergencyStep(ship,seconds);
   advanceSupportShip(combat,sector,seconds);

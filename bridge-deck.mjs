@@ -163,7 +163,7 @@ export function mountBridgeDeck({root,areas,onSelect,onTacticalOpen}) {
     const [x,y]=layout.label,width=area.id==='engineering-support'?242:area.id==='command'?164:206;
     const label=node('g',{class:'bridge-perspective-label','data-bridge-area':area.id,transform:`translate(${x} ${y})`,'aria-hidden':'true'});
     label.style.setProperty('--station-color',area.color);
-    label.append(node('rect',{x:-width/2,y:-17,width,height:38,rx:4}),node('circle',{cx:-width/2+12,cy:1,r:2.4,fill:area.color}),node('text',{'text-anchor':'middle',x:5,y:5},area.id==='command'?'COMMANDER':area.name.toUpperCase()));
+    label.append(node('rect',{x:-width/2,y:-17,width,height:38,rx:4}),node('circle',{cx:-width/2+12,cy:1,r:2.4,fill:area.color}),node('text',{'text-anchor':'middle',x:5,y:5},area.name.toUpperCase()));
     label.onclick=activate;labels.append(label);
     group.append(node('desc',{id:`bridge-deck-description-${area.id}`},area.summary));
   }

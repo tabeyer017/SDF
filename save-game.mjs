@@ -1,12 +1,13 @@
-import { EDGE_AU } from './navigation.mjs';
+import { EDGE_AU, distance } from './navigation.mjs';
+import { ARRIVAL_EPSILON_AU } from './settlements.mjs';
 import { restoreBridgeState } from './bridge-model.mjs';
 import { createSector, LOCAL_SIMULATION_RATES } from './sector-model.mjs';
-import { trainingContacts, observeContact, restoreTargetPriorities } from './tactical-model.mjs';
+import { earthPatrolContacts, trainingContacts, observeContact, restoreTargetPriorities } from './tactical-model.mjs';
 import { createCombat,stationSupport } from './combat-model.mjs';
 import { restoreCombat } from './combat-save.mjs';
 import {hasDeployedShuttles} from './boarding-model.mjs';
 import { restoreCommunications } from './communications-model.mjs';
-import { generateEncounter, ENCOUNTER_VERSIONS, MAX_ENCOUNTER_CONTACTS } from './encounter-model.mjs';
+import { generateEncounter, ENCOUNTER_VERSIONS, MAX_ENCOUNTER_CONTACTS, updateLegacyPatrolBriefing } from './encounter-model.mjs';
 
 export const SAVE_STORAGE_KEY = 'sdf-save-v2';
 export const LEGACY_SAVE_STORAGE_KEY = 'sdf-save-v1';
@@ -52,13 +53,14 @@ function localSector(value,location,pause){
   result.faceTarget=boolean(value.faceTarget,'bow tracking');
   requireValue(record(value.manual),'Missing manual Helm settings.');
   result.manual={thrust:number(value.manual.thrust,'thrust',-100,100),bearing:number(value.manual.bearing,'thrust bearing',0,360),elevation:number(value.manual.elevation,'thrust elevation',-90,90)};
-  let expected=trainingContacts;
+  const contacts=list(value.contacts,MAX_ENCOUNTER_CONTACTS,'sector contacts');
+  // Both fixed Earth rosters have distinct sizes. Validate every ID against the selected roster.
+  let expected=location==='Earth'&&contacts.length===earthPatrolContacts.length?earthPatrolContacts:trainingContacts;
   if(value.encounter!==undefined){
     requireValue(record(value.encounter)&&ENCOUNTER_VERSIONS.includes(value.encounter.version),'Unsupported sector encounter.');
     const seed=number(value.encounter.seed,'encounter seed',0,0xFFFFFFFF);requireValue(Number.isInteger(seed),'Invalid encounter seed.');
-    const {contacts,...encounter}=generateEncounter(location,seed,value.encounter.version);expected=contacts;result.encounter=encounter;
+    const {contacts,...encounter}=generateEncounter(location,seed,value.encounter.version,value.encounter.missionKind);expected=contacts;result.encounter=encounter;
   }
-  const contacts=list(value.contacts,MAX_ENCOUNTER_CONTACTS,'sector contacts');
   requireValue(contacts.length===expected.length,'The save has an incomplete sector encounter.');
   const ids=new Set();
   result.contacts=contacts.map(c=>{
@@ -100,6 +102,7 @@ function validateSave(value,pause){
   const sectorLocation=nav.active?string(value.bridge.sector?.location,'local sector location',120):nav.location;
   const sector=localSector(value.bridge.sector,sectorLocation,pause);
   const combat=value.version===1?createCombat(sector.contacts):restoreCombat(value.bridge.combat,sector.contacts);
+  combat.log=combat.log.map(updateLegacyPatrolBriefing);
   requireValue(!combat.docked||(!nav.active&&!!stationSupport(nav.location)&&Math.hypot(sector.own.x,sector.own.y,sector.own.z)<=5&&Math.hypot(sector.own.vx,sector.own.vy,sector.own.vz)<=10),'Invalid docked state.');
   requireValue(!combat.support||combat.support.location===sector.location,'Support rendezvous is in another sector.');
   requireValue(!nav.active||(!combat.firing&&!combat.shots.length&&!combat.docked&&!combat.support&&!Object.keys(combat.alliedOrders).length),'Combat cannot run during EPD transit.');
@@ -114,9 +117,13 @@ function validateSave(value,pause){
   requireValue(new Set(lockedIds).size===lockedIds.length,'Duplicate target locks.');
   requireValue(tactical.activeId===null||lockedIds.includes(tactical.activeId),'Selected target is not locked.');
   const priorities=restoreTargetPriorities(lockedIds,tactical.priorities);
-  const logs=list(value.logs,3,'command log').map(l=>({time:string(l.time,'log time',20),message:string(l.message,'log message',500)}));
+  const logs=list(value.logs,3,'command log').map(l=>({time:string(l.time,'log time',20),message:updateLegacyPatrolBriefing(string(l.message,'log message',500))}));
+  const communications=restoreCommunications(value.bridge.communications),mission=communications.mission;
+  if(mission?.arrived)requireValue(!nav.active&&sector.encounter?.seed===mission.seed&&sector.encounter.missionKind===mission.kind&&
+    sector.location===mission.destination.name&&distance(nav.ship,mission.destination)<ARRIVAL_EPSILON_AU,'Active assignment does not match the local sector.');
+  if(mission?.sweepSeconds!==undefined)requireValue(sector.encounter.event==='patrol'&&mission.sweepSeconds<=sector.time+1e-6,'Invalid sector sweep progress.');
   return {format:'sdf-save',version:2,savedAt,navigation:nav,
-    bridge:{settings:restoreBridgeState(value.bridge.settings),sector,tactical:{lockedIds,activeId:tactical.activeId,priorities},combat,communications:restoreCommunications(value.bridge.communications)},
+    bridge:{settings:restoreBridgeState(value.bridge.settings),sector,tactical:{lockedIds,activeId:tactical.activeId,priorities},combat,communications},
     selection:point(value.selection),logs};
 }
 

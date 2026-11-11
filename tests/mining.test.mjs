@@ -26,7 +26,7 @@ test('every mining station has a unique active contract issued by the UNE govern
   for(const site of miningStations){
     assert.equal(site.contract.issuer,CONTRACT_AUTHORITY);
     assert.equal(site.contract.status,'Active');
-    assert.match(site.contract.id,/^UNE-MIN-2250-\d{3}$/);
+    assert.match(site.contract.id,/^UNE-MIN-2100-\d{3}$/);
     assert.ok(miningCompanies.some(company=>company.id===site.companyId && company.name===site.companyName));
   }
 });

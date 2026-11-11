@@ -1,0 +1,26 @@
+SOL DEFENSE FORCE / PRIVATE BETA
+
+Run the Windows x64 portable EXE, or use the setup EXE to install the game.
+The build version is in the filename and under Help > About Sol Defense Force.
+Both builds are unsigned. The game runs offline and stores its autosave under
+%APPDATA%\Sol Defense Force. Export JSON from the browser's Saves menu and use
+Load Saved Game in the desktop app if you want to carry over a browser patrol.
+
+Start with a fresh mission at Earth. Open the Game Manual from How to Play or
+the desktop Help menu. Check that you can plot and fly an EPD course, receive
+and open assignments in Comms, and maneuver in Local Flight.
+
+In Tactical, inspect friendly, neutral and hostile ships on Radar and HUD.
+Try target locks, combat, damage control, and shuttle launch and recovery.
+On a quiet patrol, stay underway with radar active and watch for Sol Command's
+check-in and follow-up orders. Try returning to Earth when cleared.
+
+Save during a patrol, quit, and choose Continue after reopening the app. Verify
+that flight resumes paused. Export a JSON backup and import it to confirm it
+restores the same ship, location, orders and assignment.
+
+The playable beta is the open patrol. New Campaign is a preview of planned
+campaign progression.
+
+For each issue, include the build version, Windows version, steps to reproduce,
+expected and actual behavior, and a screenshot or JSON save when available.

@@ -4,7 +4,7 @@ import { radarRanges,boardingComplements } from './tactical-model.mjs';
 export const marineComplements=Object.fromEntries(Object.entries(boardingComplements).filter(([id])=>id.startsWith('sdf-')));
 
 export const bridgeStations = [
-  { id:'command', name:'Command', short:'Command', group:'Command', symbol:'✧', color:'#d5b77c', x:330,y:305, summary:'Ship readiness, alerts, and shuttle status.' },
+  { id:'command', name:'Bridge Command', short:'Bridge Command', group:'Bridge Command', symbol:'✧', color:'#d5b77c', x:330,y:305, summary:'Ship readiness, alerts, and shuttle status.' },
   { id:'system-map', name:'System Map', short:'System Map', group:'Flight Control', symbol:'⌖', color:'#8ac9d0', summary:'Plot a strategic patrol through the Solar System.' },
   { id:'ops', name:'Operations', short:'Ops', group:'Forward & flight control', symbol:'◈', color:'#8ac9d0', x:405,y:157, summary:'Coordinate daily ship resources, internal systems, sensor assignments, and readiness reports. Choose the current bridge duty priority.' },
   { id:'navigation', name:'Local Flight', short:'Local Flight', group:'Flight Control', symbol:'⌖', color:'#8ac9d0', summary:'Choose stops on the local chart and fly the route with automatic guidance. Optional manual controls are available for direct thrust and steering.' },
@@ -18,7 +18,7 @@ export const bridgeStations = [
 
 // Legacy station IDs resolve to the console that now contains their controls.
 export const bridgeAreas = [
-  {id:'command',name:'Command',short:'Command',symbol:'✧',color:'#d5b77c',x:330,y:305,summary:'Ship readiness, alerts & shuttles',tabs:[['command','Command']]},
+  {id:'command',name:'Bridge Command',short:'Bridge Command',symbol:'✧',color:'#d5b77c',x:330,y:305,summary:'Ship readiness, alerts & shuttles',tabs:[['command','Bridge Command']]},
   {id:'flight',name:'Flight Control',short:'Flight Control',symbol:'⌖',color:'#8ac9d0',x:330,y:140,summary:'System travel & local flight',tabs:[['system-map','System Map'],['navigation','Local Flight']]},
   {id:'tactical-security',name:'Tactical / Security',short:'Tactical / Security',symbol:'◇',color:'#d6977f',x:140,y:305,summary:'Weapons, defenses & marines',tabs:[['tactical','Tactical']]},
   {id:'communications',name:'Comms',short:'Comms',symbol:'⌁',color:'#aaa7d1',x:520,y:305,summary:'Hails, messages & shuttle recall',tabs:[['communications','Comms']]},

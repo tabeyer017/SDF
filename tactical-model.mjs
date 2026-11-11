@@ -180,6 +180,7 @@ export const trainingContacts = [
   { id: 'F-11', type: 'friendly', shipType: 'sdf-cruiser', name: 'SDF Ontario', registry: 'SDF-083', x: -67, y: -66, z: 55, vx: 1000, vy: 750, vz: 200 },
   { id: 'F-12', type: 'friendly', shipType: 'sdf-heavy-cruiser', name: 'SDF Nairobi', registry: 'SDF-101', x: 118, y: -95, z: -75, vx: -900, vy: 1200, vz: 240 }
 ];
+export const earthPatrolContacts = trainingContacts.filter(contact => contact.type !== 'enemy');
 
 export const contactDistance = contact => Math.hypot(contact.x, contact.y, contact.z);
 export const contactSpeed = contact => Math.hypot(contact.vx, contact.vy, contact.vz);

@@ -4,6 +4,7 @@ import { createSave, parseSave, MAX_SAVE_BYTES } from '../save-game.mjs';
 import { createSector, observeSector, issueManeuver, setManualHelm, addPatrolWaypoint, startPatrol, stepSector } from '../sector-model.mjs';
 import { restoreBridgeState } from '../bridge-model.mjs';
 import { createCombat,orderAlliedSupport,requestSupportShip,stepCombat,orderEngagement } from '../combat-model.mjs';
+import { earthPatrolContacts } from '../tactical-model.mjs';
 
 function game(){
   const sector=createSector();observeSector(sector);
@@ -13,6 +14,19 @@ function game(){
     logs:[{time:'06:00',message:'Patrol underway.'}]};
 }
 const roundTrip=value=>parseSave(JSON.stringify(createSave(value)));
+
+test('a new Earth patrol saves and reloads with civilian and SDF traffic only',()=>{
+  const original=game(),sector=createSector(earthPatrolContacts);
+  observeSector(sector);
+  original.bridge.sector=sector;
+  original.bridge.combat=createCombat(sector.contacts);
+  const loaded=roundTrip(original);
+  assert.deepEqual(loaded.bridge.sector.contacts,sector.contacts);
+  assert.equal(sector.contacts.filter(contact=>contact.type==='neutral').length,6);
+  assert.equal(sector.contacts.filter(contact=>contact.type==='friendly').length,4);
+  assert.equal(sector.contacts.length,10);
+  assert.deepEqual(Object.keys(loaded.bridge.combat.contacts),sector.contacts.map(contact=>contact.id));
+});
 
 test('JSON save preserves strategic progress, bridge settings, selection, logs, and target locks',()=>{
   const original=game(),before=structuredClone(original),saved=roundTrip(original);

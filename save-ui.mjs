@@ -3,7 +3,7 @@ import { MAX_SAVE_BYTES, parseSave } from './save-game.mjs';
 export function mountSaves({capture,restore}){
   const $=id=>document.getElementById(id),dialog=$('save-dialog'),status=$('save-status'),file=$('save-file'),load=$('load-save');
   let pending=null,readId=0;
-  $('saves-button').onclick=()=>{status.textContent='Browser autosave keeps your current progress. Download a JSON file for a portable backup.';dialog.showModal();};
+  $('saves-button').onclick=()=>{status.textContent='Autosave keeps your current progress on this device. Export a JSON file for a portable backup.';dialog.showModal();};
   $('close-saves').onclick=()=>dialog.close();
   $('download-save').onclick=()=>{
     try{
@@ -11,7 +11,7 @@ export function mountSaves({capture,restore}){
       const url=URL.createObjectURL(new Blob([json],{type:'application/json'})),link=document.createElement('a');
       link.href=url;link.download=`sdf-save-${game.savedAt.replace(/[:.]/g,'-')}.json`;
       document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
-      status.textContent='JSON save download requested. Keep the file to restore this patrol in another browser or on another computer.';
+      status.textContent='JSON export requested. Keep the file to restore this patrol on another computer.';
     }catch(error){status.textContent=`Could not create save: ${error.message}`;}
   };
   file.onchange=async()=>{

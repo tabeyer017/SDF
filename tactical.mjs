@@ -12,7 +12,7 @@ import { HUD_RANGE_KM, relativeShuttleTracks } from './tactical-view-model.mjs';
 
 export const expandRadarRounds = expandProjectileRounds;
 export function radarDamageSummary(contact,ship){
-  if(!contact?.identified||contact.type!=='enemy'||contact.stale||!ship)return [];
+  if(!contact?.identified||contact.stale||!ship)return [];
   return shipDamageSummary(ship);
 }
 export function shipDamageSummary(ship){
@@ -488,7 +488,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     const identity=contact.identified?[el('strong','',contact.name),el('span','',contact.ship.label),el('span','',classification)]:[el('strong','',classification)];
     tooltip.replaceChildren(...identity, el('span', '', `Distance ${contactDistance(contact).toFixed(1)} KM`), el('span', '', `Speed ${speedText(contact)}`), el('span', `radar-closure ${closure.className}`, closure.text), el('span', signClass(contact.z), zText(contact)), el('span', signClass(contact.y), yText(contact)), el('span', '', `IFF: ${contact.iffStatus}`));
     if(contact.trackingStatus)tooltip.append(el('span','',`${contact.jammerEmitting?'JAMMER EMISSION · ':''}${contact.trackingStatus} · ${Math.round(contact.trackingQuality*100)}% track quality`));
-    appendDamageSummary(radarDamageSummary(contact,flight?.combat.contacts[contact.id]),'Enemy ship integrity');
+    appendDamageSummary(radarDamageSummary(contact,flight?.combat.contacts[contact.id]),'Ship integrity');
     if(contact.behavior)tooltip.append(el('span','',contact.behavior==='retreating'?'DISENGAGING · accelerating away':'SURRENDERED · weapons secured'));
     if(priorities[contact.id])tooltip.append(el('span','',`Priority ${priorities[contact.id]} · 1 is highest`));
     tooltip.hidden = false;

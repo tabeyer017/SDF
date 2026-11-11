@@ -23,8 +23,8 @@ export function createSector(contacts=trainingContacts, location='Earth') {
   return { location, time:0, running:false, rate:1, own:{x:0,y:0,z:0,vx:0,vy:0,vz:0}, facing:{x:0,y:1,z:0}, contacts:contacts.map(c=>({...c})), memory:{}, order:null, route:[], manual:{thrust:0,bearing:0,elevation:0}, status:'Vector Drive ready · local simulation paused', safety:'Clear', faceTarget:true };
 }
 
-export function createEncounterSector(location,seed){
-  const {contacts,...encounter}=generateEncounter(location,seed),sector=createSector(contacts,location);
+export function createEncounterSector(location,seed,missionKind){
+  const {contacts,...encounter}=generateEncounter(location,seed,undefined,missionKind),sector=createSector(contacts,location);
   sector.encounter=encounter;sector.status=`${encounter.title} · ${contacts.length} contacts · local simulation paused`;
   return sector;
 }

@@ -6,6 +6,8 @@ coverage/
 !.env.example
 .DS_Store
 Thumbs.db
+/dist/
+/release/
 
 # Artwork working files belong in development/Image Creation/output.
 /output/

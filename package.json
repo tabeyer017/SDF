@@ -1,12 +1,45 @@
 {
   "name": "sol-defense-force",
-  "version": "0.1.0",
+  "version": "0.1.0-beta.1",
+  "productName": "Sol Defense Force",
   "private": true,
-  "description": "SDF Phase 1 — Solar System strategic navigation prototype",
+  "description": "Sol Defense Force — Solar System patrol and ship command game",
   "type": "module",
+  "main": "desktop/main.mjs",
   "scripts": {
     "dev": "node server.mjs",
     "start": "node server.mjs",
+    "start:desktop": "electron .",
+    "pack:win": "electron-builder --win --x64 --dir --publish never",
+    "dist:win": "electron-builder --win --x64 --publish never",
+    "test:desktop": "node desktop/smoke.mjs",
     "test": "node --test tests/navigation.test.mjs tests/settlements.test.mjs tests/mining.test.mjs tests/bridge.test.mjs tests/tactical.test.mjs tests/sector.test.mjs tests/save-game.test.mjs tests/combat.test.mjs tests/communications.test.mjs tests/encounter.test.mjs tests/resolve.test.mjs tests/ship-names.test.mjs tests/missile-guidance.test.mjs tests/boarding.test.mjs"
+  },
+  "devDependencies": {
+    "electron": "45.3.0",
+    "electron-builder": "26.18.0",
+    "playwright-core": "1.65.0"
+  },
+  "build": {
+    "appId": "com.sdf.sol-defense-force",
+    "asar": true,
+    "publish": null,
+    "directories": { "output": "release" },
+    "files": [
+      "*.mjs", "app.js", "!server.mjs", "index.html", "*.css", "desktop/main.mjs",
+      "images/*-five-view.png", "images/sdf-frigate-side-view-transparent.png",
+      "docs/SDF-Game-Manual.pdf", "fonts/**", "package.json"
+    ],
+    "extraFiles": [{ "from": "desktop/QA-START-HERE.txt", "to": "QA-START-HERE.txt" }],
+    "win": { "target": ["nsis", "portable"], "signExecutable": false },
+    "nsis": {
+      "artifactName": "SDF-${version}-win-${arch}-setup.${ext}",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "createDesktopShortcut": true
+    },
+    "portable": { "artifactName": "SDF-${version}-win-${arch}-portable.${ext}" }
   }
 }
