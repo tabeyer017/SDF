@@ -6,7 +6,7 @@ import { mountTactical } from './tactical.mjs';
 import { createSector, createEncounterSector, observeSector, issueManeuver, setManualHelm, coast, brake, addPatrolWaypoint, startPatrol, stepSector, LOCAL_SIMULATION_RATES, maneuverNames } from './sector-model.mjs';
 import { applyEncounterEvent } from './encounter-model.mjs';
 import { mountSectorConsole } from './sector-console.mjs';
-import { createCombat,changeEncounter,shipPerformance,orderEngagement,commandWeapons,ceaseFiring,queueRepair,scheduleRepairs,setAutomaticRepairs,cancelRepair,containEmergency,dock,requestService,stepCombat,advanceMaintenance,cancelSupportShip,missileVolleySizes,cannonBurstSizes,syncElectronicTracking,setJammerMode,requestRadarBurnThrough,refreshMissileGuidance,deployCountermeasures } from './combat-model.mjs';
+import { createCombat,changeEncounter,shipPerformance,orderEngagement,commandWeapons,ceaseFiring,queueRepair,scheduleRepairs,setAutomaticRepairs,cancelRepair,containEmergency,dock,requestService,stepCombat,advanceMaintenance,cancelSupportShip,salvoWeights,missileVolleySizes,cannonBurstSizes,syncElectronicTracking,setJammerMode,requestRadarBurnThrough,refreshMissileGuidance,deployCountermeasures } from './combat-model.mjs';
 import { mountDamageConsole } from './combat-console.mjs';
 import { createCommunications,restoreCommunications,pollCommunications,communicationsRecipients,communicationLink,sendCommunication,channelContactId,revealedPatrolMission,missionMatchesWaypoint,pollPatrolMission,finishPatrolMission,leavePatrolMission,recordPatrolSweep } from './communications-model.mjs';
 import { mountCommunications,mountCommunicationAlerts } from './communications-console.mjs';
@@ -14,7 +14,7 @@ import { earthPatrolContacts,shuttleTypes,crewDoctrine } from './tactical-model.
 import {shipNameOptions,shipNamingConventions,playerShipName,setPlayerShipName} from './ship-names.mjs';
 import {boardingOrders,launchShuttle,recallShuttle,shuttleStatus,hasDeployedShuttles} from './boarding-model.mjs';
 
-export function mountBridge({snapshot,engage,abort,log,missionStations,onOpenMission,onMissionChange,onLocalChange=()=>{},onSave=()=>{},savedGame=null}) {
+export function mountBridge({snapshot,engage,abort,log,missionStations,onOpenBriefing,onOpenMission,onMissionChange,onLocalChange=()=>{},onSave=()=>{},savedGame=null}) {
   const $=id=>document.getElementById(id);
   let saved=savedGame?.settings;
   if(!saved)try{saved=JSON.parse(localStorage.getItem('sdf-bridge-v1'));}catch{}
@@ -77,6 +77,12 @@ export function mountBridge({snapshot,engage,abort,log,missionStations,onOpenMis
     engageTargets:(objective,ids)=>combatAction(()=>orderEngagement(combat,sector,objective,ids)),
     setMissileVolley:size=>{if(missileVolleySizes.includes(size)){combat.missileVolleySize=size;refresh();save();}},
     setCannonBurst:size=>{if(cannonBurstSizes.includes(size)){combat.cannonBurstSize=size;refresh();save();}},
+    setSalvoWeight:id=>{
+      const weight=salvoWeights.find(weight=>weight.id===id);if(!weight)return;
+      combat.missileVolleySize=weight.missileVolleySize;
+      combat.cannonBurstSize=weight.cannonBurstSize;
+      refresh();save();
+    },
     fire:orders=>combatAction(()=>commandWeapons(combat,sector,orders)),
     startFire:orders=>combatAction(()=>commandWeapons(combat,sector,orders,true)),
     ceaseFire:mountIds=>{ceaseFiring(combat,mountIds);refresh();save();},
@@ -120,7 +126,7 @@ export function mountBridge({snapshot,engage,abort,log,missionStations,onOpenMis
     const doctrine=document.createElement('p');doctrine.className='security-doctrine';doctrine.textContent='Marines board, seize and defend ships. Automation keeps crews small. Androids handle routine, hazardous and combat duties, count within personnel totals and can be injured or destroyed. High cost limits androids to 30%.';
     const info=iconAction('Marine and android doctrine',()=>{},'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18ZM12 11v6m0-10v1');
     info.title=doctrine.textContent;info.lastElementChild.textContent=doctrine.textContent;info.lastElementChild.id=`${idPrefix}-marine-doctrine`;info.setAttribute('aria-describedby',info.lastElementChild.id);controls.prepend(info);
-    root.append(header,readout,action('Shuttle control in Comms',()=>select('communications')));
+    root.append(header,readout);
     return {refresh(){
       readouts(snapshot(),'security').forEach(([,value],index)=>{values[index].textContent=value;});
       labelAction(watch,state.watch==='routine'?'Set heightened watch':'Return to routine watch');watch.setAttribute('aria-pressed',String(state.watch==='heightened'));fire.disabled=!combat.own.fire;breach.disabled=!combat.own.breach;
@@ -136,7 +142,7 @@ export function mountBridge({snapshot,engage,abort,log,missionStations,onOpenMis
   const missionContext=()=>{const s=snapshot();return {sector,combat,inTransit:s.active,days:s.days,position:s.position};};
   const communicationsContext=()=>{const locks=tactical.exportState();return {...missionContext(),missionStations,contacts:flight.contacts(),activeTargetId:locks.activeId,range:state.radarRange,lockedTargetIds:[...locks.lockedIds].sort((a,b)=>locks.priorities[a]-locks.priorities[b])};};
   function communicationsChanged(){commsAlerts.refresh();onMissionChange();save();}
-  const commsConsole=mountCommunications({root:commsRoot,getState:()=>communications,getContext:communicationsContext,onChange:communicationsChanged,onRecall:flight.recallShuttle,onLaunch:flight.launchShuttle,onShuttleOrder:flight.setShuttleOrder,onOpenContact:openContact,onOpenMission,onDeclineMission:()=>{
+  const commsConsole=mountCommunications({root:commsRoot,getState:()=>communications,getContext:communicationsContext,onChange:communicationsChanged,onOpenContact:openContact,onOpenMission,onDeclineMission:()=>{
     if(!revealedPatrolMission(communications)||communications.mission.arrived)return;
     finishPatrolMission(communications,missionContext(),'declined','Assignment returned to Sol Command.');
     commsConsole.refresh();communicationsChanged();
@@ -303,7 +309,7 @@ export function mountBridge({snapshot,engage,abort,log,missionStations,onOpenMis
     if(nextShuttleKey!==shuttleKey){
       shuttleKey=nextShuttleKey;
       $('command-shuttles').replaceChildren(...(deployed.length?deployed.map(label=>action(label,()=>{
-        communications.selectedId='shuttles';communications.filter='all';select('communications');commsConsole.focus();
+        select('security');tactical.focusShuttleOps();
       })):[document.createTextNode('All shuttles aboard')]));
     }
   }
@@ -324,6 +330,7 @@ export function mountBridge({snapshot,engage,abort,log,missionStations,onOpenMis
     $('bridge-station-detail').style.setProperty('--station-color',station.color);
     $('bridge-watch').textContent=state.watch==='routine'?'ROUTINE WATCH':'HEIGHTENED WATCH';
     $('bridge-watch').classList.toggle('heightened',state.watch==='heightened');
+    $('bridge-deck').classList.toggle('heightened-watch',state.watch==='heightened');
     $('bridge-duty-seat').textContent=state.seat==='captain'?'CAPTAIN HAS THE CONN':'FIRST OFFICER HAS THE CONN';
     $('bridge-main-display').textContent=s.active?`TRANSIT TO ${s.nextWaypoint.toUpperCase()}`:'SOL SYSTEM / PATROL WATCH';
     $('bridge-last-report').textContent=notice;
@@ -340,10 +347,15 @@ export function mountBridge({snapshot,engage,abort,log,missionStations,onOpenMis
   for(const button of document.querySelectorAll('[data-station-area]:not(#messages-button)')){
     button.onclick=()=>button.dataset.stationArea==='command'?openBridge():selectArea(button.dataset.stationArea);
   }
+  function selectDeckArea(id){
+    if(id==='command')onOpenBriefing();
+    else selectArea(id);
+  }
   const mobileAreas=document.createElement('div');mobileAreas.className='bridge-mobile-areas';document.querySelector('.bridge-deck-panel').insertBefore(mobileAreas,document.querySelector('.bridge-deck-footer'));
   for(const station of bridgeAreas){
     const mobileButton=document.createElement('button');mobileButton.dataset.bridgeArea=station.id;mobileButton.style.setProperty('--station-color',station.color);mobileButton.setAttribute('aria-label',`Open ${station.name}`);
-    const mobileIcon=document.createElement('span'),mobileName=document.createElement('strong'),mobileDescription=document.createElement('small');mobileIcon.className='bridge-area-icon';mobileIcon.setAttribute('aria-hidden','true');mobileIcon.textContent=station.symbol;mobileName.textContent=station.name;mobileDescription.textContent=station.summary;mobileDescription.id=`bridge-mobile-description-${station.id}`;mobileButton.setAttribute('aria-describedby',mobileDescription.id);mobileButton.append(mobileIcon,mobileName,mobileDescription);mobileButton.onclick=()=>selectArea(station.id);mobileAreas.append(mobileButton);
+    const mobileIcon=document.createElement('span'),mobileName=document.createElement('strong'),mobileDescription=document.createElement('small');mobileIcon.className='bridge-area-icon';mobileIcon.setAttribute('aria-hidden','true');mobileIcon.textContent=station.symbol;mobileName.textContent=station.name;mobileDescription.textContent=station.summary;mobileDescription.id=`bridge-mobile-description-${station.id}`;mobileButton.setAttribute('aria-describedby',mobileDescription.id);mobileButton.append(mobileIcon,mobileName,mobileDescription);mobileButton.onclick=()=>selectDeckArea(station.id);mobileAreas.append(mobileButton);
+    if(station.id==='command'){mobileButton.setAttribute('aria-haspopup','dialog');mobileButton.setAttribute('aria-controls','briefing-dialog');}
   }
   const acknowledgments=createStationAcknowledgments(()=>{
     Object.assign(state,battleStationsPreset.settings);
@@ -353,7 +365,7 @@ export function mountBridge({snapshot,engage,abort,log,missionStations,onOpenMis
     save();
   });
   const deckFooter=document.querySelector('.bridge-deck-footer');
-  mountBridgeDeck({root:$('bridge-deck'),areas:bridgeAreas,onSelect:selectArea,onTacticalOpen:direction=>tacticalView.open(direction),footer:deckFooter,acknowledgments});
+  mountBridgeDeck({root:$('bridge-deck'),areas:bridgeAreas,onSelect:selectDeckArea,onTacticalOpen:direction=>tacticalView.open(direction),footer:deckFooter,acknowledgments});
   const tacticalView=mountTacticalView({flight,deck:$('bridge-deck'),targeting:tactical.hudTargeting,acknowledgments});
   const viewButton=document.createElement('button');viewButton.type='button';viewButton.className='bridge-action';viewButton.textContent='HUD · V';viewButton.setAttribute('aria-haspopup','dialog');viewButton.setAttribute('aria-controls','tactical-view-dialog');viewButton.onclick=()=>tacticalView.open();deckFooter.append(viewButton);
   $('bridge-game-guide').onclick=()=>$('how-to-play-dialog').showModal();

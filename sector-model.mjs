@@ -8,7 +8,6 @@ export const VECTOR_ACCELERATION = 120; // KPH gained per simulated second.
 export const HARD_TURN_DEGREES = 40;
 export const isHardTurn = mode => mode === 'port' || mode === 'starboard';
 export const maneuverNames = { intercept:'Intercept', match:'Match velocity', maintain:'Maintain range', open:'Open distance', break:'Break away', patrol:'Patrol route', manual:'Manual flight', brake:'Braking to sector rest', coast:'Coasting' };
-export const sectorHazards = [{ id:'debris', name:'Training debris field', x:50, y:60, z:0, radius:12 }];
 const keys = ['x','y','z'], speeds = ['vx','vy','vz'];
 const length = v => Math.hypot(v.x,v.y,v.z);
 const subtract = (a,b) => Object.fromEntries(keys.map(k=>[k,a[k]-b[k]]));
@@ -19,12 +18,12 @@ const dot = (a,b) => keys.reduce((sum,k)=>sum+a[k]*b[k],0);
 const limited = (v,max) => {const n=length(v);return n>max?Object.fromEntries(keys.map(k=>[k,v[k]*max/n])):v;};
 const validPoint = p => p && keys.every(k=>Number.isFinite(p[k]) && Math.abs(p[k])<=100000);
 
-export function createSector(contacts=trainingContacts, location='Earth') {
-  return { location, time:0, running:false, rate:1, own:{x:0,y:0,z:0,vx:0,vy:0,vz:0}, facing:{x:0,y:1,z:0}, contacts:contacts.map(c=>({...c})), memory:{}, order:null, route:[], manual:{thrust:0,bearing:0,elevation:0}, status:'Vector Drive ready · local simulation paused', safety:'Clear', faceTarget:true };
+export function createSector(contacts=trainingContacts, location='Earth', {hazards=[]}={}) {
+  return { location, time:0, running:false, rate:1, own:{x:0,y:0,z:0,vx:0,vy:0,vz:0}, facing:{x:0,y:1,z:0}, contacts:contacts.map(c=>({...c})), hazards:hazards.map(hazard=>({...hazard})), memory:{}, order:null, route:[], manual:{thrust:0,bearing:0,elevation:0}, status:'Vector Drive ready · local simulation paused', safety:'Clear', faceTarget:true };
 }
 
-export function createEncounterSector(location,seed,missionKind){
-  const {contacts,...encounter}=generateEncounter(location,seed,undefined,missionKind),sector=createSector(contacts,location);
+export function createEncounterSector(location,seed,missionKind,options){
+  const {contacts,...encounter}=generateEncounter(location,seed,undefined,missionKind),sector=createSector(contacts,location,options);
   sector.encounter=encounter;sector.status=`${encounter.title} · ${contacts.length} contacts · local simulation paused`;
   return sector;
 }
@@ -123,12 +122,13 @@ function guidance(sector) {
     desired=limited(Object.fromEntries(keys.map((k,i)=>[k,target[speeds[i]]+direction[k]*correction])),VECTOR_LIMIT);
     sector.status=`${maneuverNames[order.mode]} · TRK-${target.id.split('-').at(-1)} · autopilot executing`;
   }
+  if(!sector.hazards?.length){sector.safety='Clear';return desired;}
   // Check the stopping corridor as well as the commanded path; brake if either is obstructed.
   const speed=length(velocity(own)), acceleration=VECTOR_ACCELERATION*(sector.enginePerformance??1);
   const horizon=(acceleration>0?speed/acceleration:0)+10;
   const end=Object.fromEntries(keys.map(k=>[k,own[k]+desired[k]*horizon/3600]));
   const stopping=Object.fromEntries(keys.map((k,i)=>[k,own[k]+own[speeds[i]]*horizon/3600]));
-  const hazard=sectorHazards.find(h=>segmentHitsHazard(own,end,h)||segmentHitsHazard(own,stopping,h));
+  const hazard=sector.hazards.find(h=>segmentHitsHazard(own,end,h)||segmentHitsHazard(own,stopping,h));
   sector.safety=hazard?`Blocked: ${hazard.name}`:'Clear';
   if(hazard){sector.status=`Navigation braking · ${hazard.name} · plot a waypoint around hazard`;return {x:0,y:0,z:0};}
   return desired;

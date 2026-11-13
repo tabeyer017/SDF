@@ -8,6 +8,40 @@ import { createDamageShip } from '../combat-model.mjs';
 import { projectTacticalView, tacticalViews, bridgeCombatActive, tacticalProjectiles, incomingTacticalThreats } from '../tactical-view-model.mjs';
 import { createSector, relativeContact, issueManeuver } from '../sector-model.mjs';
 import { createCombat, fireWeapon, stepCombat } from '../combat-model.mjs';
+import { diagramAimCategory, diagramSystemStatus, renderShipDiagram, shipDiagramMarkers } from '../ship-diagrams.mjs';
+
+test('each five-view diagram covers its fitted engines, weapon mounts and key ship systems',async()=>{
+  assert.deepEqual(Object.keys(shipDiagramMarkers).sort(),Object.keys(shipFiveViews).sort());
+  for(const classId of Object.keys(shipFiveViews)){
+    const ship=createDamageShip(classId),markers=shipDiagramMarkers[classId];
+    const expected=['bridge','reactor','jammer','hull','sensors',...Object.keys(ship.systems).filter(id=>id.startsWith('engine-')),...ship.mounts.map(mount=>mount.id)];
+    assert.deepEqual(Object.keys(markers).sort(),expected.sort(),classId);
+    const image=await readFile(new URL(`../${shipFiveViews[classId]}`,import.meta.url));
+    const aspect=image.readUInt32BE(20)/image.readUInt32BE(16);
+    const points=Object.entries(markers);
+    for(const [index,[id,{x,y}]] of points.entries()){
+      assert.ok(Number.isFinite(x)&&x>0&&x<100,classId);
+      assert.ok(Number.isFinite(y)&&y>0&&y<100,classId);
+      for(const [otherId,other] of points.slice(index+1)){
+        assert.ok(Math.hypot(x-other.x,(y-other.y)*aspect)>=5,`${classId}: ${id} overlaps ${otherId}`);
+      }
+    }
+  }
+  assert.equal(renderShipDiagram({ship:null,classId:'unknown'}),null);
+});
+
+test('diagram integrity thresholds and Tactical aim categories match combat',()=>{
+  for(const [hp,status] of [[100,'healthy'],[71,'healthy'],[70,'damaged'],[40,'damaged'],[39,'critical'],[1,'critical'],[0,'offline']]){
+    assert.equal(diagramSystemStatus({hp,max:100}),status);
+  }
+  const ship=createDamageShip('sdf-frigate');
+  for(const [id,category] of [
+    ['engine-1','engines'],['ciws-30-2','ciws'],['mp-missiles-1','weapons'],['autocannon-120-2','weapons'],
+    ['jammer','jammer'],['sensors','sensors'],['bridge','hull'],['reactor','hull'],['hull','hull'],['missing',null]
+  ]){
+    assert.equal(diagramAimCategory(ship,id),category);
+  }
+});
 
 test('tactical views cover the complete bearing circle once, including sector boundaries',()=>{
   for(let bearing=-180;bearing<180;bearing+=.5){

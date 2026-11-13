@@ -314,10 +314,12 @@ $('watch-rate').onchange=()=>{
   if(!state.active){bridgeConsole.setLocalRate(rate);return;}
   if([1,10,100].includes(rate)){state.speed=rate;updateTelemetry();save();}
 };
-for(const [id,page] of [['briefing-button','mission'],['about-button','details']])$(id).onclick=()=>{
+function openBriefing(page='mission'){
   document.querySelector(`[data-briefing="${page}"]`).click();
   $('briefing-dialog').showModal();
-};
+}
+$('briefing-button').onclick=()=>openBriefing();
+$('about-button').onclick=()=>openBriefing('details');
 document.querySelectorAll('.briefing-tabs button').forEach(button=>button.onclick=()=>{
   $('briefing-mission').hidden=button.dataset.briefing!=='mission';
   $('briefing-details').hidden=button.dataset.briefing!=='details';
@@ -376,7 +378,7 @@ bridgeConsole=mountBridge({
   snapshot:()=>({shipName:currentShipName(),location:state.location,position:state.ship,days:state.days,canEPD:bridgeConsole?.localStatus().canEPD!==false,active:state.active,paused:state.paused,speed:state.speed,routeCount:state.route.length,nextWaypoint:state.route[0]?.name||'',unsafe:routeUnsafe(),distance:formatDistance(routeDistance(state.ship,state.route)),eta:state.route.length?formatETA(routeDistance(state.ship,state.route)/EPD_AU_PER_DAY):'Awaiting course',targetName:selected.name}),
   engage:()=>{if(!state.active)$('engage-button').click();},
   abort:()=>{if(state.active)$('engage-button').click();},
-  log,missionStations,onOpenMission:openMissionMap,onMissionChange:renderMissionMarker,
+  log,missionStations,onOpenBriefing:openBriefing,onOpenMission:openMissionMap,onMissionChange:renderMissionMarker,
   onLocalChange:()=>{updateTelemetry();save();},onSave:save,savedGame:savedGame?.bridge
 });
 function restoredSelection(point){return [...bodies,...settlements,...miningStations].find(body=>body.id===point?.id)||point||earth;}

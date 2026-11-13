@@ -15,6 +15,21 @@ function game(){
 }
 const roundTrip=value=>parseSave(JSON.stringify(createSave(value)));
 
+test('explicit sector hazards survive saves and old patrols lose stale debris warnings',()=>{
+  const original=game();
+  const hazard={id:'debris',name:'Training debris field',x:50,y:60,z:0,radius:12};
+  original.bridge.sector.hazards=[hazard];
+  assert.deepEqual(roundTrip(original).bridge.sector.hazards,[hazard]);
+  const legacy=createSave(original);
+  delete legacy.bridge.sector.hazards;
+  legacy.bridge.sector.safety='Blocked: Training debris field';
+  legacy.bridge.sector.status='Navigation braking · Training debris field · plot a waypoint around hazard';
+  const restored=parseSave(JSON.stringify(legacy));
+  assert.deepEqual(restored.bridge.sector.hazards,[]);
+  assert.equal(restored.bridge.sector.safety,'Clear');
+  assert.doesNotMatch(restored.bridge.sector.status,/debris/i);
+});
+
 test('a new Earth patrol saves and reloads with civilian and SDF traffic only',()=>{
   const original=game(),sector=createSector(earthPatrolContacts);
   observeSector(sector);

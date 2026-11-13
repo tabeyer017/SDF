@@ -4,13 +4,13 @@ import { createCombat,createDamageShip,deployCountermeasures,damageClasses,weapo
 import { createSector,stepSector,setManualHelm } from '../sector-model.mjs';
 import { restoreCombat } from '../combat-save.mjs';
 import { shipTypes,trainingContacts } from '../tactical-model.mjs';
-import { trackingSolution,syncElectronicTracking,updateElectronicWarfare,setJammerMode,requestRadarBurnThrough,radarBurnThrough,infraredTrackingQuality,jammerEmitting,withinMountArc } from '../combat-model.mjs';
+import { trackingSolution,syncElectronicTracking,updateElectronicWarfare,setJammerMode,requestRadarBurnThrough,radarBurnThrough,infraredTrackingQuality,jammerEmitting,withinCiwsArc,withinTurretArc,batteryFireOrders } from '../combat-model.mjs';
 import { observeSector,issueManeuver } from '../sector-model.mjs';
 const setup=()=>({sector:createSector(),combat:createCombat()});
 function step(c,s,seconds,rng=()=>0){for(let t=0;t<seconds-1e-8;t+=.05)stepCombat(c,s,Math.min(.05,seconds-t),rng);}
 
 test('physical countermeasures use faction ammo and spend one charge per ten-second deployment',()=>{
-  for(const [classId,charges] of [['sdf-frigate',6],['sdf-destroyer',6],['sdf-cruiser',6],['sdf-heavy-cruiser',6],['pirate-frigate',4],['pirate-corvette',4]]){
+  for(const [classId,charges] of [['sdf-frigate',30],['sdf-destroyer',30],['sdf-cruiser',30],['sdf-heavy-cruiser',30],['pirate-frigate',4],['pirate-corvette',4]]){
     const ship=createDamageShip(classId);
     assert.equal(ship.ammo.chaff,charges);
     assert.equal(ship.ammo.flares,charges);
@@ -18,7 +18,7 @@ test('physical countermeasures use faction ammo and spend one charge per ten-sec
   const {combat,sector}=setup();
   combat.time=12;
   assert.equal(deployCountermeasures(combat,'chaff').ok,true);
-  assert.equal(combat.own.ammo.chaff,5);
+  assert.equal(combat.own.ammo.chaff,29);
   assert.equal(combat.own.chaffUntil,22);
   assert.equal(combat.own.flaresUntil,0);
   combat.time=14;combat.own.ammo.flares=1;
@@ -34,10 +34,25 @@ test('physical countermeasures use faction ammo and spend one charge per ten-sec
   delete combat.own.ammo.chaff;delete combat.own.ammo.flares;
   combat.own.countermeasures={chaff:7,flares:8};
   const migrated=restoreCombat(structuredClone(combat),sector.contacts);
-  assert.equal(migrated.own.ammo.chaff,5);
-  assert.equal(migrated.own.ammo.flares,6);
+  assert.equal(migrated.own.ammo.chaff,29);
+  assert.equal(migrated.own.ammo.flares,30);
   combat.own=createDamageShip('privateer',true);
   assert.equal(deployCountermeasures(combat,'chaff').ok,false);
+});
+
+test('six-charge SDF saves expand their countermeasure magazines only once',()=>{
+  const {combat,sector}=setup();
+  for(const type of ['chaff','flares'])combat.own.maxAmmo[type]=6;
+  combat.own.ammo.chaff=4;
+  combat.own.ammo.flares=0;
+  combat.own.chaffUntil=10;
+  const restored=restoreCombat(structuredClone(combat),sector.contacts);
+  assert.equal(restored.own.ammo.chaff,28);
+  assert.equal(restored.own.ammo.flares,24);
+  assert.equal(restored.own.chaffUntil,10);
+  assert.equal(restored.own.maxAmmo.chaff,30);
+  assert.equal(restored.own.maxAmmo.flares,30);
+  assert.deepEqual(restoreCombat(structuredClone(restored),sector.contacts),restored);
 });
 
 test('reactor allocation scales thruster acceleration, gun and CIWS cycles, and sensor coverage',()=>{
@@ -286,7 +301,7 @@ test('station arrival and docking do not replenish ammunition or decoys until se
   assert.equal(requestService(combat,sector),true);advanceMaintenance(combat,59);assert.equal(combat.own.ammo['as-missiles'],0);
   assert.equal(combat.own.ammo.chaff,0);assert.equal(combat.own.ammo.flares,1);
   advanceMaintenance(combat,1);assert.equal(combat.own.ammo['as-missiles'],combat.own.maxAmmo['as-missiles']);
-  assert.equal(combat.own.ammo.chaff,6);assert.equal(combat.own.ammo.flares,6);
+  assert.equal(combat.own.ammo.chaff,30);assert.equal(combat.own.ammo.flares,30);
 });
 
 test('a repair tender reaches a stranded ship, replaces destroyed engines, and replenishes ammunition after service',()=>{
@@ -463,19 +478,99 @@ test('each CIWS mount tracks incoming missiles independently of ship radar and f
   assert.ok(combat.own.mounts.find(m=>m.id==='ciws-30-2').readyAt>0);assert.ok(enemy);
 });
 
-test('CIWS arcs use the catalog sides and include a 15-degree overlap on either side of the bow',()=>{
+test('CIWS arcs use catalog sides, overlap near the bow, and leave a blind sector astern',()=>{
   for(const [classId,catalog] of Object.entries(shipTypes)){
+    if(!catalog.loadout.includes('ciws-30'))continue;
     const fit=catalog.fitting?.['ciws-30'];
-    if(!fit?.port&&!fit?.starboard)continue;
     const mounts=createDamageShip(classId).mounts.filter(mount=>mount.weapon==='ciws-30');
-    assert.equal(mounts.filter(mount=>mount.side==='port').length,fit.port??0);
-    assert.equal(mounts.filter(mount=>mount.side==='starboard').length,fit.starboard??0);
+    const expected=fit?.port||fit?.starboard
+      ?[...Array(fit.port??0).fill('port'),...Array(fit.starboard??0).fill('starboard')]
+      :mounts.map((_,i)=>i%2===0?'port':'starboard');
+    assert.deepEqual(mounts.map(mount=>mount.side),expected,classId);
   }
-  const shipPos={x:0,y:0,z:0,facing:{x:0,y:1,z:0}};
-  for(const [degrees,port,starboard] of [[-180,true,true],[-179,true,false],[-16,true,false],[-15,true,true],[15,true,true],[16,false,true],[179,false,true],[180,true,true]]){
-    const angle=degrees*Math.PI/180,target={x:Math.sin(angle),y:Math.cos(angle),z:0};
-    assert.equal(withinMountArc(shipPos,{side:'port'},target),port,`port at ${degrees}°`);
-    assert.equal(withinMountArc(shipPos,{side:'starboard'},target),starboard,`starboard at ${degrees}°`);
+  const shipPos={x:0,y:0,z:0,bow:350};
+  for(const [degrees,port,starboard] of [[-180,false,false],[-171,false,false],[-170,true,false],[-16,true,false],[-15,true,true],[15,true,true],[16,false,true],[170,false,true],[171,false,false],[180,false,false]]){
+    const angle=(degrees+shipPos.bow)*Math.PI/180,target={x:Math.sin(angle),y:Math.cos(angle),z:5};
+    assert.equal(withinCiwsArc(shipPos,{side:'port'},target),port,`port at ${degrees}°`);
+    assert.equal(withinCiwsArc(shipPos,{side:'starboard'},target),starboard,`starboard at ${degrees}°`);
+    assert.equal(withinCiwsArc(shipPos,{},target),true);
+  }
+});
+
+test('a port CIWS intercepts a port missile and reaches a starboard missile after the bow turns',()=>{
+  const {combat,sector}=setup();
+  Object.assign(sector.contacts.find(c=>c.id==='E-04'),{x:-12,y:0,z:0,vx:0,vy:0,vz:0});
+  assert.equal(fireWeapon(combat,sector,'E-04','gp-missiles-1','own','hull',()=>0).ok,true);
+  combat.hostiles=[];
+  combat.own.systems['ciws-30-2'].hp=0;
+  const mount=combat.own.mounts.find(m=>m.side==='port'),port=combat.shots[0];
+  const starboard={...port,id:`shot:${combat.nextShot++}`,x:12,vx:-port.vx};
+  combat.shots.push(starboard);
+
+  stepCombat(combat,sector,.05,()=>0);
+  assert.equal(mount.ciwsTarget,port.id);
+  step(combat,sector,1.5,()=>0);
+  assert.deepEqual(combat.shots.map(shot=>shot.id),[starboard.id]);
+  assert.equal(mount.ciwsTarget,undefined);
+  assert.equal(canFire(combat,sector,'own',mount.id,starboard.id),'Target is outside CIWS firing arc.');
+
+  sector.own.bow=180;
+  assert.equal(canFire(combat,sector,'own',mount.id,starboard.id),null);
+  stepCombat(combat,sector,.05,()=>0);
+  assert.equal(mount.ciwsTarget,starboard.id);
+  step(combat,sector,1.5,()=>0);
+  assert.equal(combat.shots.length,0);
+});
+
+test('fore and aft turret arcs follow the bow and include their boundary bearings',()=>{
+  const {combat,sector}=setup(),contact=sector.contacts.find(c=>c.id==='E-04');
+  const turrets=combat.own.mounts.filter(m=>m.weapon==='autocannon-120');
+  assert.deepEqual(turrets.map(m=>m.arc),['fore','aft']);
+  assert.equal(createDamageShip('sdf-cruiser').mounts.find(m=>m.weapon==='rail-gun').arc,'fore');
+  assert.deepEqual(combat.contacts['E-04'].mounts.filter(m=>m.weapon==='autocannon-75').map(m=>m.arc),['fore','aft']);
+  for(const [bearing,fore,aft] of [[0,true,false],[44,true,false],[45,true,true],[-45,true,true],[135,true,true],[-135,true,true],[136,false,true],[180,false,true]]){
+    const angle=bearing*Math.PI/180,point={x:Math.sin(angle),y:Math.cos(angle),z:3};
+    assert.equal(withinTurretArc(sector.own,turrets[0],point),fore,`fore at ${bearing}°`);
+    assert.equal(withinTurretArc(sector.own,turrets[1],point),aft,`aft at ${bearing}°`);
+  }
+  Object.assign(contact,{x:0,y:10,z:0});
+  assert.equal(canFire(combat,sector,'own',turrets[0].id,contact.id),null);
+  assert.equal(canFire(combat,sector,'own',turrets[1].id,contact.id),'Target is outside turret firing arc.');
+  assert.equal(issueManeuver(sector,'starboard'),true);
+  assert.equal(issueManeuver(sector,'starboard'),true);
+  assert.equal(canFire(combat,sector,'own',turrets[1].id,contact.id),null);
+  sector.own.bow=180;
+  assert.equal(canFire(combat,sector,'own',turrets[0].id,contact.id),'Target is outside turret firing arc.');
+  assert.equal(canFire(combat,sector,'own',turrets[1].id,contact.id),null);
+});
+
+test('dorsal and ventral VLS block close off-axis shots and add two seconds at legal range',()=>{
+  for(const [weapon,vertical,offset,component] of [['mp-missiles','dorsal',-1,'engines'],['as-missiles','ventral',1,'hull']]){
+    const {combat,sector}=setup(),contact=sector.contacts.find(c=>c.id==='E-04');
+    const mount=combat.own.mounts.find(m=>m.weapon===weapon),ammo=combat.own.ammo[weapon];
+    assert.equal(mount.vertical,vertical);
+    assert.equal(combat.contacts['E-04'].mounts.find(m=>m.weapon==='gp-missiles').vertical,'ventral');
+    Object.assign(contact,{x:0,y:3,z:offset,vx:0,vy:0,vz:0});
+    assert.equal(canFire(combat,sector,'own',mount.id,contact.id,component),null);
+    contact.z=2*offset;
+    const blocked=fireWeapon(combat,sector,'own',mount.id,contact.id,component,()=>0);
+    assert.deepEqual(blocked,{ok:false,message:'Target is inside VLS vertical blind zone (< 6 km off-axis).'});
+    assert.equal(combat.own.ammo[weapon],ammo);
+    assert.equal(mount.readyAt,0);
+
+    contact.z=6*offset;contact.y=0;
+    assert.equal(fireWeapon(combat,sector,'own',mount.id,contact.id,component,()=>1,5).ok,true);
+    const baseCycle=5*60/weapons[weapon].rpm;
+    assert.equal(mount.readyAt,baseCycle+2);
+    const saved=JSON.parse(JSON.stringify(combat));
+    for(const mount of saved.own.mounts){delete mount.arc;delete mount.vertical;}
+    const restored=restoreCombat(saved,sector.contacts);
+    assert.deepEqual(restored.own.mounts,combat.own.mounts);
+
+    combat.time=mount.readyAt;
+    contact.z=-2*offset;contact.y=3;
+    assert.equal(fireWeapon(combat,sector,'own',mount.id,contact.id,component,()=>1,5).ok,true);
+    assert.equal(mount.readyAt-combat.time,baseCycle);
   }
 });
 
@@ -489,7 +584,7 @@ test('Hard a Starboard brings the working CIWS onto a port threat across the ste
   const missile=combat.shots[0];
   stepCombat(combat,sector,.05,()=>0);
   assert.equal(mount.ciwsTarget,undefined);
-  assert.match(canFire(combat,sector,'own',mount.id,missile.id),/outside the starboard CIWS arc/);
+  assert.equal(canFire(combat,sector,'own',mount.id,missile.id),'Target is outside CIWS firing arc.');
 
   assert.equal(issueManeuver(sector,'starboard'),true);
   assert.equal(canFire(combat,sector,'own',mount.id,missile.id),null);
@@ -508,8 +603,8 @@ test('CIWS selects an in-arc missile even when the closest threat is on the oppo
   const port={...starboard,id:`shot:${combat.nextShot++}`,x:-12};
   combat.shots.push(port);
   const [portMount,starboardMount]=combat.own.mounts.filter(m=>m.weapon==='ciws-30');
-  assert.match(canFire(combat,sector,'own',portMount.id,starboard.id),/outside the port CIWS arc/);
-  assert.match(canFire(combat,sector,'own',starboardMount.id,port.id),/outside the starboard CIWS arc/);
+  assert.equal(canFire(combat,sector,'own',portMount.id,starboard.id),'Target is outside CIWS firing arc.');
+  assert.equal(canFire(combat,sector,'own',starboardMount.id,port.id),'Target is outside CIWS firing arc.');
   assert.equal(canFire(combat,sector,'own',portMount.id,port.id),null);
   stepCombat(combat,sector,.05,()=>0);
   assert.equal(portMount.ciwsTarget,port.id);
@@ -531,7 +626,7 @@ test('pirate CIWS uses its course for port and starboard bearings',()=>{
   assert.equal(fireWeapon(combat,sector,'own','as-missiles-1',pirate.id,'hull',()=>0).ok,true);
   const [port,starboard]=combat.contacts[pirate.id].mounts.filter(m=>m.weapon==='ciws-30');
   const missile=combat.shots[0];
-  assert.match(canFire(combat,sector,pirate.id,port.id,missile.id),/outside the port CIWS arc/);
+  assert.equal(canFire(combat,sector,pirate.id,port.id,missile.id),'Target is outside CIWS firing arc.');
   assert.equal(canFire(combat,sector,pirate.id,starboard.id,missile.id),null);
   stepCombat(combat,sector,.05,()=>0);
   assert.equal(port.ciwsTarget,undefined);
@@ -553,6 +648,13 @@ test('CIWS cycles persist through saves and a close salvo overwhelms two mounts'
   assert.ok(mounts.every(m=>Math.abs(m.readyAt-combat.time-1.5)<1e-10));
   const restored=restoreCombat(JSON.parse(JSON.stringify(combat)),sector.contacts);
   assert.deepEqual(restored.own.mounts,combat.own.mounts);
+  const legacy=JSON.parse(JSON.stringify(combat));
+  for(const ship of [legacy.own,...Object.values(legacy.contacts)]){
+    for(const mount of ship.mounts)delete mount.side;
+  }
+  const migrated=restoreCombat(legacy,sector.contacts);
+  assert.deepEqual(migrated.own.mounts,combat.own.mounts);
+  assert.deepEqual(migrated.contacts['U-01'].mounts,combat.contacts['U-01'].mounts);
   step(restored,sector,8,()=>0);
   assert.ok(restored.own.systems.hull.hp<hull);
 });
@@ -769,10 +871,52 @@ test('automatic destroy selects reachable targets in priority order and waits be
   assert.ok(combat.firing.every(f=>f.targetId===a.id));
 });
 
+test('boarding and Defang keep distinct aims and holds across simulation and save restore',()=>{
+  const {combat,sector}=setup(),id='E-04',target=combat.contacts[id];
+  Object.assign(sector.contacts.find(contact=>contact.id===id),{x:12,y:8,z:0,vx:0,vy:0,vz:0});
+  assert.equal(orderEngagement(combat,sector,'boarding',[id]).ok,true);
+  assert.deepEqual(combat.firing.map(f=>[f.mountId,f.component]),[
+    ['autocannon-120-1','engines'],['autocannon-120-2','engines'],['mp-missiles-1','engines']
+  ]);
+  const restored=restoreCombat(JSON.parse(JSON.stringify(combat)),sector.contacts);
+  assert.deepEqual(restored.engagement,combat.engagement);
+  for(const [systemId,system] of Object.entries(restored.contacts[id].systems)){
+    if(systemId.startsWith('engine-'))system.hp=0;
+  }
+  stepCombat(restored,sector,.01,()=>1);
+  assert.ok(restored.firing.every(f=>f.component==='weapons'&&!f.mountId.startsWith('as-missiles')));
+  assert.equal(restored.own.ammo['as-missiles'],combat.own.ammo['as-missiles']);
+
+  assert.equal(orderEngagement(combat,sector,'defang',[id]).ok,true);
+  assert.deepEqual(combat.firing.map(f=>[f.mountId,f.component]),[
+    ['autocannon-120-1','weapons'],['autocannon-120-2','weapons'],['mp-missiles-1','jammer'],['as-missiles-1','jammer']
+  ]);
+  assert.deepEqual(restoreCombat(JSON.parse(JSON.stringify(combat)),sector.contacts).engagement,combat.engagement);
+  target.systems.jammer.hp=0;
+  stepCombat(combat,sector,.01,()=>1);
+  assert.ok(combat.firing.every(f=>f.component==='weapons'));
+});
+
+test('battery orders choose compatible aims and skip mounts that cannot fire',()=>{
+  const {combat,sector}=setup(),id='E-04',target=combat.contacts[id];
+  Object.assign(sector.contacts.find(contact=>contact.id===id),{x:12,y:8,z:0,vx:0,vy:0,vz:0});
+  combat.own.mounts.find(m=>m.id==='autocannon-120-2').readyAt=10;
+  assert.deepEqual(batteryFireOrders(combat,sector,'main-guns',id),[{mountId:'autocannon-120-1',targetId:id,component:'hull'}]);
+  assert.equal(batteryFireOrders(combat,sector,'main-guns',id,true).length,2);
+  assert.equal(batteryFireOrders(combat,sector,'mp-missiles',id)[0].component,'weapons');
+  for(const mount of target.mounts)target.systems[mount.id].hp=0;
+  assert.equal(batteryFireOrders(combat,sector,'mp-missiles',id)[0].component,'engines');
+  target.jammer=true;
+  assert.equal(batteryFireOrders(combat,sector,'mp-missiles',id)[0].component,'jammer');
+  assert.equal(batteryFireOrders(combat,sector,'as-missiles',id)[0].component,'hull');
+  target.surrendered=true;
+  assert.deepEqual(batteryFireOrders(combat,sector,'main-guns',id),[]);
+});
+
 test('Disable and Destroy suppress CIWS, then the jammer, then attack the objective one missile at a time',()=>{
   for(const objective of ['disable','destroy']){
     const {combat,sector}=setup(),id='E-04';
-    Object.assign(sector.contacts.find(c=>c.id===id),{x:0,y:10,z:0,vx:0,vy:0,vz:0});
+    Object.assign(sector.contacts.find(c=>c.id===id),{x:8,y:6,z:0,vx:0,vy:0,vz:0});
     const before={...combat.own.ammo};
     orderEngagement(combat,sector,objective,[id]);stepCombat(combat,sector,.01,()=>0);
     assert.equal(combat.own.ammo['as-missiles'],before['as-missiles']);
@@ -822,6 +966,7 @@ test('Tactical holds missiles beyond gun range or with disabled guns, while a ma
 test('manual missile volleys use 1, 5, 10 or 15 separate warheads and preserve the launch rate',()=>{
   for(const size of [1,5,10,15]){
     const {combat,sector}=setup();combat.missileVolleySize=size;
+    sector.contacts.find(contact=>contact.id==='E-04').z=-5;
     const order={mountId:'as-missiles-1',targetId:'E-04',component:'hull'};
     assert.equal(commandWeapons(combat,sector,[order],false,()=>0).ok,true);
     const shots=combat.shots.filter(s=>s.sourceId==='own');
@@ -861,7 +1006,8 @@ test('a changed volley size applies to the next Tactical launch and survives sav
 
 test('a real volley gives each CIWS mount a separate interceptable missile track',()=>{
   const {combat,sector}=setup();combat.missileVolleySize=15;
-  Object.assign(sector.contacts.find(c=>c.id==='E-04'),{x:0,y:8,z:0,vx:0,vy:0,vz:0});
+  // Launch into the overlap ahead of the pirate's north-facing bow.
+  Object.assign(sector.contacts.find(c=>c.id==='E-04'),{x:0,y:-8,z:0,vx:0,vy:0,vz:0});
   commandWeapons(combat,sector,[{mountId:'as-missiles-1',targetId:'E-04',component:'hull'}],false,()=>0);
   stepCombat(combat,sector,.05,()=>0);
   const mounts=combat.contacts['E-04'].mounts.filter(m=>m.weapon==='ciws-30');
@@ -923,7 +1069,7 @@ test('jammer suppression uses MP beyond autocannon range and holds heavy missile
 test('both pirate classes suppress CIWS with autocannons, then use GP missiles and autocannons on the jammer',()=>{
   for(const id of ['E-04','E-06']){
     const {combat,sector}=setup(),pirate=combat.contacts[id];combat.own.autoRepair=false;
-    Object.assign(sector.contacts.find(c=>c.id===id),{x:0,y:10,z:0,vx:0,vy:0,vz:0});
+    Object.assign(sector.contacts.find(c=>c.id===id),{x:0,y:-10,z:0,vx:0,vy:0,vz:0});
     combat.hostiles=[id];combat.own.jammer=true;
     stepCombat(combat,sector,.01,()=>0);
     let shots=combat.shots.filter(s=>s.sourceId===id);
@@ -971,7 +1117,7 @@ test('manual cannon bursts fire 1, 5, 10 or 20 individual shells per mount at th
 test('Tactical fires five-round cannon bursts, pauses, repeats, and accepts a player size change',()=>{
   for(const objective of ['disable','destroy']){
     const {combat,sector}=setup(),id='E-04',ammo=combat.own.ammo['autocannon-120'];
-    Object.assign(sector.contacts.find(c=>c.id===id),{x:0,y:10,z:0,vx:0,vy:0,vz:0});
+    Object.assign(sector.contacts.find(c=>c.id===id),{x:8,y:6,z:0,vx:0,vy:0,vz:0});
     assert.equal(combat.cannonBurstSize,5);
     orderEngagement(combat,sector,objective,[id]);stepCombat(combat,sector,.01,()=>1);
     assert.equal(combat.own.ammo['autocannon-120'],ammo-2); // One shell from each turret.
@@ -1047,7 +1193,7 @@ test('successive cannon shells have separate trajectories and independent hit ch
 
 test('selective cease and mount destruction cancel only their unfinished cannon bursts',()=>{
   const {combat,sector}=setup();combat.cannonBurstSize=10;
-  Object.assign(sector.contacts[0],{x:0,y:20,z:0,vx:0,vy:0,vz:0});
+  Object.assign(sector.contacts[0],{x:16,y:12,z:0,vx:0,vy:0,vz:0});
   const orders=combat.own.mounts.filter(m=>m.weapon==='autocannon-120').map(m=>({mountId:m.id,targetId:'U-01',component:'hull'}));
   const ammo=combat.own.ammo['autocannon-120'];commandWeapons(combat,sector,orders,false,()=>1);
   ceaseFiring(combat,[orders[0].mountId]);step(combat,sector,3,()=>1);

@@ -22,15 +22,19 @@ function createTacticalViewSurface({ direction, onHover, onLeave, onLock, onCont
   const readout = svg('text', { x: 620, y: 28, 'text-anchor': 'end', class: 'tactical-view-readout' });
   root.append(label, readout);
   const grid = svg('g', { 'aria-hidden': 'true', fill: 'none', stroke: '#284555', 'stroke-width': 1 });
-  grid.append(svg('path', { d: `M32 ${horizon}H608`, stroke: '#78a7b7', 'stroke-dasharray': '9 7' }));
+  grid.append(svg('path', { d: `M32 ${horizon}H288M352 ${horizon}H608`, stroke: '#78a7b7', 'stroke-dasharray': '9 7' }));
   for (const degree of [-60, -30, 30, 60]) {
     const y = 180 - degree / 90 * 128;
     grid.append(svg('path', { d: `M272 ${y}H368M320 ${y - 4}V${y + 4}` }), svg('text', { x: 376, y: y + 4, stroke: 'none', fill: '#7898a9', class: 'tactical-view-tick' }, `${degree > 0 ? '+' : ''}${degree}°`));
   }
   for (const x of [32, 176, 464, 608]) grid.append(svg('path', { d: `M${x} ${horizon - 6}V${horizon + 6}` }));
   root.append(grid);
-  // The fixed aircraft-style mark is our ship's plane, never a target reticle.
-  root.append(svg('path', { d: `M274 ${horizon}H303L311 ${horizon + 8}H329L337 ${horizon}H366M320 ${horizon - 11}V${horizon - 3}`, fill: 'none', stroke: '#d4edf2', 'stroke-width': 3, 'aria-hidden': 'true' }));
+  const reticle=svg('g', { class: 'tactical-view-crosshair', transform: `translate(320 ${horizon})`, fill: 'none', 'aria-hidden': 'true', 'pointer-events': 'none' });
+  reticle.append(
+    svg('path', { d: 'M-26 0H-7M7 0H26M0-22V-7M0 7V22', stroke: '#d4edf2', 'stroke-width': 2 }),
+    svg('path', { d: 'M-21-4V4M21-4V4M-4-17H4M-4 17H4', stroke: '#83b5c5', 'stroke-width': 1 })
+  );
+  root.append(reticle);
   const fire = svg('g', { class: 'tactical-view-projectiles', 'pointer-events': 'none', 'aria-label': 'Weapon fire in flight' });
   const tracks = svg('g', { class: 'tactical-view-tracks' }),shuttles=createShuttleTrackLayer('hud-contact-glyph'); root.append(fire, tracks, shuttles.root);
   for (const [x, anchor, text] of [[20, 'start', '−45°'], [320, 'middle', 'SHIP PLANE'], [620, 'end', '+45°']]) root.append(svg('text', { x, y: 338, 'text-anchor': anchor, class: 'tactical-view-readout' }, text));

@@ -54,8 +54,8 @@ export const armamentTypes = {
   'rail-gun': { name:'Rail Gun', category:'Rail guns' }
 };
 export const countermeasureTypes = {
-  chaff: { name:'Chaff dispensers', charges:{sdf:6,pirate:4} },
-  flares: { name:'Flare dispensers', charges:{sdf:6,pirate:4} },
+  chaff: { name:'Chaff dispensers', charges:{sdf:30,pirate:4} },
+  flares: { name:'Flare dispensers', charges:{sdf:30,pirate:4} },
   'radar-jammer': { name:'Radar jammer' }
 };
 export function armamentLabel(ship,id) {

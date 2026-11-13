@@ -51,6 +51,12 @@ function localSector(value,location,pause){
   result.facing=vector(value.facing,'bow direction',axes,1);
   requireValue(Math.abs(Math.hypot(...axes.map(k=>result.facing[k]))-1)<.001,'Bow direction must be a unit vector.');
   result.faceTarget=boolean(value.faceTarget,'bow tracking');
+  if(value.hazards!==undefined)result.hazards=list(value.hazards,100,'sector hazards').map(hazard=>({
+    ...vector(hazard,'hazard position'),
+    id:string(hazard.id,'hazard ID',120),
+    name:string(hazard.name,'hazard name',120),
+    radius:number(hazard.radius,'hazard radius',Number.MIN_VALUE,100000)
+  }));
   requireValue(record(value.manual),'Missing manual Helm settings.');
   result.manual={thrust:number(value.manual.thrust,'thrust',-100,100),bearing:number(value.manual.bearing,'thrust bearing',0,360),elevation:number(value.manual.elevation,'thrust elevation',-90,90)};
   const contacts=list(value.contacts,MAX_ENCOUNTER_CONTACTS,'sector contacts');
@@ -79,6 +85,10 @@ function localSector(value,location,pause){
     requireValue(mode!=='patrol'||result.route.length>0,'A patrol order needs waypoints.');
   }
   result.status=string(value.status,'flight status',300);result.safety=string(value.safety,'navigation safety',300);
+  if(!result.hazards.length&&result.safety.startsWith('Blocked: ')){
+    result.safety='Clear';
+    if(result.status.startsWith('Navigation braking · '))result.status='Automatic guidance · corridor clear';
+  }
   requireValue(record(value.memory) && Object.keys(value.memory).length<=contacts.length,'Invalid sensor memory.');
   for(const [id,m] of Object.entries(value.memory)){
     requireValue(ids.has(id) && record(m) && record(m.observed),'Invalid remembered contact.');

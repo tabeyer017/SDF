@@ -8,7 +8,7 @@ export const gameAssets = new Set([
   'bridge-model.mjs', 'bridge-deck.mjs', 'tactical.mjs', 'tactical-model.mjs',
   'tactical-view.mjs', 'tactical-view-model.mjs', 'radar-symbol.mjs', 'sector-model.mjs',
   'sector-console.mjs', 'sector-bodies.mjs', 'encounter-model.mjs', 'save-game.mjs',
-  'save-ui.mjs', 'combat-model.mjs', 'combat-console.mjs', 'combat-save.mjs',
+  'save-ui.mjs', 'combat-model.mjs', 'combat-console.mjs', 'combat-save.mjs', 'ship-diagrams.mjs',
   'boarding-model.mjs', 'communications-model.mjs', 'communications-console.mjs',
   'start-menu.mjs', 'ship-names.mjs', 'images/sdf-frigate-side-view-transparent.png',
   'fonts.css',

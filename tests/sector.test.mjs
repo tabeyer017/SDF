@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSector, relativeContact, observeSector, issueManeuver, setManualHelm, coast, brake, addPatrolWaypoint, startPatrol, stepSector, maneuverTelemetry, predictedPath, segmentHitsHazard, sectorHazards, VECTOR_ACCELERATION } from '../sector-model.mjs';
+import { createSector, createEncounterSector, relativeContact, observeSector, issueManeuver, setManualHelm, coast, brake, addPatrolWaypoint, startPatrol, stepSector, maneuverTelemetry, predictedPath, segmentHitsHazard, VECTOR_ACCELERATION } from '../sector-model.mjs';
 import { contactDistance, contactClosureRate } from '../tactical-model.mjs';
 import { sectorBodies, planetaryOverview } from '../sector-bodies.mjs';
 
@@ -140,10 +140,20 @@ test('patrol validates waypoints and completes the route with braking',()=>{
   assert.ok(Math.hypot(sector.own.x+10,sector.own.y-10,sector.own.z-5)<.5);
 });
 
-test('Navigation brakes instead of flying an automatic route through a 3D hazard',()=>{
-  const sector=createSector([]);addPatrolWaypoint(sector,{x:100,y:120,z:0});startPatrol(sector);advance(sector,120);
+test('standard patrols and arrivals leave the old debris corridor clear',()=>{
+  for(const sector of [createSector(),createEncounterSector('Mars',123)]){
+    assert.deepEqual(sector.hazards,[]);
+    addPatrolWaypoint(sector,{x:100,y:120,z:0});startPatrol(sector);advance(sector,120);
+    assert.equal(sector.safety,'Clear');
+    assert.ok(sector.own.y>60);
+  }
+});
+
+test('Navigation brakes for an explicitly configured 3D hazard',()=>{
+  const hazard={id:'debris',name:'Training debris field',x:50,y:60,z:0,radius:12};
+  const sector=createSector([],'Earth',{hazards:[hazard]});addPatrolWaypoint(sector,{x:100,y:120,z:0});startPatrol(sector);advance(sector,120);
   assert.match(sector.safety,/Blocked/);assert.match(sector.status,/braking/);
-  const hazard=sectorHazards[0];assert.ok(Math.hypot(sector.own.x-hazard.x,sector.own.y-hazard.y,sector.own.z-hazard.z)>hazard.radius);
+  assert.ok(Math.hypot(sector.own.x-hazard.x,sector.own.y-hazard.y,sector.own.z-hazard.z)>hazard.radius);
   assert.equal(segmentHitsHazard({x:0,y:0,z:100},{x:100,y:120,z:100},hazard),false);
 });
 

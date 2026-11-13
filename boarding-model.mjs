@@ -22,7 +22,7 @@ export function shuttleStatus(shuttle){
 export function boardingLaunchError(combat,sector,number,order,target,inTransit=false){
   const shuttle=combat.boarding?.shuttles.find(item=>item.number===number);
   if(!shuttle)return 'Shuttle unavailable.';
-  if(shuttle.status!=='ready')return 'This shuttle is deployed. Recall it from Comms or wait for its return.';
+  if(shuttle.status!=='ready')return 'This shuttle is deployed. Recall it from Tactical Shuttle Ops or wait for its return.';
   if(!validOrder(order))return 'Choose shuttle orders.';
   if(inTransit)return 'Recover all shuttles before EPD transit; launches are unavailable in transit.';
   if(combat.own.systems.hull.hp<=0||combat.own.systems.power.hp<=0||combat.own.systems.reactor.hp<=0)return 'Shuttle launch control is offline.';
@@ -87,7 +87,7 @@ export function advanceBoarding(combat,sector,seconds,onCapture){
       const disabled=ship.systems.bridge.hp<=0||ship.systems.power.hp<=0||ship.systems.reactor.hp<=0;
       const resistance=ship.surrendered||disabled?0:Math.max(10,shipTypes[ship.classId].boarding?.personnel??10)*Math.max(.25,ship.systems.hull.hp/ship.systems.hull.max);
       if(force<resistance){
-        if(!shuttle.blocked)report(combat,`Shuttle ${shuttle.number}: resistance`,`Capture resisted aboard ${shuttle.targetName}. ${force} marines cannot secure the remaining defenders. Team holding at the entry point; weaken the ship, obtain surrender, reinforce, or recall from Comms.`);
+        if(!shuttle.blocked)report(combat,`Shuttle ${shuttle.number}: resistance`,`Capture resisted aboard ${shuttle.targetName}. ${force} marines cannot secure the remaining defenders. Team holding at the entry point; weaken the ship, obtain surrender, reinforce, or recall from Tactical Shuttle Ops.`);
         shuttle.blocked=true;continue;
       }
       onCapture?.(target.id);combat.boarding.captured.push(target.id);

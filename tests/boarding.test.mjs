@@ -34,7 +34,7 @@ test('the launch limit does not prevent recall or recovery after separation exce
 test('each actual shuttle launches one team, stays unavailable, and returns before relaunch',()=>{
   const {combat,sector,target}=setup('U-01');assert.equal(combat.boarding.shuttles.length,2);
   assert.equal(launchShuttle(combat,sector,1,'explore',target).ok,true);
-  assert.equal(launchShuttle(combat,sector,1,'explore',target).ok,false);
+  assert.match(launchShuttle(combat,sector,1,'explore',target).message,/Tactical Shuttle Ops/);
   assert.equal(launchShuttle(combat,sector,2,'assist',target).ok,true);
   assert.equal(hasDeployedShuttles(combat),true);assert.equal(sector.running,true);
   advance(combat,sector,6);assert.equal(combat.boarding.shuttles[0].entry,'hatch');

@@ -82,7 +82,7 @@ test('deployed chaff and flares can spoof a terminal salvo without spending addi
     for(const shot of combat.shots)shot.y=1;
     stepCombat(combat,sector,.05,()=>1);
     assert.equal(combat.shots.length,0);
-    assert.equal(target.ammo[type],5);
+    assert.equal(target.ammo[type],target.maxAmmo[type]-1);
     assert.ok(combat.log.some(message=>message.match(/decoy spoofed gp-missiles guidance/)));
   }
 });
@@ -97,7 +97,7 @@ test('a surviving missile does not reroll the same decoy check after loading a s
   const loaded=restoreCombat(structuredClone(combat),sector.contacts);
   stepCombat(loaded,sector,6,()=>1);
   assert.ok(loaded.own.systems.hull.hp<target.systems.hull.hp);
-  assert.equal(loaded.own.ammo.chaff,5);
+  assert.equal(loaded.own.ammo.chaff,29);
 });
 
 test('expired decoys and emitter seekers bypass spoofing',()=>{

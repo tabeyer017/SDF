@@ -110,7 +110,11 @@ test('exhausted offensive weapons prompt escape while CIWS and jamming remain av
   assert.equal(enemy.combatResponse.mode,'retreating');assert.ok(contact.vy>0);assert.equal(jammerEmitting(enemy),true);assert.equal(enemy.ciwsAuto,true);
   assert.ok(!combat.shots.some(s=>s.sourceId==='E-04'));
   assert.match(canFire(combat,sector,'E-04','gp-missiles-1','own','hull'),/disengaging/);
-  contact.y=10;fireWeapon(combat,sector,'own','as-missiles-1','E-04','hull',()=>0);stepCombat(combat,sector,1,()=>0);
+  contact.y=10;
+  // Approach from the flank to exercise CIWS while the pirate is still turning away.
+  Object.assign(sector.own,{x:10,y:10});
+  assert.equal(fireWeapon(combat,sector,'own','as-missiles-1','E-04','hull',()=>0).ok,true);
+  stepCombat(combat,sector,1,()=>0);
   advance(game,10);
   assert.ok(enemy.ammo['ciws-30']<enemy.maxAmmo['ciws-30']);
 });

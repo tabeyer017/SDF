@@ -1,6 +1,6 @@
 import { radarRanges, contactTypes, armamentTypes, countermeasureTypes, armamentLabel, shipTypes, shipFiveViews, shuttleTypes, crewDoctrine, trainingContacts, contactDistance, contactSpeed, contactClosureRate, contactsInRange, rangeRings, projectContact, projectVelocity, selectTargets, prioritizeTargets, restoreTargetPriorities, MAX_TARGET_PRIORITY, observeContact, IFF_RANGE_KM, IFF_IDENTIFICATION_CHANCE } from './tactical-model.mjs';
 import { mountManeuverControls, flightReadout } from './sector-console.mjs';
-import { mountWeaponsConsole } from './combat-console.mjs';
+import { mountShuttleOps,mountWeaponsConsole } from './combat-console.mjs';
 import {playerShipName,shipNamingConventions} from './ship-names.mjs';
 import { weapons, recentInterceptions, supportStatus, condition, radarEmitting, jammerEmitting } from './combat-model.mjs';
 import { relativeContact, isHardTurn } from './sector-model.mjs';
@@ -202,6 +202,10 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     }
     const leftRail=displayRail('left'),rightRail=displayRail('right');
     if(mountSecurity){const security=el('section','');mfd.security=mountSecurity(security,{idPrefix:`tactical-${id}`});displayPanes.right.defense.append(security);}
+    if(flight){
+      mfd.shuttleOps=mountShuttleOps({flight,getTargeting:()=>({contacts,activeTargetId:activeId}),onSelectTarget:focusContact});
+      displayPanes.right.defense.append(mfd.shuttleOps.root);
+    }
     mfd.systemsDetails=el('section','tactical-combined-systems');mfd.systemsDetails.setAttribute('aria-label','Target systems and facilities');displayPanes.right.defense.append(mfd.systemsDetails);
     const targetPicker=createTargetPicker(id);mfd.picker=targetPicker.picker;mfd.targetDetails=el('section','target-tracking-details');
     displayPanes.left.targets.append(targetPicker.selection,mfd.targetDetails);
@@ -225,7 +229,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     for(const [id,button] of displayButtons)button.setAttribute('aria-pressed',String(id===`${side}-${key}`));
     if(changed){targetPanel.scrollTop=0;combatPanel.scrollTop=0;}
     if(key==='hud'){mfd.hud.refresh();displayPanes.left.hud.focus({preventScroll:true});}
-    if(key==='defense')mfd.security?.refresh();
+    if(key==='defense'){mfd.security?.refresh();mfd.shuttleOps?.refresh();}
   }
   const note = el('div', 'tactical-note'),flightStatus=el('span','');note.append(flightStatus);
   const tooltip = el('div', 'radar-tooltip'); tooltip.id = 'radar-track-tooltip'; tooltip.setAttribute('role', 'tooltip'); tooltip.hidden = true;
@@ -548,6 +552,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
   }
   function renderTarget(contact, visible, mfd) {
     mfd.security?.refresh();
+    if(!mfd.displayPanes.right.defense.hidden)mfd.shuttleOps?.refresh();
     const {displayPanes,weaponControls}=mfd;
     if(weaponControls)weaponControls.refresh(contact||null,lockedContacts());
     if(flight){
@@ -741,7 +746,11 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     const emitting=contacts.filter(contact=>contact.jammerEmitting&&!contact.stale),lost=emitting.filter(contact=>contact.precisionTrack===false);
     ewReadout.textContent=emitting.length?`${emitting.length} JAMMER EMISSION${emitting.length===1?'':'S'} · ${lost.length} PRECISION TRACK${lost.length===1?'':'S'} LOST`:'NO JAMMER EMISSIONS';
     refreshEncounterReport();
-    for(const mfd of displays){mfd.security?.refresh();mfd.weaponControls?.refresh(contacts.find(c=>c.id===activeId)||null,lockedContacts());}
+    for(const mfd of displays){
+      mfd.security?.refresh();
+      if(!mfd.displayPanes.right.defense.hidden)mfd.shuttleOps?.refresh();
+      mfd.weaponControls?.refresh(contacts.find(c=>c.id===activeId)||null,lockedContacts());
+    }
     // Retain locked tracks as stale sensor records without exposing unseen motion.
     if(flight)for(const id of lockedIds)if(!contacts.some(c=>c.id===id)&&flight.sector.memory[id])contacts.push({...flight.sector.memory[id].observed,stale:true});
     refreshManeuverPopup();
@@ -780,18 +789,19 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     }
     for(const mfd of displays)mfd.hud.refresh();
   }
+  function focusContact(id){
+    if(flight)contacts=flight.contacts();
+    if(!contacts.some(contact=>contact.id===id&&!contact.stale))return false;
+    if(!lockedIds.includes(id)){
+      const priority=nextPriority(id,true);
+      if(!priority)return false;
+      ({lockedIds,priorities}=prioritizeTargets(lockedIds,priorities,id,priority,true));
+    }
+    activeId=id;render();onChange();return true;
+  }
   openDisplay(displays[0],'left','radar');openDisplay(displays[1],'left','targets');render();refresh();
-  return {refresh,openDefense:()=>openDisplay(displays[1],'right','defense'),refreshFlightTracks:()=>{for(const radar of charts)renderFlightTracks(radar);for(const mfd of displays)mfd.hud.refreshFlightTracks();},
-    focusContact(id){
-      if(flight)contacts=flight.contacts();
-      if(!contacts.some(contact=>contact.id===id&&!contact.stale))return false;
-      if(!lockedIds.includes(id)){
-        const priority=nextPriority(id,true);
-        if(!priority)return false;
-        ({lockedIds,priorities}=prioritizeTargets(lockedIds,priorities,id,priority,true));
-      }
-      activeId=id;render();onChange();return true;
-    },
+  return {refresh,openDefense:()=>openDisplay(displays[1],'right','defense'),focusShuttleOps:()=>displays[1].shuttleOps?.focus(),refreshFlightTracks:()=>{for(const radar of charts)renderFlightTracks(radar);for(const mfd of displays)mfd.hud.refreshFlightTracks();},
+    focusContact,
     hudTargeting:{getContacts:()=>flight?flight.contacts():contacts,getLockState:()=>({lockedIds,priorities,activeId}),
       lock(id,toggle){if(flight)contacts=flight.contacts();lock(id,'hud-popup',toggle);},
       onHover:showTooltip,onLeave:hideTooltip,onContextMenu:openQuickFire,contactLabel:radarLabel,tooltip,

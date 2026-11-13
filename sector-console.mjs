@@ -1,6 +1,6 @@
 import { contactTypes, contactClosureRate, contactDistance } from './tactical-model.mjs';
 import {playerShipName} from './ship-names.mjs';
-import { maneuverNames, maneuverTelemetry, predictedPath, sectorHazards, SENSOR_RANGE, isHardTurn } from './sector-model.mjs';
+import { maneuverNames, maneuverTelemetry, predictedPath, SENSOR_RANGE, isHardTurn } from './sector-model.mjs';
 import { flightControlState } from './bridge-model.mjs';
 import { sectorBodies, planetaryOverview } from './sector-bodies.mjs';
 import { boardingBalance } from './boarding-model.mjs';
@@ -60,7 +60,7 @@ export function mountSectorConsole({root,flight,strategic,getContactId,openDefen
   const route=el('ol','sector-route');const routeActions=el('div','sector-route-actions'),fly=button('Fly route',()=>{flight.patrol();refresh();});routeActions.append(button('Clear patrol route',()=>{flight.clearRoute();refresh();}));
   const coordinates=el('details','sector-advanced');coordinates.append(el('summary','','Enter coordinates (optional)'),waypointForm);
   nav.append(route,routeActions,coordinates);
-  const helm=el('details','sector-helm sector-advanced');helm.append(el('summary','','Manual controls (advanced)'),el('p','','Applying manual controls cancels autopilot and bypasses debris avoidance. Zero thrust coasts without slowing down; bow direction is independent of travel. Use Stop ship to brake.'));
+  const helm=el('details','sector-helm sector-advanced');helm.append(el('summary','','Manual controls (advanced)'),el('p','','Applying manual controls cancels autopilot and bypasses hazard avoidance. Zero thrust coasts without slowing down; bow direction is independent of travel. Use Stop ship to brake.'));
   const helmForm=el('form','sector-helm-form');const thrust=field(helmForm,'Thrust · %',0,-100,100),bearing=field(helmForm,'Thrust bearing · °',0,0,360),elevation=field(helmForm,'Thrust elevation · °',0,-90,90),bow=field(helmForm,'Bow bearing · °',0,0,360);
   const apply=el('button','bridge-action','Apply manual controls');apply.type='submit';helmForm.append(apply);helmForm.onsubmit=e=>{e.preventDefault();flight.manual({thrust:Number(thrust.value),bearing:Number(bearing.value),elevation:Number(elevation.value),bow:Number(bow.value)});refresh();};helm.append(helmForm);
   const transitControls=el('details','sector-advanced'),epd=el('section','sector-epd');transitControls.append(el('summary','','EPD transit controls'),epd);
@@ -68,7 +68,7 @@ export function mountSectorConsole({root,flight,strategic,getContactId,openDefen
   epd.append(epdEngage,epdAbort);
   const coast=button('Cancel maneuver / coast',()=>{flight.coast();refresh();}),brake=button('Stop ship',()=>{flight.brake();refresh();});brake.classList.add('sector-stop');helm.append(coast);const position=el('p','sector-position');
   const tracks=el('details','sector-track-list');tracks.append(el('summary','','Sensor tracks / last known'));const trackList=el('ul','');tracks.append(trackList);
-  const bodySection=el('details','sector-body-list sector-advanced');bodySection.append(el('summary','','Planets & moons'));const bodyList=el('ul',''),bodyNote=el('p','','Fixed chart positions · guidance avoids training debris only.');bodySection.append(bodyList,bodyNote);
+  const bodySection=el('details','sector-body-list sector-advanced');bodySection.append(el('summary','','Planets & moons'));const bodyList=el('ul',''),bodyNote=el('p','','Fixed chart positions for planetary reference.');bodySection.append(bodyList,bodyNote);
   const primary=el('div','sector-primary-actions');primary.append(fly,brake);
   side.append(contactPanel,readout,status,safety,primary,nav,helm,transitControls,bodySection,position,tracks);
   workspace.append(mapArea,side);root.append(toolbar,tabs,workspace);
@@ -140,7 +140,7 @@ export function mountSectorConsole({root,flight,strategic,getContactId,openDefen
       }
     }
     layer.append(svg('circle',{cx:px(s.own),cy:py(s.own),r:(s.sensorRange??SENSOR_RANGE)/radius*250,fill:'#78cbd608',stroke:'#8cd3df','stroke-width':1.6,'stroke-dasharray':'5 4','vector-effect':'non-scaling-stroke'}));
-    for(const h of sectorHazards){const slice=Math.sqrt(Math.max(0,h.radius**2-(h[plane==='top'?'z':'y']-origin[plane==='top'?'z':'y'])**2));if(!slice)continue;layer.append(svg('circle',{cx:px(h),cy:py(h),r:slice/radius*250,fill:'#f4777920',stroke:'#f47779'}));if(radius<=2500)layer.append(svg('text',{x:px(h)+8,y:py(h)-8,fill:'#f47779','font-size':11},h.name));}
+    for(const h of s.hazards??[]){const slice=Math.sqrt(Math.max(0,h.radius**2-(h[plane==='top'?'z':'y']-origin[plane==='top'?'z':'y'])**2));if(!slice)continue;layer.append(svg('circle',{cx:px(h),cy:py(h),r:slice/radius*250,fill:'#f4777920',stroke:'#f47779'}));if(radius<=2500)layer.append(svg('text',{x:px(h)+8,y:py(h)-8,fill:'#f47779','font-size':11},h.name));}
     layer.append(svg('path',{d:`M${px({x:0,y:0,z:0})-5} ${py({x:0,y:0,z:0})}h10m-5-5v10`,stroke:'#d5b77c'}));
     const points=[s.own,...s.route];if(points.length>1)layer.append(svg('polyline',{points:points.map(p=>`${px(p)},${py(p)}`).join(' '),fill:'none',stroke:'#d5b77c','stroke-width':1.2}));
     s.route.forEach((p,i)=>layer.append(svg('circle',{cx:px(p),cy:py(p),r:4,fill:'#d5b77c'}),svg('text',{x:px(p)+8,y:py(p)-7,fill:'#e7cf9d','font-size':11},`${i+1} · Z ${p.z.toFixed(1)}`)));

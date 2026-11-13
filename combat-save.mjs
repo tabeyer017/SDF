@@ -1,4 +1,4 @@
-import { createCombat,createDamageShip,weapons,missileOptions,missileVolleySizes,cannonBurstSizes,ciwsFiringTime,radarBurnThrough,maxBurnThroughDuration,weaponAimOptions,missileCountermeasures,countermeasureDuration } from './combat-model.mjs';
+import { createCombat,createDamageShip,weapons,missileOptions,missileVolleySizes,cannonBurstSizes,ciwsFiringTime,radarBurnThrough,maxBurnThroughDuration,weaponAimOptions,missileCountermeasures,countermeasureDuration,isEngagementObjective } from './combat-model.mjs';
 import {isPowerAllocation,powerChannels} from './bridge-model.mjs';
 import {migratePlayerShipName} from './ship-names.mjs';
 import {restoreBoarding} from './boarding-model.mjs';
@@ -52,6 +52,7 @@ function upgradePirateFit(legacy){
 }
 function ship(saved,classId,player){
   check(object(saved)&&saved.classId===classId&&object(saved.systems)&&object(saved.ammo)&&object(saved.roles));
+  // Mount geometry comes from the class fitting, including when old saves omit it.
   const legacy=legacyPirateFit(saved,classId),result=legacy??createDamageShip(classId,player);
   if(saved.powerAllocation!==undefined){
     check(isPowerAllocation(saved.powerAllocation));
@@ -60,12 +61,17 @@ function ship(saved,classId,player){
   if(player&&saved.name!==undefined){const name=migratePlayerShipName(classId,saved.name);check(name!==null);result.name=name;}
   for(const [id,s] of Object.entries(result.systems)){check(object(saved.systems[id]));s.hp=num(saved.systems[id].hp,0,s.max);}
   for(const weapon of Object.keys(result.ammo)){
-    if(Object.hasOwn(missileCountermeasures,weapon)&&!Object.hasOwn(saved.ammo,weapon)){
+    const isCountermeasure=Object.hasOwn(missileCountermeasures,weapon);
+    if(isCountermeasure&&!Object.hasOwn(saved.ammo,weapon)){
       if(saved.countermeasures!==undefined){
         check(object(saved.countermeasures));
         const spent=8-integer(saved.countermeasures[weapon],0,8);
         result.ammo[weapon]=Math.max(0,result.maxAmmo[weapon]-spent);
       }
+    }else if(isCountermeasure&&classId.startsWith('sdf-')&&saved.maxAmmo?.[weapon]===6){
+      // Expand the old six-charge magazine while retaining its expenditure.
+      const spent=6-integer(saved.ammo[weapon],0,6);
+      result.ammo[weapon]=result.maxAmmo[weapon]-spent;
     }else result.ammo[weapon]=integer(saved.ammo[weapon],0,result.maxAmmo[weapon]);
   }
   for(const {timer} of Object.values(missileCountermeasures)){
@@ -184,7 +190,7 @@ export function restoreCombat(saved,contacts){
     });
   }
   if(saved.engagement!=null){
-    const order=saved.engagement;check(object(order)&&['engage','disable','destroy'].includes(order.objective));
+    const order=saved.engagement;check(object(order)&&isEngagementObjective(order.objective));
     const targetIds=array(order.targetIds,contacts.length).map(id=>{check(id!=='own'&&validId(id));return id;});
     const overrides=array(order.overrides,result.own.mounts.length).map(id=>{check(result.own.mounts.some(m=>m.id===id));return id;});
     check(targetIds.length>0&&new Set(targetIds).size===targetIds.length&&new Set(overrides).size===overrides.length);
