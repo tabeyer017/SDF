@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { _electron as electron } from 'playwright-core';
 import { parseSave, SAVE_STORAGE_KEY } from '../save-game.mjs';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = path.resolve(fileURLToPath(new URL('../', import.meta.url)));
 const release = path.join(root, 'release');
 await mkdir(release, { recursive: true });
 const testRoot = await realpath(release);
@@ -79,7 +79,16 @@ try {
   await page.keyboard.press('t');
   await page.getByRole('heading', { name: 'Tactical / Security', exact: true }).waitFor();
   await page.keyboard.press('v');
-  await page.locator('#tactical-view-dialog[open]').waitFor();
+  const hud = page.locator('#tactical-view-dialog[open]');
+  await hud.waitFor();
+  const commands = hud.getByRole('group', { name: 'Captain’s commands' });
+  assert.equal(await commands.getByRole('button', { name: 'Engage Targets' }).isDisabled(), true);
+  assert.equal(await commands.getByRole('button', { name: 'Cease Fire' }).isDisabled(), true);
+  await commands.getByRole('button', { name: 'Chaff · 6' }).click();
+  await commands.getByRole('button', { name: 'Chaff · 5' }).waitFor();
+  await commands.getByRole('button', { name: 'Hard a Starboard' }).click();
+  await hud.getByRole('button', { name: 'Battle Stations' }).click();
+  await hud.getByRole('status', { name: 'Station Officer Acknowledgment Ticker' }).waitFor();
   await page.keyboard.press('Escape');
 
   await page.locator('#saves-button').click();
@@ -99,6 +108,12 @@ try {
   assert.equal(exportState, 'completed', 'The native download writes a JSON backup');
   const exported = parseSave(await readFile(backup, 'utf8'));
   assert.equal(exported.navigation.location, 'Mars');
+  assert.equal(exported.bridge.settings.watch, 'heightened');
+  assert.equal(exported.bridge.combat.own.radar, true);
+  assert.equal(exported.bridge.combat.own.ciwsAuto, true);
+  assert.equal(exported.bridge.combat.own.jammerMode, 'auto');
+  assert.equal(exported.bridge.combat.own.ammo.chaff, 5);
+  assert.ok(exported.bridge.sector.facing.x > .6, 'Hard a Starboard turns the bow from sector north');
   await desktop.close();
   desktop = undefined;
 

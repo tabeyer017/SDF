@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createCombat,fireWeapon,stepCombat,refreshMissileGuidance,weapons} from '../combat-model.mjs';
+import {createCombat,createDamageShip,fireWeapon,stepCombat,refreshMissileGuidance,weapons,deployCountermeasures} from '../combat-model.mjs';
 import {createSector,stepSector,relativeContact} from '../sector-model.mjs';
 import {restoreCombat} from '../combat-save.mjs';
 import {projectVelocity} from '../tactical-model.mjs';
@@ -69,4 +69,47 @@ test('older in-flight missiles adopt a launch frame once without moving time, re
     const bad=structuredClone(loaded);bad.shots[0].launchVelocity=value;assert.throws(()=>restoreCombat(bad,sector.contacts));
   }
   assert.equal(weapons['as-missiles'].speed,1);
+});
+
+test('deployed chaff and flares can spoof a terminal salvo without spending additional charges',()=>{
+  for(const type of ['chaff','flares']){
+    const {combat,sector,sourceId,targetId,target}=setup('gp-missiles');
+    sector.own.y=16;
+    assert.equal(fireWeapon(combat,sector,sourceId,'gp-missiles-1',targetId,'hull',()=>0,5).ok,true);
+    assert.equal(deployCountermeasures(combat,type).ok,true);
+    stepCombat(combat,sector,.05,()=>1);
+    assert.equal(combat.shots.length,5);
+    for(const shot of combat.shots)shot.y=1;
+    stepCombat(combat,sector,.05,()=>1);
+    assert.equal(combat.shots.length,0);
+    assert.equal(target.ammo[type],5);
+    assert.ok(combat.log.some(message=>message.match(/decoy spoofed gp-missiles guidance/)));
+  }
+});
+
+test('a surviving missile does not reroll the same decoy check after loading a save',()=>{
+  const {combat,sector,sourceId,targetId,target}=setup('gp-missiles');
+  sector.own.y=5;sector.own.vy=0;sector.contacts.find(c=>c.id==='E-04').vy=0;
+  assert.equal(fireWeapon(combat,sector,sourceId,'gp-missiles-1',targetId,'hull',()=>0).ok,true);
+  deployCountermeasures(combat,'chaff');
+  stepCombat(combat,sector,.05,()=>0);
+  assert.deepEqual(combat.shots[0].countermeasuresChecked,{chaff:true});
+  const loaded=restoreCombat(structuredClone(combat),sector.contacts);
+  stepCombat(loaded,sector,6,()=>1);
+  assert.ok(loaded.own.systems.hull.hp<target.systems.hull.hp);
+  assert.equal(loaded.own.ammo.chaff,5);
+});
+
+test('expired decoys and emitter seekers bypass spoofing',()=>{
+  for(const component of ['hull','sensors']){
+    const {combat,sector,sourceId,targetId,target}=setup('gp-missiles');
+    sector.own.y=5;sector.own.vy=0;sector.contacts.find(c=>c.id==='E-04').vy=0;
+    assert.equal(fireWeapon(combat,sector,sourceId,'gp-missiles-1',targetId,component,()=>0).ok,true);
+    deployCountermeasures(combat,'chaff');
+    deployCountermeasures(combat,'flares');
+    if(component==='hull')combat.time=10;
+    const hull=target.systems.hull.hp;
+    stepCombat(combat,sector,6,()=>1);
+    assert.ok(target.systems.hull.hp<hull);
+  }
 });

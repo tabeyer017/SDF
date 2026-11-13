@@ -124,7 +124,8 @@ function guidance(sector) {
     sector.status=`${maneuverNames[order.mode]} · TRK-${target.id.split('-').at(-1)} · autopilot executing`;
   }
   // Check the stopping corridor as well as the commanded path; brake if either is obstructed.
-  const speed=length(velocity(own)), horizon=speed/VECTOR_ACCELERATION+10;
+  const speed=length(velocity(own)), acceleration=VECTOR_ACCELERATION*(sector.enginePerformance??1);
+  const horizon=(acceleration>0?speed/acceleration:0)+10;
   const end=Object.fromEntries(keys.map(k=>[k,own[k]+desired[k]*horizon/3600]));
   const stopping=Object.fromEntries(keys.map((k,i)=>[k,own[k]+own[speeds[i]]*horizon/3600]));
   const hazard=sectorHazards.find(h=>segmentHitsHazard(own,end,h)||segmentHitsHazard(own,stopping,h));

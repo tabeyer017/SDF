@@ -1,6 +1,7 @@
 import { armamentTypes } from './tactical-model.mjs';
 import {playerShipName} from './ship-names.mjs';
-import { weapons,weaponAimOptions,aimPointState,nextAimPoint,canFire,condition,stationSupport,radarEmitting,jammerEmitting,supportStatus,missileVolleySizes,cannonBurstSizes,trackingSolution,burnThroughError,radarBurnThrough,shipPerformance } from './combat-model.mjs';
+import {powerChannels,redistributePower} from './bridge-model.mjs';
+import { weapons,weaponAimOptions,aimPointState,nextAimPoint,canFire,condition,stationSupport,radarEmitting,jammerEmitting,supportStatus,missileVolleySizes,cannonBurstSizes,trackingSolution,burnThroughError,burnThroughDuration,radarBurnThrough,shipPerformance } from './combat-model.mjs';
 const el=(tag,cls,text)=>{const n=document.createElement(tag);n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 const button=(text,fn)=>{const n=el('button','bridge-action',text);n.type='button';n.onclick=fn;return n;};
 const fireIconPath='M9 18V8c0-3 3-6 3-6s3 3 3 6v10M8 18h8v4H8zM9 8h6M9 15h6';
@@ -77,8 +78,13 @@ export function mountWeaponsConsole({flight,idPrefix='tactical',onSelectionChang
   const radar=defenseAction('Ship radar',()=>flight.toggleEmitter('radar'),'M12 12 20 4M21 12a9 9 0 1 1-9-9M17 12a5 5 0 1 1-5-5'),jammer=defenseAction('Jammer',()=>flight.cycleJammer(),'M12 10v11M8 21h8M8 6a6 6 0 0 0 0 8m8-8a6 6 0 0 1 0 8M5 3a10 10 0 0 0 0 14M19 3a10 10 0 0 1 0 14'),ciws=defenseAction('Independent CIWS',()=>flight.toggleEmitter('ciwsAuto'),'M12 2v5m0 10v5M2 12h5m10 0h5M18 12a6 6 0 1 1-12 0 6 6 0 0 1 12 0Z');
   jammer.title='Cycle jammer use: automatic in combat → always on → silent. Emitting reveals your presence.';
   const burn=defenseAction('Radar burn-through',()=>flight.burnThrough(),'m14 2-9 12h6l-1 8 9-12h-6l1-8Z'),ewStatus=el('p','combat-note');ewStatus.setAttribute('role','status');
-  burn.title=`${radarBurnThrough.duration} s tracking pulse · ${radarBurnThrough.cooldown} s between uses · requires active radar`;
   const ewControls=el('div','combat-actions');ewControls.append(jammer,burn);
+  const decoys=el('div','combat-actions');
+  const decoyButtons=[['chaff','Chaff','chaffUntil'],['flares','Flares','flaresUntil']].map(([type,label,timer])=>{
+    const control=button(label,()=>flight.deployCountermeasures(type));
+    decoys.append(control);
+    return {type,label,timer,control};
+  });
   const fire=actionIcon('Fire',()=>flight.fire(orders()),fireIconPath);
   const continuous=actionIcon('Start Firing',()=>flight.startFire(orders()),repeatIconPath);
   const ceaseAll=actionIcon('Cease Fire',ceaseAllWeapons,'M8 3h13v13M3 8h13v13H3zM6 11l7 7M13 11l-7 7');
@@ -89,7 +95,7 @@ export function mountWeaponsConsole({flight,idPrefix='tactical',onSelectionChang
   const events=el('ol','combat-events');events.setAttribute('aria-label','Combat events');
   const targetDetails=el('section','target-combat-details');targetDetails.setAttribute('aria-label','Target combat status');targetDetails.append(targetStatus,targetSystems);
   const defense=el('section','weapons-control');defense.setAttribute('aria-label','Electronic warfare and defenses');
-  defense.append(el('h4','','ELECTRONIC WARFARE / DEFENSE'),emitters,ewControls,ewStatus);
+  defense.append(el('h4','','ELECTRONIC WARFARE / DEFENSE'),emitters,ewControls,decoys,ewStatus);
   const settings=el('details','combat-settings');settings.open=true;settings.append(el('summary','','Combat events'),events);
   const objectives=el('div','combat-actions');
   const objectiveStatus=el('p','combat-note');objectiveStatus.setAttribute('role','status');
@@ -122,7 +128,7 @@ export function mountWeaponsConsole({flight,idPrefix='tactical',onSelectionChang
   const quickVolley=select('Quick missile volley size',volleyChoices,value=>flight.setMissileVolley(Number(value)));
   const quickBurst=select('Quick cannon burst size',burstChoices,value=>flight.setCannonBurst(Number(value)));
   const quickSalvoSettings=el('div','weapon-salvo-settings');quickSalvoSettings.append(quickVolley.wrap,quickBurst.wrap);
-  const quickBurn=button('Radar burn-through',()=>flight.burnThrough());quickBurn.setAttribute('aria-label','Quick radar burn-through');quickBurn.title=burn.title;
+  const quickBurn=button('Radar burn-through',()=>flight.burnThrough());quickBurn.setAttribute('aria-label','Quick radar burn-through');
   const quickFooter=el('footer','quick-fire-footer');quickFooter.append(quickStatus,quickCeaseAll);const quickObjectives=el('div','combat-actions');quickObjectives.append(button('Engage ship(s)',engage),quickBurn);quick.append(quickHeader,quickObjectives,quickSalvoSettings,quickList,quickFooter);document.body.append(quick);
   quick.oncontextmenu=event=>event.preventDefault();
   function closeQuickFire(){if(quick.matches(':popover-open'))quick.hidePopover();quickTargetId=null;quickAnchor=null;}
@@ -211,7 +217,17 @@ export function mountWeaponsConsole({flight,idPrefix='tactical',onSelectionChang
     radar.disabled=s.systems.sensors.hp<=0;jammer.disabled=s.systems.jammer.hp<=0;
     const burnError=burnThroughError(c),burnLeft=Math.ceil((s.burnThroughUntil??0)-c.time),cooling=Math.ceil((s.burnThroughReadyAt??0)-c.time);
     burn.disabled=quickBurn.disabled=flight.inTransit()||!!burnError;
-    ewStatus.textContent=`${burnLeft>0&&radarEmitting(s)?`BURN-THROUGH · ${burnLeft} s tracking pulse`:cooling>0?`Burn-through cooling · ${cooling} s`:'Burn-through ready · 15 s pulse / 180 s cooldown'}${jammerEmitting(s)?' · Jammer emission reveals your presence.':''}`;
+    const pulse=Number(burnThroughDuration(s).toFixed(1));
+    const burnHint=`${pulse} s tracking pulse · ${radarBurnThrough.cooldown} s between uses · requires active radar`;
+    burn.title=quickBurn.title=burnError||burnHint;
+    burn.lastElementChild.textContent=burn.title;
+    for(const {type,label,timer,control} of decoyButtons){
+      const remaining=Math.ceil(s[timer]-c.time);
+      control.hidden=!Object.hasOwn(s.ammo,type);
+      control.disabled=flight.inTransit()||!s.ammo[type]||!shipPerformance(s).power||s.surrendered;
+      control.textContent=`Deploy ${label.toLowerCase()} · ${s.ammo[type]??0}${remaining>0?` · ${remaining} s active`:''}`;
+    }
+    ewStatus.textContent=`${burnLeft>0&&radarEmitting(s)?`BURN-THROUGH · ${burnLeft} s tracking pulse`:cooling>0?`Burn-through cooling · ${cooling} s`:burnError||`Burn-through ready · ${pulse} s pulse / ${radarBurnThrough.cooldown} s cooldown`}${jammerEmitting(s)?' · Jammer emission reveals your presence.':''}`;
     events.replaceChildren(...c.log.slice(0,5).map(message=>el('li','',message)));
     if(quickTargetId){
       const contact=lockedTargets.find(contact=>contact.id===quickTargetId);
@@ -245,11 +261,39 @@ export function mountWeaponsConsole({flight,idPrefix='tactical',onSelectionChang
 }
 
 export function mountDamageConsole({root,flight}){
-  root.className='damage-console';root.setAttribute('aria-label','Engineering damage control');
+  root.className='damage-console';root.setAttribute('aria-label','Engineering');
   const summary=el('p','combat-readout'),status=el('p','combat-note');status.setAttribute('role','status');
   const toolbar=el('div','combat-actions');
   const automatic=button('',()=>flight.automaticRepairs(!flight.combat.own.autoRepair));
   automatic.setAttribute('aria-label','Automatic repairs');toolbar.prepend(automatic);
+  const allocation=el('fieldset','reactor-allocation');
+  allocation.append(el('legend','','Reactor power allocation'));
+  let powerPreview=null;
+  const powerControls=powerChannels.map(channel=>{
+    const label=el('label','reactor-channel');
+    const name=channel[0].toUpperCase()+channel.slice(1);
+    const slider=el('input',''),value=el('span','reactor-share');
+    slider.type='range';slider.min='0';slider.max='100';slider.step='1';slider.setAttribute('aria-label',`${name} power`);
+    slider.oninput=()=>{
+      const ship=flight.combat.own;
+      powerPreview={ship,allocation:redistributePower(ship.powerAllocation,channel,slider.valueAsNumber)};
+      renderPower(powerPreview.allocation);
+    };
+    slider.onchange=()=>{
+      const percent=slider.valueAsNumber;
+      powerPreview=null;
+      flight.allocatePower(channel,percent);
+    };
+    label.append(el('span','',name),value,slider);allocation.append(label);
+    return {channel,slider,value};
+  });
+  function renderPower(shares){
+    for(const {channel,slider,value} of powerControls){
+      const share=shares[channel];
+      slider.value=String(share);slider.setAttribute('aria-valuetext',`${share}%`);
+      value.textContent=`${share}%`;
+    }
+  }
   const workspace=el('div','damage-workspace'),equipment=el('div','damage-equipment');
   const affected=el('div','damage-systems'),empty=el('p','combat-note','No systems damaged.');
   const healthy=el('details','healthy-systems'),healthyLabel=el('summary','','Systems at full integrity'),healthyRows=el('div','damage-systems');
@@ -273,7 +317,7 @@ export function mountDamageConsole({root,flight}){
   serviceActions.append(el('h3','','Station service'),station,docking,service,el('h3','','Repair tender'),tenderStatus,requestTender,cancelTender);
   serviceDetails.append(el('summary','','Service & resupply'),serviceActions);
   aside.append(containFire,containBreach,queueHeading,queue,repairGuide,serviceDetails,eventLog);
-  workspace.append(equipment,aside);root.append(summary,status,toolbar,workspace);
+  workspace.append(equipment,aside);root.append(summary,status,allocation,toolbar,workspace);
   let systemOrder='',repairQueueKey='',serviceActive=false;
   function refresh(){
     const c=flight.combat,s=c.own;
@@ -281,7 +325,9 @@ export function mountDamageConsole({root,flight}){
     summary.title=`Hull / structure · ${hp(s.systems.hull)} · ${state(s.systems.hull)}`;
     automatic.textContent=`Automatic repairs: ${s.autoRepair?'ON':'OFF · manual control'}`;automatic.setAttribute('aria-pressed',String(s.autoRepair));
     const performance=shipPerformance(s);
-    const blocked=[!performance.engines&&'Local maneuvering unavailable',!performance.epd&&'EPD unavailable',(!performance.power||!s.systems.communications.hp)&&'Comms offline',!performance.sensors&&'Sensors offline'].filter(Boolean);
+    if(powerPreview?.ship!==s)powerPreview=null;
+    renderPower(powerPreview?.allocation??s.powerAllocation);
+    const blocked=[!performance.engines&&'Local maneuvering unavailable',!performance.weapons&&'Weapons unpowered',!performance.epd&&'EPD unavailable',(!performance.power||!s.systems.communications.hp)&&'Comms offline',!performance.sensors&&'Sensors offline'].filter(Boolean);
     const warnings=[s.fire&&'Fire aboard',s.breach&&'Pressure loss',
       (s.breach||s.systems['life-support'].hp===0)&&`Emergency air ${Math.ceil(s.air)} s`,
       c.service&&`${c.service.provider==='tender'?'Repair tender':'Station'} service in progress`,

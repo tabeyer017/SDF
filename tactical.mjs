@@ -142,7 +142,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     const selection=el('div','tactical-contact target-picker-controls');
     const label=el('label','radar-contact-picker');label.append(el('span','','LOCK TARGET'));
     const picker=el('select','');picker.id=`tactical-${id}-target-picker`;picker.setAttribute('aria-label','Lock radar track');picker.onchange=()=>{if(picker.value)lock(picker.value);};label.append(picker);
-    const hint=el('span','radar-interaction-hint','Select a track to lock and set priority · 1 = highest');selection.append(label,hint);
+    const hint=el('span','radar-interaction-hint','Select a track to lock · priority assigned automatically');selection.append(label,hint);
     return {selection,picker};
   }
   function refreshEncounterReport(){
@@ -201,7 +201,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
       return rail;
     }
     const leftRail=displayRail('left'),rightRail=displayRail('right');
-    if(mountSecurity){const security=el('section','');mfd.security=mountSecurity(security,{getTarget:()=>contacts.find(contact=>contact.id===activeId),idPrefix:`tactical-${id}`});displayPanes.right.defense.append(security);}
+    if(mountSecurity){const security=el('section','');mfd.security=mountSecurity(security,{idPrefix:`tactical-${id}`});displayPanes.right.defense.append(security);}
     mfd.systemsDetails=el('section','tactical-combined-systems');mfd.systemsDetails.setAttribute('aria-label','Target systems and facilities');displayPanes.right.defense.append(mfd.systemsDetails);
     const targetPicker=createTargetPicker(id);mfd.picker=targetPicker.picker;mfd.targetDetails=el('section','target-tracking-details');
     displayPanes.left.targets.append(targetPicker.selection,mfd.targetDetails);
@@ -501,10 +501,19 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
   window.addEventListener('resize', hideTooltip);
   root.addEventListener('keydown', event => { if (event.key === 'Escape') hideTooltip(); });
 
+  function nextPriority(id,toggle){
+    const used=new Set(selectTargets(lockedIds,id,toggle).filter(key=>key!==id).map(key=>priorities[key]));
+    return Array.from({length:MAX_TARGET_PRIORITY},(_,index)=>index+1).find(value=>!used.has(value));
+  }
   function lock(id, sourceView, toggle = false) {
     weaponControls?.closeQuickFire();
-    if(!lockedIds.includes(id)){askPriority(id,{sourceView,toggle});return;}
-    const next=prioritizeTargets(lockedIds,priorities,id,priorities[id],toggle);lockedIds=next.lockedIds;priorities=next.priorities;
+    const priority=priorities[id]??nextPriority(id,toggle);
+    const acquisitionRange=sourceView?.startsWith('hud-')?HUD_RANGE_KM:range;
+    if(!priority||(!lockedIds.includes(id)&&!contactsInRange(contacts.filter(contact=>!contact.stale),acquisitionRange).some(contact=>contact.id===id))){
+      render();
+      return;
+    }
+    ({lockedIds,priorities}=prioritizeTargets(lockedIds,priorities,id,priority,toggle));
     activeId = lockedIds.includes(id) ? id : lockedIds.at(-1) || null;
     finishLock(id,sourceView,toggle);
   }
@@ -550,7 +559,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
     status.textContent = contact ? `${lockedIds.length} TARGET${lockedIds.length === 1 ? '' : 'S'} LOCKED · PRIORITY ${priorities[contact.id]}${contact.stale?' · SENSOR LOST / LAST KNOWN':inRange ? '' : ' · OUT OF RANGE'}` : 'FIRE CONTROL / STANDBY';
     const name = el('h3', '', contact ? contact.name : 'No target locked'); name.tabIndex = -1;
     if (!contact) {
-      mfd.targetDetails.replaceChildren(status,name,el('p','target-empty','Select a track above or click a radar contact to choose its priority. Ctrl + left-click adds or removes targets.'),el('div','target-empty-reticle','⌖'),el('p','target-fit-note',flight?.sector.encounter?`${contacts.length} local ship contacts. Radar detects traffic within sensor coverage; use a wider radar range to inspect the sector.`:'12 ship types in the training catalog. Radar detects contacts within 200 km.'),catalogLink());
+      mfd.targetDetails.replaceChildren(status,name,el('p','target-empty','Select a track to lock it and assign the first available priority. Ctrl + left-click adds or removes targets.'),el('div','target-empty-reticle','⌖'),el('p','target-fit-note',flight?.sector.encounter?`${contacts.length} local ship contacts. Radar detects traffic within sensor coverage; use a wider radar range to inspect the sector.`:'12 ship types in the training catalog. Radar detects contacts within 200 km.'),catalogLink());
       displayPanes.left.ship.replaceChildren(el('h3','','No target locked'),el('p','target-empty','Select a radar or HUD contact to view ship information.'));
       mfd.systemsDetails.replaceChildren(el('h3','','TARGET SYSTEMS & FACILITIES'),el('p','target-empty','Select a radar or HUD contact to inspect its systems and facilities.'));
       displayPanes.left.ship.append(catalogLink());
@@ -777,8 +786,7 @@ export function mountTactical({ root, range, onRangeChange, onChange=()=>{}, fli
       if(flight)contacts=flight.contacts();
       if(!contacts.some(contact=>contact.id===id&&!contact.stale))return false;
       if(!lockedIds.includes(id)){
-        const used=new Set(Object.values(priorities));
-        const priority=Array.from({length:MAX_TARGET_PRIORITY},(_,index)=>index+1).find(value=>!used.has(value));
+        const priority=nextPriority(id,true);
         if(!priority)return false;
         ({lockedIds,priorities}=prioritizeTargets(lockedIds,priorities,id,priority,true));
       }

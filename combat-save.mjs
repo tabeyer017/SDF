@@ -1,4 +1,5 @@
-import { createCombat,createDamageShip,weapons,missileOptions,missileVolleySizes,cannonBurstSizes,ciwsFiringTime,radarBurnThrough,weaponAimOptions } from './combat-model.mjs';
+import { createCombat,createDamageShip,weapons,missileOptions,missileVolleySizes,cannonBurstSizes,ciwsFiringTime,radarBurnThrough,maxBurnThroughDuration,weaponAimOptions,missileCountermeasures,countermeasureDuration } from './combat-model.mjs';
+import {isPowerAllocation,powerChannels} from './bridge-model.mjs';
 import {migratePlayerShipName} from './ship-names.mjs';
 import {restoreBoarding} from './boarding-model.mjs';
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
@@ -27,6 +28,7 @@ function legacyPirateFit(saved,classId){
   });
   legacy.ammo=early?Object.fromEntries(earlyWeapons.map(weapon=>[weapon,weapon==='ciws-30'?6000:weapon==='gp-missiles'?16:weapon==='mp-missiles'?12:1200])):
     {'gp-missiles':classId==='pirate-frigate'?40:30,'autocannon-120':1200*guns,'ciws-30':12000};
+  for(const type of Object.keys(missileCountermeasures))legacy.ammo[type]=legacy.maxAmmo[type];
   legacy.maxAmmo={...legacy.ammo};return legacy;
 }
 function upgradePirateFit(legacy){
@@ -51,9 +53,24 @@ function upgradePirateFit(legacy){
 function ship(saved,classId,player){
   check(object(saved)&&saved.classId===classId&&object(saved.systems)&&object(saved.ammo)&&object(saved.roles));
   const legacy=legacyPirateFit(saved,classId),result=legacy??createDamageShip(classId,player);
+  if(saved.powerAllocation!==undefined){
+    check(isPowerAllocation(saved.powerAllocation));
+    result.powerAllocation=Object.fromEntries(powerChannels.map(channel=>[channel,saved.powerAllocation[channel]]));
+  }
   if(player&&saved.name!==undefined){const name=migratePlayerShipName(classId,saved.name);check(name!==null);result.name=name;}
   for(const [id,s] of Object.entries(result.systems)){check(object(saved.systems[id]));s.hp=num(saved.systems[id].hp,0,s.max);}
-  for(const weapon of Object.keys(result.ammo))result.ammo[weapon]=integer(saved.ammo[weapon],0,result.maxAmmo[weapon]);
+  for(const weapon of Object.keys(result.ammo)){
+    if(Object.hasOwn(missileCountermeasures,weapon)&&!Object.hasOwn(saved.ammo,weapon)){
+      if(saved.countermeasures!==undefined){
+        check(object(saved.countermeasures));
+        const spent=8-integer(saved.countermeasures[weapon],0,8);
+        result.ammo[weapon]=Math.max(0,result.maxAmmo[weapon]-spent);
+      }
+    }else result.ammo[weapon]=integer(saved.ammo[weapon],0,result.maxAmmo[weapon]);
+  }
+  for(const {timer} of Object.values(missileCountermeasures)){
+    if(saved[timer]!==undefined)result[timer]=num(saved[timer]);
+  }
   const mounts=array(saved.mounts,result.mounts.length);check(mounts.length===result.mounts.length);
   for(const mount of result.mounts){const source=mounts.find(m=>object(m)&&m.id===mount.id);check(!!source);mount.readyAt=num(source.readyAt);if(source.ciwsTarget!==undefined){check(mount.weapon==='ciws-30'&&typeof source.ciwsTarget==='string'&&/^shot:\d+$/.test(source.ciwsTarget));mount.ciwsTarget=source.ciwsTarget;}if(source.ciwsRounds!==undefined){check(!!mount.ciwsTarget);mount.ciwsRounds=integer(source.ciwsRounds,1,75);}}
   for(const weapon of Object.keys(result.roles)){const role=saved.roles[weapon];check(role===null&&weapon!=='as-missiles'||missileOptions[weapon].includes(role));result.roles[weapon]=role;}
@@ -96,12 +113,13 @@ export function restoreCombat(saved,contacts){
   result.own=ship(saved.own,'sdf-frigate',true);
   for(const contact of contacts)result.contacts[contact.id]=ship(saved.contacts[contact.id],contact.shipType,false);
   for(const vessel of [result.own,...Object.values(result.contacts)]){
-    check(vessel.burnThroughUntil<=result.time+radarBurnThrough.duration&&vessel.burnThroughReadyAt<=result.time+radarBurnThrough.cooldown);
+    for(const {timer} of Object.values(missileCountermeasures))check(vessel[timer]<=result.time+countermeasureDuration);
+    check(vessel.burnThroughUntil<=result.time+maxBurnThroughDuration&&vessel.burnThroughReadyAt<=result.time+radarBurnThrough.cooldown);
     check(vessel.burnThroughReadyAt>=vessel.burnThroughUntil);
   }
   check(saved.ciwsFeedVersion===undefined||saved.ciwsFeedVersion===1);
   if(saved.ciwsFeedVersion===undefined)for(const vessel of [result.own,...Object.values(result.contacts)])for(const mount of vessel.mounts){
-    if(mount.ciwsTarget)mount.readyAt=Math.min(mount.readyAt,result.time+ciwsFiringTime(vessel,mount,mount.ciwsRounds??75));
+    if(mount.ciwsTarget)mount.readyAt=Math.min(mount.readyAt,result.time+ciwsFiringTime({...vessel,powerAllocation:undefined},mount,mount.ciwsRounds??75));
   }
   const validId=id=>id==='own'||Object.hasOwn(result.contacts,id);
   for(const [id,vessel] of [['own',result.own],...Object.entries(result.contacts)]){
@@ -141,6 +159,12 @@ export function restoreCombat(saved,contacts){
     const shot={id:s.id,sourceId:s.sourceId,targetId:s.targetId,weapon:s.weapon,role:s.role,component,
       damage:num(s.damage,0,weapons[s.weapon].damage*(legacyShot?1:Math.max(...mounts.map(m=>m.barrels)))*maxBurst),remaining:num(s.remaining,0,1000000)};
     if(s.jammingChecked!==undefined){check(!!weapons[s.weapon].missile);shot.jammingChecked=bool(s.jammingChecked);}
+    if(s.countermeasuresChecked!==undefined){
+      check(!!weapons[s.weapon].missile&&object(s.countermeasuresChecked));
+      shot.countermeasuresChecked=Object.fromEntries(Object.entries(s.countermeasuresChecked).map(([type,checked])=>{
+        check(Object.hasOwn(missileCountermeasures,type)&&checked===true);return [type,true];
+      }));
+    }
     if(s.launchVelocity!==undefined){
       check(!!weapons[s.weapon].missile&&object(s.launchVelocity));
       shot.launchVelocity=Object.fromEntries(['vx','vy','vz'].map(axis=>[axis,num(s.launchVelocity[axis],-1e6,1e6)]));

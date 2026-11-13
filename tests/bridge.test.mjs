@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { bridgeAreas, bridgeAreaFor, restoreBridgeState, flightControlState } from '../bridge-model.mjs';
+import { bridgeAreas, bridgeAreaFor, restoreBridgeState, flightControlState, defaultPowerAllocation, redistributePower } from '../bridge-model.mjs';
+
+test('adjusting a reactor channel redistributes whole percentages and keeps 100 percent allocated',()=>{
+  const focused=redistributePower(defaultPowerAllocation,'engines',100);
+  assert.deepEqual(focused,{engines:100,weapons:0,sensors:0});
+  assert.deepEqual(redistributePower(focused,'engines',34),defaultPowerAllocation);
+  const changed=redistributePower({engines:40,weapons:45,sensors:15},'engines',60);
+  assert.deepEqual(changed,{engines:60,weapons:30,sensors:10});
+  assert.equal(redistributePower(changed,'engines',101),changed);
+});
 
 test('bridge settings reject invalid saved station, watch, and control values',()=>{
   assert.deepEqual(restoreBridgeState({watch:'red',seat:'admiral',ops:'invalid',sensor:'unknown',temperature:'hot',selected:'missing'}),restoreBridgeState());

@@ -67,7 +67,57 @@ function furniture(parent,x,z,angle,color,commander=false) {
   for(const item of faces)polygon(parent,item.vertices,item.fill,{'stroke':'#0c151d','stroke-width':.65,'stroke-linejoin':'round',...item.attrs});
 }
 
-export function mountBridgeDeck({root,areas,onSelect,onTacticalOpen}) {
+export function createStationAcknowledgments(applyPreset) {
+  const replies = [
+    'Flight Control · Helm standing by',
+    'Tactical · Weapons crews at stations',
+    'Security · Marines standing by',
+    'Communications · Channels monitored',
+    'Engineering · Damage control standing by',
+    'Science · Long-range watch assigned',
+    'Operations · Engineering readiness prioritized',
+    'Life Support · Damage-control liaison standing by'
+  ];
+  const views = [];
+  let timer, message = '';
+  function update(text) {
+    message = text;
+    for (const view of views) view.textContent = text;
+  }
+  function activate() {
+    clearTimeout(timer);
+    applyPreset();
+    let next = 0;
+    update('Battle Stations ordered · awaiting station acknowledgments');
+    function acknowledge() {
+      update(replies[next++]);
+      if (next < replies.length) timer = setTimeout(acknowledge, 1500);
+      else timer = setTimeout(() => update('Battle Stations · all officers acknowledged'), 1500);
+    }
+    timer = setTimeout(acknowledge, 600);
+  }
+  return {
+    activate,
+    mount(root) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'bridge-action';
+      button.textContent = 'Battle Stations';
+      const ticker = document.createElement('p');
+      ticker.className = 'station-acknowledgment';
+      ticker.setAttribute('role','status');
+      ticker.setAttribute('aria-label','Station Officer Acknowledgment Ticker');
+      ticker.textContent = message;
+      views.push(ticker);
+      button.onclick = activate;
+      root.append(button,ticker);
+    },
+    clear() { clearTimeout(timer); update(''); }
+  };
+}
+
+export function mountBridgeDeck({root,areas,onSelect,onTacticalOpen,footer,acknowledgments}) {
+  acknowledgments.mount(footer);
   root.replaceChildren();
   root.setAttribute('viewBox','0 -55 1000 730');
   root.setAttribute('aria-label','Perspective view of the bridge with forward, port, and starboard tactical screen panels above the windows, nine seated crew consoles, and a central commander chair. Select a station to open its controls or a screen to open the tactical view.');

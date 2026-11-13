@@ -36,6 +36,28 @@ test('JSON save preserves strategic progress, bridge settings, selection, logs, 
   assert.deepEqual(saved.bridge.tactical,original.bridge.tactical);assert.deepEqual(original,before);
 });
 
+test('v2 ship saves preserve valid reactor allocations and migrate missing allocations to balanced power',()=>{
+  const original=game();
+  original.bridge.combat=createCombat(original.bridge.sector.contacts);
+  original.bridge.combat.own.powerAllocation={engines:0,weapons:40,sensors:60};
+  const saved=roundTrip(original);
+  assert.deepEqual(saved.bridge.combat.own.powerAllocation,original.bridge.combat.own.powerAllocation);
+  for(const invalid of [
+    {engines:34,weapons:33,sensors:34},
+    {engines:-1,weapons:51,sensors:50},
+    {engines:34.5,weapons:32.5,sensors:33},
+    {engines:34,weapons:33}
+  ]){
+    saved.bridge.combat.own.powerAllocation=invalid;
+    assert.throws(()=>parseSave(JSON.stringify(saved)),/combat data/);
+  }
+  delete saved.bridge.combat.own.powerAllocation;
+  delete saved.bridge.combat.contacts['E-04'].powerAllocation;
+  const restored=parseSave(JSON.stringify(saved));
+  assert.deepEqual(restored.bridge.combat.own.powerAllocation,{engines:34,weapons:33,sensors:33});
+  assert.deepEqual(restored.bridge.combat.contacts['E-04'].powerAllocation,{engines:34,weapons:33,sensors:33});
+});
+
 test('legacy Security saves reopen in Tactical without changing the watch, patrol, or locks',()=>{
   const saved=createSave(game());saved.bridge.settings.selected='security';
   const loaded=parseSave(JSON.stringify(saved));

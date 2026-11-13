@@ -433,6 +433,12 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 .tactical-view-contact.active-target .tactical-view-glyph { filter: drop-shadow(0 0 3px #f3dfaa77); }
 .tactical-view-contact:focus-visible .tactical-view-glyph { filter: drop-shadow(0 0 4px #fff); }
 .tactical-view-dialog { box-sizing: border-box; width: min(1100px,calc(100vw - 24px)); max-width: none; max-height: calc(100dvh - 24px); overflow: auto; padding: 20px; background: #0b1722; border: 1px solid #5c8293; }
+.tactical-view-readiness { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.tactical-view-command-bar { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 8px; margin-top: 8px; border-top: 1px solid #344b59; }
+.tactical-view-command-bar .bridge-action { padding: 6px 9px; }
+.station-acknowledgment { margin: 0; color: var(--gold); font: var(--font-small)/1.4 var(--mono); }
+.bridge-deck-footer .station-acknowledgment { flex-basis: 100%; order: 1; }
+.station-acknowledgment:empty { display: none; }
 .tactical-view-dialog::backdrop { background: #020810bb; }
 .tactical-view-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .tactical-view-header h2 { margin: 0; font: 22px var(--body); color: #dfedf2; }
@@ -700,7 +706,13 @@ body[data-screen="bridge"] .bridge-console { display: grid; grid-template-column
 .tactical-combat-panel .combat-maneuvers .target-fit-note { margin: 0; }
 .damage-console { display: none; min-width: 0; min-height: 0; padding: 18px; gap: 8px; background: #09121c; }
 .bridge-console[data-station="engineering"] > :is(.bridge-deck-panel,.bridge-station-detail) { display: none; }
-.bridge-console[data-station="engineering"] > .damage-console { display: grid; grid-column: 2/-1; grid-row: 1; grid-template-rows: auto auto auto minmax(0,1fr); }
+.bridge-console[data-station="engineering"] > .damage-console { display: grid; grid-column: 2/-1; grid-row: 1; grid-template-rows: auto auto auto auto minmax(0,1fr); }
+.reactor-allocation { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px 16px; min-width: 0; margin: 0; padding: 6px 10px; border: 1px solid #344b59; }
+.reactor-allocation legend { color: var(--gold); padding: 0 5px; }
+.reactor-channel { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px; font: var(--font-small) var(--mono); }
+.reactor-channel input { grid-column: 1/-1; width: 100%; min-width: 0; margin: 0; accent-color: var(--gold); }
+.reactor-share { color: var(--gold); }
+@media (max-width: 400px) { .reactor-allocation { gap: 6px; } .reactor-channel { grid-template-columns: 1fr; } }
 .damage-console > p { margin: 0; }
 .damage-workspace { display: grid; grid-row: 4; grid-template-columns: minmax(0,1fr) 280px; gap: 18px; min-height: 0; }
 .damage-equipment { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; min-width: 0; min-height: 0; }
@@ -1015,19 +1027,7 @@ body[data-screen="bridge"] .bridge-system-map > .command-layout { display: grid;
   .tactical-combined-systems .target-integrity-list { grid-template-columns: minmax(0,1fr); }
 }
 
-/* Orders precede each numbered shuttle launch; deployed craft stay unavailable. */
-.boarding-shuttles { border-top: 1px solid #344b59; margin-top: 3px; padding-top: 3px; }
-.boarding-shuttles h4 { margin: 0; color: #b9d1dc; font: var(--font-small)/1.4 var(--mono); }
 .boarding-target { margin: 2px 0 3px; color: #a8c1d0; font: var(--font-small)/1.4 var(--body); }
-.boarding-shuttle-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 5px 10px; }
-.boarding-shuttle-row { display: grid; grid-template-columns: minmax(0,1fr) 42px; align-items: center; gap: 3px 5px; min-width: 0; }
-.boarding-shuttle-row select { min-width: 0; width: 100%; height: 28px; padding: 3px 5px; border: 1px solid #48616d; border-radius: 2px; background: #101d27; color: #d7e4ea; font: var(--font-small) var(--body); }
-.boarding-shuttle-row select:disabled { opacity: .5; }
-.boarding-shuttle-row .shuttle-launch { position: relative; display: flex; align-items: center; justify-content: center; gap: 3px; min-width: 0; width: 42px; height: 28px; padding: 3px; }
-.shuttle-launch svg { width: 17px; height: 17px; }
-.shuttle-launch b { font: 600 12px var(--mono); }
-.boarding-shuttle-status { grid-column: 1/-1; color: #96b0c0; font: var(--font-small)/1.4 var(--body); overflow-wrap: anywhere; }
-.shuttle-launch:is(:hover,:focus-visible) > .defense-action-tooltip { visibility: visible; opacity: 1; }
 .comms-workspace { grid-row: 2; }
 .comms-shuttle-control { padding: 8px 14px; border-bottom: 1px solid #344b59; background: #101d27; }
 .comms-shuttle-control h3 { margin: 0; color: #b9d1dc; font: var(--font-small)/1.4 var(--mono); }
@@ -1035,10 +1035,10 @@ body[data-screen="bridge"] .bridge-system-map > .command-layout { display: grid;
 .comms-shuttle-heading h3 { margin: 0; }
 .comms-shuttle-heading button { padding: 4px 7px; font-size: var(--font-small); }
 .comms-shuttle-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px 16px; margin-top: 5px; }
-.comms-shuttle-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
-.comms-shuttle-row > span { color: #b9d1dc; font: var(--font-small)/1.4 var(--body); overflow-wrap: anywhere; }
+.comms-shuttle-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.comms-shuttle-row > span { flex: 1 0 100%; color: #b9d1dc; font: var(--font-small)/1.4 var(--body); overflow-wrap: anywhere; }
+.comms-shuttle-row select { min-width: 0; min-height: 28px; background: #101d27; color: #d7e4ea; border: 1px solid #48616d; font: var(--font-small) var(--body); }
 .comms-shuttle-row button { flex-shrink: 0; padding: 5px 8px; min-height: 28px; font-size: var(--font-small); }
-@container tactical-display (max-width: 380px) { .boarding-shuttle-list { grid-template-columns: minmax(0,1fr); } }
 @media (max-width: 550px) { .comms-shuttle-list { grid-template-columns: minmax(0,1fr); } }
 .target-facility-grid .target-equipment h4 { display: flex; align-items: center; gap: 4px; }
 .facility-info { position: relative; display: inline-grid; place-items: center; flex: 0 0 20px; width: 20px; height: 20px; padding: 0; color: #b5cbd4; border: 1px solid #48616d; border-radius: 3px; }

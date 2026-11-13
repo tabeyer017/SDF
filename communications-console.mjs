@@ -1,7 +1,7 @@
 import { communicationsRecipients,communicationRequests,communicationLink,sendCommunication,markChannelRead,channelContactId } from './communications-model.mjs';
 import { gameDate } from './navigation.mjs';
 import {playerShipName} from './ship-names.mjs';
-import {shuttleStatus} from './boarding-model.mjs';
+import {boardingBalance,boardingOrders,boardingLaunchError,shuttleStatus} from './boarding-model.mjs';
 const el=(tag,cls,text)=>{const node=document.createElement(tag);node.className=cls;if(text!==undefined)node.textContent=text;return node;};
 const button=(text,fn)=>{const node=el('button','bridge-action',text);node.type='button';node.onclick=fn;return node;};
 function field(label,input){const wrap=el('label','bridge-setting');wrap.append(el('span','',label),input);input.setAttribute('aria-label',label);return wrap;}
@@ -40,12 +40,16 @@ export function mountCommunicationAlerts({getState,onOpen}){
   refresh();return {refresh};
 }
 
-export function mountCommunications({root,getState,getContext,onChange,onRecall=()=>({ok:false,message:'Shuttle recall unavailable.'}),onOpenContact=()=>false,onOpenMission,onDeclineMission}){
+export function mountCommunications({root,getState,getContext,onChange,onLaunch,onRecall,onShuttleOrder,onOpenContact=()=>false,onOpenMission,onDeclineMission}){
   root.className='communications-console';root.setAttribute('aria-label','Communications console');
-  const shuttleControl=el('section','comms-shuttle-control');shuttleControl.setAttribute('aria-label','Shuttle recall control');
-  const shuttleLabel=el('h3','','SHUTTLE CONTROL'),shuttleRows=el('div','comms-shuttle-list'),recallStatus=el('p','comms-result');
-  recallStatus.setAttribute('role','status');shuttleControl.append(shuttleLabel,shuttleRows,recallStatus);
-  const recallRows=new Map();
+  const shuttleControl=el('section','comms-shuttle-control');shuttleControl.setAttribute('aria-label','Shuttle control');
+  const shuttleTarget=el('p','boarding-target'),shuttleRows=el('div','comms-shuttle-list'),shuttleFeedback=el('p','comms-result');
+  shuttleFeedback.setAttribute('role','status');shuttleControl.append(el('h3','','Shuttle control'),shuttleTarget,shuttleRows,shuttleFeedback);
+  const controlsByShuttle=new Map();
+  function shuttleAction(result){
+    refresh();
+    shuttleFeedback.textContent=result.message;
+  }
   const directory=el('aside','comms-directory');directory.setAttribute('aria-label','Communication channels');
   const filter=el('select','');for(const [id,label] of [['all','All channels'],['unread','Unread messages'],['ships','Tactical ships'],['stations','HQ & stations'],['archive','Channel history']])filter.append(Object.assign(el('option','',label),{value:id}));
   const search=el('input','');search.type='search';search.placeholder='Name or track';
@@ -82,25 +86,44 @@ export function mountCommunications({root,getState,getContext,onChange,onRecall=
   };
   function refresh(){
     const state=getState(),context=getContext();
+    if(previousState!==state){previousState=state;threadKey='';directoryKey='';optionsKey='';detail.value='';status.textContent='';search.value='';shuttleFeedback.textContent='';contactFeedback.textContent='';}
     const shuttles=context.combat.boarding?.shuttles??[];
-    const deployed=shuttles.filter(shuttle=>shuttle.status!=='ready');
+    const target=context.contacts.find(contact=>contact.id===context.activeTargetId&&!contact.stale);
+    const deployed=shuttles.some(shuttle=>shuttle.status!=='ready');
     shuttleControl.hidden=!shuttles.length;
-    shuttleLabel.textContent=deployed.length?'Shuttle control':'All shuttles aboard';
-    shuttleRows.hidden=!deployed.length;
-    if(!deployed.length)recallStatus.textContent='';
-    const recallBlock=communicationLink(context,{available:true});
+    shuttleTarget.textContent=(target?`Target: ${target.name} · ${Math.hypot(target.x,target.y,target.z).toFixed(1)} km / ${boardingBalance.range} km launch range`:'Lock a ship on Radar or HUD to launch.')+(deployed&&!context.sector.running?' · Paused · use Run above':'');
+    const recallBlock=communicationLink(context,{available:true})||(context.inTransit?'Recall unavailable during EPD transit.':'');
+    for(const [number,{row}] of controlsByShuttle){
+      if(!shuttles.some(shuttle=>shuttle.number===number)){row.remove();controlsByShuttle.delete(number);}
+    }
     for(const shuttle of shuttles){
-      if(!recallRows.has(shuttle.number)){
-        const row=el('div','comms-shuttle-row'),label=el('span',''),recall=button(`Recall ${shuttle.number}`,()=>{const result=onRecall(shuttle.number);recallStatus.textContent=result.ok?'':result.message;refresh();onChange();});
-        recall.setAttribute('aria-label',`Recall shuttle ${shuttle.number}`);row.append(label,recall);shuttleRows.append(row);recallRows.set(shuttle.number,{row,label,recall});
+      const {number}=shuttle;
+      if(!controlsByShuttle.has(number)){
+        const row=el('div','comms-shuttle-row'),label=el('span',''),orders=el('select','');
+        for(const [value,text] of boardingOrders)orders.append(Object.assign(el('option','',text),{value}));
+        orders.setAttribute('aria-label',`Shuttle ${number} orders`);
+        orders.onchange=()=>onShuttleOrder(number,orders.value);
+        const launch=button(`Launch ${number}`,()=>{
+          const current=getContext();
+          shuttleAction(onLaunch(number,orders.value,current.contacts.find(contact=>contact.id===current.activeTargetId&&!contact.stale)));
+        });
+        const recall=button(`Recall ${number}`,()=>shuttleAction(onRecall(number)));
+        launch.setAttribute('aria-label',`Launch shuttle ${number}`);
+        recall.setAttribute('aria-label',`Recall shuttle ${number}`);
+        row.append(label,orders,launch,recall);shuttleRows.append(row);controlsByShuttle.set(number,{row,label,orders,launch,recall});
       }
-      const {row,label,recall}=recallRows.get(shuttle.number);
-      row.hidden=shuttle.status==='ready';
-      label.textContent=`${shuttle.number} · ${shuttleStatus(shuttle)}`;
-      recall.disabled=!!recallBlock||context.inTransit||!['outbound','boarding'].includes(shuttle.status);
+      const {label,orders,launch,recall}=controlsByShuttle.get(number);
+      label.textContent=`Shuttle ${number} · ${shuttleStatus(shuttle)}`;
+      label.title=shuttle.result;
+      const launchError=boardingLaunchError(context.combat,context.sector,number,shuttle.order,target,context.inTransit);
+      orders.value=shuttle.order;
+      orders.hidden=launch.hidden=shuttle.status!=='ready';
+      launch.disabled=!!launchError;
+      launch.title=launchError||'Launch with 10 marines';
+      recall.hidden=shuttle.status==='ready';
+      recall.disabled=!!recallBlock||shuttle.status==='returning';
       recall.title=recallBlock||(shuttle.status==='returning'?'Shuttle is already returning':'Recall this shuttle and all 10 marines to our ship');
     }
-    if(previousState!==state){previousState=state;threadKey='';directoryKey='';optionsKey='';detail.value='';status.textContent='';search.value='';recallStatus.textContent='';contactFeedback.textContent='';}
     const recipients=communicationsRecipients(state,context);
     let selected=recipients.find(r=>r.id===state.selectedId);if(!selected){state.selectedId='hq';selected=recipients[0];}
     const readChanged=markChannelRead(state,state.selectedId);

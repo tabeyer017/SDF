@@ -1,7 +1,7 @@
 import { armamentTypes } from './tactical-model.mjs';
 import { contactSymbol, contactGlyphScale, createRadarLegend, createShuttleTrackLayer } from './radar-symbol.mjs';
 import { HUD_RANGE_KM, projectTacticalView, tacticalViewKeys, bridgeCombatActive, tacticalProjectiles, relativeShuttleTracks } from './tactical-view-model.mjs';
-import { projectileStyles } from './combat-model.mjs';
+import { projectileStyles, burnThroughError, canEngageTarget, shipPerformance } from './combat-model.mjs';
 
 const svg = (tag, attrs = {}, text) => {
   const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
@@ -149,19 +149,57 @@ export function mountHud({root, flight, getContacts, getLockState, onLock, onHov
   return {refresh, refreshFlightTracks, setDirection: choose, focusContact(id) {surface.root.querySelector(`[data-track="${id}"]`)?.focus({preventScroll:true});}};
 }
 
-export function mountTacticalView({flight, deck, targeting}) {
+export function mountTacticalView({flight, deck, targeting, acknowledgments}) {
   const dialog = el('dialog', 'tactical-view-dialog'); dialog.id = 'tactical-view-dialog'; dialog.setAttribute('aria-labelledby', 'tactical-view-title');
-  const header = el('div', 'tactical-view-header'), title = el('h2', '', 'HUD · Heads Up Display'); title.id = 'tactical-view-title';
+  const header = el('div', 'tactical-view-header'), title = el('h2', '', 'Captain’s Command View'); title.id = 'tactical-view-title';
   const close = el('button', 'tactical-view-close', '×'); close.type = 'button'; close.setAttribute('aria-label', 'Close HUD'); close.onclick = () => dialog.close(); header.append(title, close);
   const hudRoot = el('section', 'tactical-popup-hud');
   const hud = mountHud({root:hudRoot, flight, ...targeting, onLock:targeting.lock});
-  dialog.append(header, hudRoot); document.body.append(dialog);
+  const readiness = el('div', 'tactical-view-readiness');
+  acknowledgments.mount(readiness);
+  const commands=el('div','tactical-view-command-bar');
+  commands.setAttribute('role','group');
+  commands.setAttribute('aria-label','Captain’s commands');
+  function command(label,action){
+    const control=el('button','bridge-action',label);
+    control.type='button';control.onclick=action;commands.append(control);
+    return control;
+  }
+  function engageableTargets(){
+    const {lockedIds,priorities}=targeting.getLockState();
+    if(!lockedIds.length)return [];
+    return targeting.getContacts().filter(contact=>lockedIds.includes(contact.id)&&!contact.stale&&canEngageTarget(flight.combat,contact.id))
+      .sort((a,b)=>priorities[a.id]-priorities[b.id]).map(contact=>contact.id);
+  }
+  const engage=command('Engage Targets',()=>flight.engageTargets('engage',engageableTargets()));
+  const cease=command('Cease Fire',()=>flight.ceaseFire());
+  const chaff=command('Chaff',()=>flight.deployCountermeasures('chaff'));
+  const flares=command('Flare',()=>flight.deployCountermeasures('flares'));
+  const burn=command('Burn-Through',()=>flight.burnThrough());
+  const port=command('Hard a Port',()=>flight.command('port'));
+  const starboard=command('Hard a Starboard',()=>flight.command('starboard'));
+  function refreshCommands(){
+    const combat=flight.combat,ship=combat.own,performance=shipPerformance(ship);
+    const local=!flight.inTransit(),free=local&&!combat.docked&&combat.service?.provider!=='tender';
+    engage.disabled=!free||!performance.weapons||!performance.sensors||ship.surrendered||!engageableTargets().length;
+    cease.disabled=!combat.engagement&&!combat.firing?.length&&!ship.mounts.some(mount=>mount.burst);
+    for(const [control,type,label] of [[chaff,'chaff','Chaff'],[flares,'flares','Flare']]){
+      const charges=ship.ammo[type]??0;
+      control.disabled=!local||!performance.power||ship.surrendered||!charges;
+      control.textContent=`${label} · ${charges}`;
+    }
+    const burnError=burnThroughError(combat);
+    burn.disabled=!local||!!burnError;
+    burn.title=burnError??'Pulse radar to restore tracking through jamming';
+    port.disabled=starboard.disabled=!free||!performance.engines;
+  }
+  dialog.append(header, readiness, hudRoot, commands); document.body.append(dialog);
   const tooltipHome = targeting.tooltip.parentElement;
-  targeting.subscribe(() => {if(dialog.open) hud.refresh();});
+  targeting.subscribe(() => {if(dialog.open) {hud.refresh();refreshCommands();}});
   dialog.onclose = () => {targeting.onLeave(); tooltipHome.append(targeting.tooltip);};
   function open(view) {
     targeting.onLeave(); if(!dialog.open) dialog.showModal(); dialog.append(targeting.tooltip);
-    if(view) hud.setDirection(view); hud.refresh(); hudRoot.focus({preventScroll:true});
+    if(view) hud.setDirection(view); hud.refresh();refreshCommands();hudRoot.focus({preventScroll:true});
   }
   window.addEventListener('keydown', event => {
     if(event.defaultPrevented || event.repeat || event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
@@ -175,7 +213,7 @@ export function mountTacticalView({flight, deck, targeting}) {
     const scene = document.getElementById('bridge-main-display');
     if(active) scene.textContent = 'COMBAT · BLAST SHIELDS DOWN · HUD ONLINE';
     else if(scene?.textContent.startsWith('COMBAT ·')) scene.textContent = 'SOL SYSTEM / PATROL WATCH';
-    if(dialog.open) hud.refresh();
+    if(dialog.open) {hud.refresh();refreshCommands();}
   }
   return {open, refresh, refreshFlightTracks() {if(dialog.open) hud.refreshFlightTracks();}};
 }
